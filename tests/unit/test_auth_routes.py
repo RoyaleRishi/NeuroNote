@@ -37,11 +37,23 @@ def _reset_oauth_singleton() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_auth_me_with_valid_token(client: TestClient, db_session: None) -> None:
+@pytest.fixture()
+def raw_client(configured_db: None) -> TestClient:
+    """TestClient WITHOUT dependency overrides — auth routes need real JWT validation."""
+    from app.main import app
+
+    # Clear any overrides from the standard `client` fixture.
+    saved = dict(app.dependency_overrides)
+    app.dependency_overrides.clear()
+    with TestClient(app) as tc:
+        yield tc  # type: ignore[misc]
+    app.dependency_overrides.update(saved)
+
+
+def test_auth_me_with_valid_token(raw_client: TestClient, configured_db: None) -> None:
     """Authenticated request to /auth/me returns UserProfile from DB."""
     from app.db.engine import get_session_factory
 
-    # Seed a user so the DB lookup succeeds.
     factory = get_session_factory()
     with factory() as session:
         user = User(
@@ -59,7 +71,7 @@ def test_auth_me_with_valid_token(client: TestClient, db_session: None) -> None:
     token = create_access_token(
         user_id="u-123", email="test@example.com", schema_name="user_abc123def456"
     )
-    resp = client.get("/v1/auth/me", cookies={ACCESS_COOKIE_NAME: token})
+    resp = raw_client.get("/v1/auth/me", cookies={ACCESS_COOKIE_NAME: token})
     assert resp.status_code == 200
     body = resp.json()
     assert body["id"] == "u-123"
@@ -69,9 +81,9 @@ def test_auth_me_with_valid_token(client: TestClient, db_session: None) -> None:
     assert body["oauth_provider"] == "google"
 
 
-def test_auth_me_without_cookie(client: TestClient) -> None:
+def test_auth_me_without_cookie(raw_client: TestClient) -> None:
     """Missing access cookie returns 401."""
-    resp = client.get("/v1/auth/me")
+    resp = raw_client.get("/v1/auth/me")
     assert resp.status_code == 401
     assert "Authentication required" in resp.json()["detail"]
 

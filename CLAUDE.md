@@ -53,9 +53,20 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 - **SQLAlchemy** ORM (sync sessions, not async) — the DB layer is synchronous even though route handlers are `async def`
 - **Apache AGE** (typed property graph in PostgreSQL) — Cypher queries via raw SQL with `LOAD 'age'` + `ag_catalog` search path
 - **Schema is migration-first** — `DB_AUTO_CREATE=false`; always run `make compose-migrate` after pulling new migrations
-- **Alembic** for migrations — 12 migrations in `api/alembic/versions/`
+- **Alembic** for migrations — 14 migrations in `api/alembic/versions/`
 - **pgvector** for semantic embeddings — note-level embeddings stored in `public.note_embeddings` (384-dim, HNSW index); no per-entity embeddings
 - **Shared contracts** — Pydantic models in `shared/contracts/python/v1/`; always update the matching TypeScript file in `shared/contracts/ts/v1/` when changing Python contracts, and vice versa
+
+#### Users table (migration 0014)
+- `public.users` — OAuth user records for multi-tenant SaaS. Stores identity (`email`, `oauth_provider`, `oauth_provider_id`), display info (`display_name`, `avatar_url`), and tenant mapping (`schema_name`). Each user maps to an isolated tenant schema. Unique constraints on `email`, `schema_name`, and `(oauth_provider, oauth_provider_id)`.
+
+#### Tenant provisioning (`api/src/app/db/tenant.py`)
+- Schema-per-user isolation: each user gets a PostgreSQL schema (`user_xxx`) with all 12 data tables + an AGE graph (`nn_user_xxx`).
+- `create_user_schema(session, schema_name)` — provisions schema, tables (from `schema_template.sql`), and AGE graph.
+- `drop_user_schema(session, schema_name)` — tears down graph + schema.
+- `apply_ddl_to_all_schemas(session, ddl)` — runs DDL across all tenant schemas (for future migrations).
+- SQLite fallback for tests: emulates schemas via `{schema}__{table}` prefixed table names.
+- Schema names must match `^user_[a-z0-9]{4,32}$`.
 
 #### Cache tables (migration 0011)
 - `concept_insight_cache` — caches Claude-generated concept insights keyed by `(concept_label, content_digest)`. The digest is a SHA-256 of sorted `note_id:content_hash` pairs, so the cache auto-invalidates when any relevant note changes.

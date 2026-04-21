@@ -10,7 +10,7 @@ from app.core.job_store import (
     mark_job_failed,
     mark_job_running,
 )
-from app.core.auth import get_current_user
+from app.core.auth import UserContext, get_current_user
 from app.db.repositories.note_repository import NoteRepository
 from app.db.tenant_session import get_tenant_session
 from app.core.rate_limiter import limiter
@@ -56,8 +56,8 @@ def process_note(
     payload: ProcessNoteRequest,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_tenant_session),
+    user: UserContext = Depends(get_current_user),
 ) -> ProcessNoteResponse:
-    user = get_current_user(request)
     graph_name = f"nn_{user.schema_name}"
 
     note = NoteRepository(session).get_note(payload.note_id)

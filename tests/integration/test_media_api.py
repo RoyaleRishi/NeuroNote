@@ -11,14 +11,24 @@ import pytest
 @pytest.fixture()
 def media_client(configured_db: None, monkeypatch: pytest.MonkeyPatch, tmp_path):
     monkeypatch.setenv("MEDIA_ROOT_DIR", str(tmp_path / "media"))
+    monkeypatch.setenv("JWT_SECRET", "test-secret-for-media-tests")
 
     from app.main import app
+    from app.core.auth import UserContext, get_current_user
+    from app.db.session import get_db_session
+    from app.db.tenant_session import get_tenant_session
     from app.services.note_asset_service import reset_media_storage
+
+    _fake_user = UserContext(user_id="test-user", email="test@test.com", schema_name="user_test0001")
+    app.dependency_overrides[get_current_user] = lambda: _fake_user
+    app.dependency_overrides[get_tenant_session] = get_db_session
 
     reset_media_storage()
     with TestClient(app) as test_client:
         yield test_client
     reset_media_storage()
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_tenant_session, None)
 
 
 def _note_payload(note_id: str, content_json: dict[str, object] | None = None) -> dict[str, object]:

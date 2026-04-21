@@ -49,9 +49,21 @@ def configured_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
 @pytest.fixture()
 def client(configured_db: None) -> Iterator[TestClient]:
     from app.main import app
+    from app.core.auth import UserContext, get_current_user
+    from app.db.session import get_db_session
+    from app.db.tenant_session import get_tenant_session
+
+    # Override auth + tenant session for tests: no JWT required, no schema scoping.
+    _fake_user = UserContext(user_id="test-user", email="test@test.com", schema_name="user_test0001")
+
+    app.dependency_overrides[get_current_user] = lambda: _fake_user
+    app.dependency_overrides[get_tenant_session] = get_db_session
 
     with TestClient(app) as test_client:
         yield test_client
+
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_tenant_session, None)
 
 
 @pytest.fixture()
