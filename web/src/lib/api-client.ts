@@ -21,6 +21,7 @@ import type {
   GlobalGraphResponse,
   ConceptInsightResponse,
 } from "../../../shared/contracts/ts/v1/graph";
+import type { UserProfile } from "../../../shared/contracts/ts/v1/auth";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -36,14 +37,13 @@ export class ApiClientError extends Error {
   }
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const apiKey =
-    typeof process !== "undefined" ? process.env.NEXT_PUBLIC_API_KEY : undefined;
-  return apiKey ? { "X-Api-Key": apiKey } : {};
+/** Resolve the API base URL from the environment. */
+export function getBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 }
 
 /**
- * fetch wrapper that injects auth headers and enforces a request timeout.
+ * fetch wrapper that sends cookies cross-origin and enforces a request timeout.
  * Pass signal: null to opt out of the timeout for a specific call (e.g. long uploads).
  */
 async function apiFetch(
@@ -65,9 +65,9 @@ async function apiFetch(
   try {
     return await fetch(url, {
       ...rest,
+      credentials: "include",
       signal: effectiveSignal,
       headers: {
-        ...getAuthHeaders(),
         ...(rest.headers as Record<string, string> | undefined),
       },
     });
@@ -326,4 +326,20 @@ export async function fetchGlobalGraph(
     { timeoutMs: 60_000 },
   );
   return parseJsonResponse<GlobalGraphResponse>(response);
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+/** Fetch the currently authenticated user profile, or null if not logged in. */
+export async function fetchCurrentUser(): Promise<UserProfile | null> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/auth/me`);
+  if (res.status === 401) return null;
+  return parseJsonResponse<UserProfile>(res);
+}
+
+/** Log the current user out by clearing server-side auth cookies. */
+export async function logoutUser(): Promise<void> {
+  const base = getBaseUrl();
+  await apiFetch(`${base}/v1/auth/logout`, { method: "POST" });
 }
