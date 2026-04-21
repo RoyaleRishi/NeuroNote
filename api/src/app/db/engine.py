@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from threading import Lock
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from app.db.config import get_database_settings
 from app.db.models import Base
@@ -32,7 +33,27 @@ def _build_engine(database_url: str, *, db_echo: bool) -> Engine:
         kwargs["max_overflow"] = 5
         kwargs["pool_recycle"] = 300  # recycle connections after 5 min
 
-    return create_engine(database_url, **kwargs)  # type: ignore[arg-type]
+    eng = create_engine(database_url, **kwargs)  # type: ignore[arg-type]
+
+    # Reset search_path on every connection checkout so tenant-scoped sessions
+    # don't leak their search_path into subsequent requests that draw the same
+    # pooled connection.  Without this, connections returning from
+    # get_tenant_session (search_path = user_xxx, public) would cause queries
+    # against the shared `users` table (neuronote schema) to fail with
+    # "relation does not exist".
+    if database_url.startswith("postgresql"):
+
+        @event.listens_for(eng, "checkout")
+        def _reset_search_path(
+            dbapi_conn: object,
+            connection_record: ConnectionPoolEntry,
+            connection_proxy: object,
+        ) -> None:
+            cursor = dbapi_conn.cursor()  # type: ignore[union-attr]
+            cursor.execute('SET search_path TO "$user", public')
+            cursor.close()
+
+    return eng
 
 
 def get_engine() -> Engine:
