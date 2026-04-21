@@ -1,7 +1,6 @@
 """Core auth module — JWT creation, validation, and FastAPI dependency."""
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -14,6 +13,10 @@ REFRESH_TOKEN_EXPIRY = timedelta(days=7)
 
 JWT_ALGORITHM = "HS256"
 
+# Cookie names — shared constants to prevent mismatches.
+ACCESS_COOKIE_NAME = "neuronote_access"
+REFRESH_COOKIE_NAME = "neuronote_refresh"
+
 
 @dataclass(frozen=True, slots=True)
 class UserContext:
@@ -25,11 +28,10 @@ class UserContext:
 
 
 def _get_jwt_secret() -> str:
-    """Read JWT_SECRET from environment. Raises if missing."""
-    secret = os.getenv("JWT_SECRET", "").strip()
-    if not secret:
-        raise RuntimeError("JWT_SECRET environment variable is required")
-    return secret
+    """Return the JWT signing secret (delegated to OAuthSettings for single source of truth)."""
+    from app.core.oauth_config import get_oauth_settings
+
+    return get_oauth_settings().jwt_secret
 
 
 def create_access_token(user_id: str, email: str, schema_name: str) -> str:
@@ -39,6 +41,7 @@ def create_access_token(user_id: str, email: str, schema_name: str) -> str:
         "sub": user_id,
         "email": email,
         "schema_name": schema_name,
+        "type": "access",
         "exp": now + ACCESS_TOKEN_EXPIRY,
         "iat": now,
     }
@@ -57,18 +60,27 @@ def create_refresh_token(user_id: str) -> str:
     return jwt.encode(payload, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
 
-def decode_token(token: str) -> dict:
-    """Decode and validate a JWT. Raises ``HTTPException(401)`` on failure."""
+def decode_token(token: str, *, expected_type: str = "access") -> dict:
+    """Decode and validate a JWT. Raises ``HTTPException(401)`` on failure.
+
+    *expected_type* is checked against the ``type`` claim to prevent refresh
+    tokens from being used where access tokens are expected (and vice versa).
+    """
     try:
-        return jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        claims = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    if claims.get("type") != expected_type:
+        raise HTTPException(status_code=401, detail="Invalid token type")
+
+    return claims
+
 
 def get_current_user(request: Request) -> UserContext:
-    """FastAPI dependency — extract ``UserContext`` from the ``neuronote_access`` cookie.
+    """FastAPI dependency — extract ``UserContext`` from the access token cookie.
 
     Usage::
 
@@ -76,13 +88,16 @@ def get_current_user(request: Request) -> UserContext:
         async def protected(user: UserContext = Depends(get_current_user)):
             ...
     """
-    token = request.cookies.get("neuronote_access")
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    claims = decode_token(token)
-    return UserContext(
-        user_id=claims["sub"],
-        email=claims["email"],
-        schema_name=claims["schema_name"],
-    )
+    claims = decode_token(token, expected_type="access")
+    try:
+        return UserContext(
+            user_id=claims["sub"],
+            email=claims["email"],
+            schema_name=claims["schema_name"],
+        )
+    except KeyError:
+        raise HTTPException(status_code=401, detail="Malformed token")

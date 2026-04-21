@@ -8,6 +8,7 @@ import jwt
 import pytest
 
 from app.core.auth import (
+    ACCESS_COOKIE_NAME,
     JWT_ALGORITHM,
     UserContext,
     create_access_token,
@@ -42,6 +43,7 @@ def test_create_access_token_produces_valid_jwt() -> None:
     assert claims["sub"] == "uid-1"
     assert claims["email"] == "a@b.com"
     assert claims["schema_name"] == "user_abc"
+    assert claims["type"] == "access"
     assert "exp" in claims
     assert "iat" in claims
 
@@ -109,7 +111,6 @@ def test_decode_token_raises_on_expired_token() -> None:
 
 def test_decode_token_raises_on_tampered_token() -> None:
     token = create_access_token("uid-4", "t@t.com", "user_t")
-    # Tamper by appending garbage to the signature segment.
     tampered = token + "XXXXX"
 
     from fastapi import HTTPException
@@ -117,6 +118,25 @@ def test_decode_token_raises_on_tampered_token() -> None:
     with pytest.raises(HTTPException) as exc_info:
         decode_token(tampered)
     assert exc_info.value.status_code == 401
+
+
+def test_decode_token_rejects_refresh_token_as_access() -> None:
+    """A refresh token must not be accepted where an access token is expected."""
+    token = create_refresh_token("uid-6")
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        decode_token(token, expected_type="access")
+    assert exc_info.value.status_code == 401
+    assert "token type" in exc_info.value.detail.lower()
+
+
+def test_decode_token_accepts_refresh_when_expected() -> None:
+    token = create_refresh_token("uid-7")
+    claims = decode_token(token, expected_type="refresh")
+    assert claims["sub"] == "uid-7"
+    assert claims["type"] == "refresh"
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +147,7 @@ def test_decode_token_raises_on_tampered_token() -> None:
 def test_get_current_user_extracts_user_context() -> None:
     token = create_access_token("uid-5", "me@me.com", "user_me")
     request = MagicMock()
-    request.cookies = {"neuronote_access": token}
+    request.cookies = {ACCESS_COOKIE_NAME: token}
 
     ctx = get_current_user(request)
 
@@ -147,6 +167,40 @@ def test_get_current_user_raises_401_when_cookie_missing() -> None:
         get_current_user(request)
     assert exc_info.value.status_code == 401
     assert "authentication" in exc_info.value.detail.lower()
+
+
+def test_get_current_user_rejects_refresh_token() -> None:
+    """Presenting a refresh token to get_current_user must return 401."""
+    token = create_refresh_token("uid-8")
+    request = MagicMock()
+    request.cookies = {ACCESS_COOKIE_NAME: token}
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(request)
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_rejects_malformed_access_token() -> None:
+    """An access token missing required claims must return 401."""
+    payload = {
+        "sub": "uid-9",
+        "type": "access",
+        "exp": int(time.time()) + 900,
+        "iat": int(time.time()),
+        # email and schema_name intentionally missing
+    }
+    token = jwt.encode(payload, TEST_SECRET, algorithm=JWT_ALGORITHM)
+    request = MagicMock()
+    request.cookies = {ACCESS_COOKIE_NAME: token}
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_user(request)
+    assert exc_info.value.status_code == 401
+    assert "malformed" in exc_info.value.detail.lower()
 
 
 # ---------------------------------------------------------------------------
