@@ -13,3 +13,9 @@ export interface UpdatePreferencesRequest {
   llm_base_url?: string;
   llm_model?: string;
 }
+
+/** Result of a test LLM connection attempt. */
+export interface TestConnectionResponse {
+  success: boolean;
+  message: string;
+}

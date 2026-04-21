@@ -20,3 +20,10 @@ class UpdatePreferencesRequest(BaseModel):
     llm_api_key: str | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
+
+
+class TestConnectionResponse(BaseModel):
+    """Result of a test LLM connection attempt."""
+
+    success: bool
+    message: str
