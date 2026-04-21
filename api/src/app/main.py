@@ -6,6 +6,7 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -13,6 +14,7 @@ from slowapi.errors import RateLimitExceeded
 from app.db.config import get_database_settings
 from app.db.engine import get_session_factory, initialize_database
 from app.db.extensions import validate_required_extensions
+from app.routes.auth import router as auth_router
 from app.routes.backfill import router as backfill_router
 from app.routes.concepts import router as concepts_router
 from app.routes.connections import router as connections_router
@@ -31,7 +33,11 @@ from app.core.rate_limiter import limiter
 from app.services.startup_backfill_service import StartupBackfillService
 
 # Paths that are always public regardless of API_KEY setting.
-_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {
+    "/health", "/docs", "/openapi.json", "/redoc",
+    "/v1/auth/google/login", "/v1/auth/google/callback",
+    "/v1/auth/github/login", "/v1/auth/github/callback",
+}
 
 class _RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -95,6 +101,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Session middleware required by authlib for OAuth state storage.
+_session_secret = os.environ.get("JWT_SECRET", "dev-session-secret")
+app.add_middleware(SessionMiddleware, secret_key=_session_secret)
+
 
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next: object) -> object:
@@ -133,6 +143,7 @@ async def api_key_middleware(request: Request, call_next: object) -> object:
     return await call_next(request)  # type: ignore[operator]
 
 
+app.include_router(auth_router, prefix="/v1")
 app.include_router(health_router)
 app.include_router(notes_router, prefix="/v1")
 app.include_router(backlinks_router, prefix="/v1")
