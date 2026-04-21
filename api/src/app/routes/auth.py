@@ -10,6 +10,7 @@ import httpx
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -268,6 +269,21 @@ def _upsert_user(
     session.flush()  # Assign PK before schema provisioning.
 
     create_user_schema(session, schema_name)
+
+    # Create default "Inbox" subject in the new user's schema.
+    _url = str(session.get_bind().url)
+    if _url.startswith("postgresql"):
+        session.execute(text(f"SET search_path TO {schema_name}, public"))
+        session.execute(
+            text(
+                "INSERT INTO subjects (id, name, created_at, updated_at) "
+                "VALUES (:id, :name, NOW(), NOW()) ON CONFLICT DO NOTHING"
+            ),
+            {"id": "inbox", "name": "Inbox"},
+        )
+        # Reset search_path back to public for the auth route context.
+        session.execute(text("SET search_path TO public"))
+
     session.commit()
     logger.info("New user registered: %s (%s) -> %s", email, provider, schema_name)
     return user
