@@ -79,8 +79,10 @@ class ConceptInsightService:
         self,
         session: Session,
         settings: NlpSettings | None = None,
+        graph_name: str = "neuronote",
     ) -> None:
         self._session = session
+        self._graph_name = graph_name
         cfg = settings or get_nlp_settings()
         self._api_key: str = cfg.llm_api_key
         self._model: str = cfg.llm_model
@@ -278,7 +280,7 @@ class ConceptInsightService:
             conn = self._session.connection()
             rows = conn.exec_driver_sql(
                 "SELECT * FROM ag_catalog.cypher(%s, %s) AS (source_note_id ag_catalog.agtype)",
-                ("neuronote", cypher_query),
+                (self._graph_name, cypher_query),
             ).fetchall()
 
             note_ids: list[str] = []

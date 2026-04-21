@@ -11,6 +11,7 @@ from sqlalchemy import select, text as sa_text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.engine import get_session_factory
+from app.db.tenant import validate_schema_name
 from app.db.models.block import Block
 from app.db.models.nlp_extraction_cache import NlpExtractionCache
 from app.db.repositories.entity_alias_repository import AliasRecord, EntityAliasRepository
@@ -63,13 +64,27 @@ class NoteProcessingService:
         session_factory: sessionmaker[Session] | None = None,
         pipeline: NoteNlpPipeline | None = None,
         graph_name: str = _DEFAULT_GRAPH_NAME,
+        schema_name: str | None = None,
     ) -> None:
         self._session_factory = session_factory or get_session_factory()
         self._pipeline = pipeline or NoteNlpPipeline()
         self._graph_name = graph_name
+        self._schema_name = schema_name
+
+    def _open_session(self) -> Session:
+        """Open a session with the tenant search_path set (if multi-tenant)."""
+        session = self._session_factory()
+        if self._schema_name:
+            validate_schema_name(self._schema_name)
+            url = str(session.get_bind().url)
+            if url.startswith("postgresql"):
+                session.execute(sa_text(
+                    f"SET search_path TO {self._schema_name}, public"
+                ))
+        return session
 
     def _load_snapshot(self, note_id: str) -> ProcessedNoteSnapshot:
-        with self._session_factory() as session:
+        with self._open_session() as session:
             note = NoteRepository(session).get_note(note_id)
             if note is None:
                 raise NoteNotFoundError(f"Note {note_id} was not found")
@@ -108,7 +123,7 @@ class NoteProcessingService:
         return f"{title}\n\n{body}"
 
     def _load_alias_records(self) -> dict[str, AliasRecord]:
-        with self._session_factory() as session:
+        with self._open_session() as session:
             return EntityAliasRepository(session).list_alias_index()
 
     def _build_dictionary_terms(self, alias_records: dict[str, AliasRecord]) -> list[str]:
@@ -156,7 +171,7 @@ class NoteProcessingService:
         Cache miss if stored profile differs (profile change forces fresh extraction).
         """
         try:
-            with self._session_factory() as session:
+            with self._open_session() as session:
                 row = session.execute(
                     select(NlpExtractionCache).where(
                         NlpExtractionCache.content_hash == content_hash,
@@ -205,7 +220,7 @@ class NoteProcessingService:
                     },
                 )
             )
-            with self._session_factory() as session:
+            with self._open_session() as session:
                 with session.begin():
                     session.execute(stmt)
         except Exception:  # noqa: BLE001
@@ -220,7 +235,7 @@ class NoteProcessingService:
         # normalisation loop: once "machine learning" is extracted once, future calls
         # see it and reuse that exact form instead of producing "ML" or "machine-learning".
         base_terms = self._build_dictionary_terms(alias_records)
-        with self._session_factory() as session:
+        with self._open_session() as session:
             known = get_known_concepts(session)
         dictionary_terms = base_terms + [c for c in known if c not in set(t.lower() for t in base_terms)]
 
@@ -246,7 +261,7 @@ class NoteProcessingService:
 
         # Register newly extracted concepts so subsequent notes see them.
         if result.entities:
-            with self._session_factory() as session:
+            with self._open_session() as session:
                 with session.begin():
                     register_concepts(session, [(e.text, e.entity_id) for e in result.entities if e.label == "concept"])
         resolution_batch = self._build_resolver(alias_records).resolve(result.entities)
@@ -258,7 +273,7 @@ class NoteProcessingService:
             top_entities=[e.text for e in result.entities[:5]],
         )
 
-        with self._session_factory() as session:
+        with self._open_session() as session:
             if not self._is_postgres(session):
                 return summary
 
@@ -314,7 +329,7 @@ class NoteProcessingService:
             return
 
         try:
-            with self._session_factory() as session:
+            with self._open_session() as session:
                 rows = session.execute(
                     sa_text(
                         "SELECT concept_text FROM concept_registry "
@@ -332,7 +347,7 @@ class NoteProcessingService:
 
         # Pass unclassified concepts + a sample of known concepts as context
         # so the SLM can spot cross-note synonyms and hierarchies.
-        with self._session_factory() as session:
+        with self._open_session() as session:
             known = get_known_concepts(session)[:60]
         all_concepts = list(dict.fromkeys(unclassified + known))
 
@@ -346,7 +361,7 @@ class NoteProcessingService:
         if meta.synonym_pairs or meta.subtopic_pairs:
             now_iso = datetime.now(timezone.utc).isoformat()
             try:
-                with self._session_factory() as session:
+                with self._open_session() as session:
                     if not self._is_postgres(session):
                         return
                     repo = GraphRepository(session=session)
@@ -380,7 +395,7 @@ class NoteProcessingService:
     def _mark_concepts_classified(self, concept_texts: list[str]) -> None:
         try:
             now_dt = datetime.now(timezone.utc)
-            with self._session_factory() as session:
+            with self._open_session() as session:
                 with session.begin():
                     session.execute(
                         sa_text(

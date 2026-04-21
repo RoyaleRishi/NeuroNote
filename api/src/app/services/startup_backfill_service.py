@@ -64,6 +64,9 @@ class StartupBackfillService:
 
         from app.services.note_processing_service import NoteNotFoundError, NoteProcessingService
 
+        # TODO: Multi-tenant — iterate all user schemas and create a
+        # NoteProcessingService per tenant with schema_name + graph_name.
+        # Currently operates on the public schema only.
         service = NoteProcessingService()
         for note_id in note_ids:
             try:

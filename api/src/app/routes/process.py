@@ -10,6 +10,7 @@ from app.core.job_store import (
     mark_job_failed,
     mark_job_running,
 )
+from app.core.auth import get_current_user
 from app.db.repositories.note_repository import NoteRepository
 from app.db.tenant_session import get_tenant_session
 from app.core.rate_limiter import limiter
@@ -24,10 +25,15 @@ router = APIRouter()
 _LOG = logging.getLogger(__name__)
 
 
-def _run_processing_job(*, job_id: str, payload: ProcessNoteRequest) -> None:
+def _run_processing_job(
+    *, job_id: str, payload: ProcessNoteRequest, schema_name: str, graph_name: str
+) -> None:
     mark_job_running(job_id)
     try:
-        summary = NoteProcessingService().process_note(payload)
+        summary = NoteProcessingService(
+            schema_name=schema_name,
+            graph_name=graph_name,
+        ).process_note(payload)
     except NoteNotFoundError as exc:
         mark_job_failed(job_id, error=str(exc))
         return
@@ -51,6 +57,9 @@ def process_note(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_tenant_session),
 ) -> ProcessNoteResponse:
+    user = get_current_user(request)
+    graph_name = f"nn_{user.schema_name}"
+
     note = NoteRepository(session).get_note(payload.note_id)
     if note is None:
         raise HTTPException(
@@ -63,7 +72,13 @@ def process_note(
         content_hash=note.content_hash,
     )
     if created:
-        background_tasks.add_task(_run_processing_job, job_id=record.job_id, payload=payload)
+        background_tasks.add_task(
+            _run_processing_job,
+            job_id=record.job_id,
+            payload=payload,
+            schema_name=user.schema_name,
+            graph_name=graph_name,
+        )
 
     return ProcessNoteResponse(job_id=record.job_id, status="queued")
 
