@@ -343,3 +343,32 @@ export async function logoutUser(): Promise<void> {
   const base = getBaseUrl();
   await apiFetch(`${base}/v1/auth/logout`, { method: "POST" });
 }
+
+// ── Preferences ─────────────────────────────────────────────────────────────
+
+import type {
+  UserPreferences,
+  UpdatePreferencesRequest,
+} from "../../../shared/contracts/ts/v1/preferences";
+
+export type { UserPreferences, UpdatePreferencesRequest };
+
+/** Fetch the user's preferences (with defaults for unset keys). */
+export async function fetchPreferences(): Promise<UserPreferences> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/preferences`);
+  return parseJsonResponse<UserPreferences>(res);
+}
+
+/** Partial update of user preferences. */
+export async function updatePreferences(
+  payload: UpdatePreferencesRequest,
+): Promise<UserPreferences> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/preferences`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse<UserPreferences>(res);
+}
