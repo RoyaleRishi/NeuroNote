@@ -185,6 +185,16 @@ CREATE TABLE {schema}.nlp_extraction_cache (
 );
 
 -- ============================================================
+-- user_preferences  (key-value store for per-user settings)
+-- ============================================================
+CREATE TABLE {schema}.user_preferences (
+    key        VARCHAR(64)              NOT NULL,
+    value      TEXT                     NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (key)
+);
+
+-- ============================================================
 -- note_embeddings  (0008 — pgvector)
 -- Requires: CREATE EXTENSION IF NOT EXISTS vector  (database-wide, run once)
 -- ============================================================

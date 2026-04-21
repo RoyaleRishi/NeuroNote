@@ -48,7 +48,8 @@ def test_tenant_tables_constant() -> None:
     assert "concept_insight_cache" in TENANT_TABLES
     assert "nlp_extraction_cache" in TENANT_TABLES
     assert "note_embeddings" in TENANT_TABLES
-    assert len(TENANT_TABLES) == 12
+    assert "user_preferences" in TENANT_TABLES
+    assert len(TENANT_TABLES) == 13
 
 
 def test_create_user_schema_creates_tables(configured_db: None) -> None:

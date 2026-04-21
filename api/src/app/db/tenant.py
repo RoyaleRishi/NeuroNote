@@ -34,6 +34,7 @@ TENANT_TABLES: tuple[str, ...] = (
     "concept_registry",
     "concept_insight_cache",
     "nlp_extraction_cache",
+    "user_preferences",
     "note_embeddings",
 )
 
