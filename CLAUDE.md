@@ -49,12 +49,14 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 ## Key architectural decisions
 
 ### API
-- **FastAPI** with async route handlers; `Depends(get_db_session)` for DB injection
+- **FastAPI** with async route handlers; `Depends(get_tenant_session)` for tenant-scoped DB injection (sets `search_path` per user); `Depends(get_db_session)` for public-schema-only routes (health, auth)
 - **SQLAlchemy** ORM (sync sessions, not async) — the DB layer is synchronous even though route handlers are `async def`
 - **Apache AGE** (typed property graph in PostgreSQL) — Cypher queries via raw SQL with `LOAD 'age'` + `ag_catalog` search path
 - **Schema is migration-first** — `DB_AUTO_CREATE=false`; always run `make compose-migrate` after pulling new migrations
 - **Alembic** for migrations — 14 migrations in `api/alembic/versions/`
-- **pgvector** for semantic embeddings — note-level embeddings stored in `public.note_embeddings` (384-dim, HNSW index); no per-entity embeddings
+- **Multi-tenancy** — schema-per-user isolation. Each user gets a PostgreSQL schema (`user_xxx`) with all data tables + an AGE graph (`nn_user_xxx`). `get_tenant_session()` sets `search_path` from JWT `schema_name`. All data queries use unqualified table names (resolved via `search_path`).
+- **OAuth authentication** — Google + GitHub via `authlib` + JWT. `httpOnly` secure cookies (`neuronote_access` 15min, `neuronote_refresh` 7d). `get_current_user()` FastAPI dependency extracts `UserContext` from JWT.
+- **pgvector** for semantic embeddings — note-level embeddings stored in `note_embeddings` (384-dim, HNSW index); per-user schema
 - **Shared contracts** — Pydantic models in `shared/contracts/python/v1/`; always update the matching TypeScript file in `shared/contracts/ts/v1/` when changing Python contracts, and vice versa
 
 #### Users table (migration 0014)
