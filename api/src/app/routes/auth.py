@@ -238,7 +238,8 @@ async def oauth_callback(
     access = create_access_token(user.id, user.email, user.schema_name)
     refresh = create_refresh_token(user.id)
 
-    response = RedirectResponse(url="/", status_code=302)
+    frontend_url = get_oauth_settings().frontend_url
+    response = RedirectResponse(url=frontend_url, status_code=302)
     _set_auth_cookies(response, access, refresh)
     return response
 
@@ -426,7 +427,7 @@ def auth_refresh(
         key=ACCESS_COOKIE_NAME,
         value=access,
         httponly=True,
-        secure=True,
+        secure=_is_secure_env(),
         samesite="lax",
         path="/",
     )

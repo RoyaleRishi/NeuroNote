@@ -19,6 +19,7 @@ class OAuthSettings:
     github_client_secret: str
     jwt_secret: str
     oauth_redirect_base_url: str
+    frontend_url: str
 
 
 def get_oauth_settings() -> OAuthSettings:
@@ -39,5 +40,6 @@ def get_oauth_settings() -> OAuthSettings:
         github_client_id=os.getenv("GITHUB_CLIENT_ID", ""),
         github_client_secret=os.getenv("GITHUB_CLIENT_SECRET", ""),
         jwt_secret=jwt_secret,
-        oauth_redirect_base_url=os.getenv("OAUTH_REDIRECT_BASE_URL", "http://localhost:3000"),
+        oauth_redirect_base_url=os.getenv("OAUTH_REDIRECT_BASE_URL", "http://localhost:8000"),
+        frontend_url=os.getenv("FRONTEND_URL", "http://localhost:3000"),
     )
