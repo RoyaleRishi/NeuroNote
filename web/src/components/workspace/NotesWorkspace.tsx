@@ -35,6 +35,8 @@ import { useSelectionMode } from "../../lib/hooks/useSelectionMode";
 import { useQuickSwitch } from "../../lib/hooks/useQuickSwitch";
 import { QuickCaptureModal, type QuickCaptureResult } from "./QuickCaptureModal";
 import { FileDropZone } from "./FileDropZone";
+import { UserMenu } from "../auth/UserMenu";
+import { useAuth } from "../../lib/hooks/useAuth";
 
 const SELECTED_NOTE_STORAGE_KEY = "neuronote.workspace.selected";
 const RECENT_NOTES_STORAGE_KEY = "neuronote.workspace.recent";
@@ -222,6 +224,9 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const createInFlightRef = useRef(false);
   const contextMenuRef = useRef<HTMLUListElement | null>(null);
   const filtersInitializedRef = useRef(false);
+
+  // ── Auth ──
+  const { user } = useAuth();
 
   // ── Extracted hooks ──
   const qs = useQuickSwitch(notes, selectedNoteId);
@@ -1035,18 +1040,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             Graph
           </button>
         </div>
-        {process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && (
-          <button
-            type="button"
-            className="app-nav-logout"
-            onClick={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
-              window.location.href = "/login";
-            }}
-          >
-            Sign out
-          </button>
-        )}
+        <UserMenu user={user} />
       </nav>
 
       {appView === "graph" ? (
