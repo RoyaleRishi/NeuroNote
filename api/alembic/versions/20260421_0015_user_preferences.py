@@ -25,7 +25,7 @@ def upgrade() -> None:
 
     # Find all tenant schemas.
     rows = bind.execute(
-        sa.text("SELECT schema_name FROM public.users")
+        sa.text("SELECT schema_name FROM users")
     ).all()
 
     for (schema_name,) in rows:
@@ -44,7 +44,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     rows = bind.execute(
-        sa.text("SELECT schema_name FROM public.users")
+        sa.text("SELECT schema_name FROM users")
     ).all()
     for (schema_name,) in rows:
         bind.execute(

@@ -40,6 +40,21 @@ def configured_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
     reset_job_store()
     reset_backfill_status()
     initialize_database()
+
+    # Create tables that only exist in the SQL template (not in ORM models).
+    from app.db.engine import get_session_factory
+    from sqlalchemy import text as sa_text
+    factory = get_session_factory()
+    with factory() as session:
+        session.execute(sa_text(
+            "CREATE TABLE IF NOT EXISTS user_preferences ("
+            "  key VARCHAR(64) NOT NULL PRIMARY KEY,"
+            "  value TEXT NOT NULL,"
+            "  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")"
+        ))
+        session.commit()
+
     yield
     reset_job_store()
     reset_backfill_status()

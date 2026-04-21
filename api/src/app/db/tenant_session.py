@@ -40,15 +40,13 @@ def get_tenant_session(request: Request) -> Iterator[Session]:
     with session_factory() as session:
         url = str(session.get_bind().url)
         if url.startswith("postgresql"):
-            # SET search_path is a session-level command in PostgreSQL — it
-            # persists across transactions on the same connection.  Execute it
-            # then commit so the auto-begun transaction is closed; route handlers
-            # that call session.begin() will start a fresh transaction with the
-            # search_path already active.
-            session.execute(
+            # Pin the connection to this session so it isn't released back to
+            # the pool after commit() — the pool checkout event resets
+            # search_path, which would undo our tenant scoping.
+            conn = session.connection()
+            conn.execute(
                 text(f"SET search_path TO {user.schema_name}, public")
             )
-            session.commit()
         yield session
 
 

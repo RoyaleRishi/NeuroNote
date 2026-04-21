@@ -37,7 +37,7 @@ def put_note(
 
     repository = NoteRepository(session)
     try:
-        with session.begin():
+        with session.begin_nested():
             record = repository.upsert_note(
                 note_id=payload.note_id,
                 note_title=payload.note_title,
@@ -139,7 +139,7 @@ def delete_note(
     note_id: str,
     session: Session = Depends(get_tenant_session),
 ) -> Response:
-    with session.begin():
+    with session.begin_nested():
         deleted = NoteRepository(session).delete_note(note_id)
 
     if not deleted:

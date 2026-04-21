@@ -35,12 +35,7 @@ def _build_engine(database_url: str, *, db_echo: bool) -> Engine:
 
     eng = create_engine(database_url, **kwargs)  # type: ignore[arg-type]
 
-    # Reset search_path on every connection checkout so tenant-scoped sessions
-    # don't leak their search_path into subsequent requests that draw the same
-    # pooled connection.  Without this, connections returning from
-    # get_tenant_session (search_path = user_xxx, public) would cause queries
-    # against the shared `users` table (neuronote schema) to fail with
-    # "relation does not exist".
+    # Reset search_path on checkout so non-tenant sessions always start clean.
     if database_url.startswith("postgresql"):
 
         @event.listens_for(eng, "checkout")

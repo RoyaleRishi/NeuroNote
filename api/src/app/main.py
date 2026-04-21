@@ -27,6 +27,7 @@ from app.routes.health import router as health_router
 from app.routes.import_ import router as import_router
 from app.routes.media import router as media_router
 from app.routes.notes import router as notes_router
+from app.routes.preferences import router as preferences_router
 from app.routes.process import router as process_router
 from app.core.job_store import mark_stale_jobs_as_failed
 from app.core.rate_limiter import limiter
@@ -158,4 +159,5 @@ app.include_router(export_router, prefix="/v1")
 app.include_router(graph_router, prefix="/v1")
 app.include_router(connections_router, prefix="/v1")
 app.include_router(concepts_router, prefix="/v1")
+app.include_router(preferences_router, prefix="/v1")
 app.include_router(import_router, prefix="/v1")

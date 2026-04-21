@@ -53,7 +53,7 @@ async def upload_media(
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image too large")
 
     storage = get_media_storage()
-    with session.begin():
+    with session.begin_nested():
         note = NoteRepository(session).get_note(payload.note_id)
         if note is None:
             raise HTTPException(
@@ -116,7 +116,7 @@ def delete_media(
         )
 
     storage = get_media_storage()
-    with session.begin():
+    with session.begin_nested():
         repository = NoteAssetRepository(session)
         asset = repository.get_asset(asset_id)
         if asset is None:

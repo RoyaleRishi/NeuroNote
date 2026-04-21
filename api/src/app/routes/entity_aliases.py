@@ -25,7 +25,7 @@ def confirm_entity_alias(
     payload: ConfirmEntityAliasRequest,
     session: Session = Depends(get_tenant_session),
 ) -> ConfirmEntityAliasResponse:
-    with session.begin():
+    with session.begin_nested():
         record = EntityAliasRepository(session).upsert_alias(
             alias_text=payload.alias_text,
             canonical_entity_id=payload.canonical_entity_id,
