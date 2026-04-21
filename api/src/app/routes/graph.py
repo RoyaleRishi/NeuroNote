@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.services.global_graph_service import GlobalGraphQuery, GlobalGraphService
 from app.services.local_graph_service import LocalGraphNoteNotFoundError
 from app.services.local_graph_service import LocalGraphQuery, LocalGraphService
@@ -18,7 +18,7 @@ def get_global_graph(
     limit_nodes: int = Query(default=500, ge=1, le=2000),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
     include_types: str = Query(default="note,entity,relation"),
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> GlobalGraphResponse:
     include_type_values = [item.strip() for item in include_types.split(",") if item.strip()]
     return GlobalGraphService(session).get_global_graph(
@@ -37,7 +37,7 @@ def get_local_graph(
     limit_nodes: int = Query(default=80, ge=1, le=150),
     min_confidence: float = Query(default=0.35, ge=0.0, le=1.0),
     include_types: str = Query(default="note,entity,relation"),
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> LocalGraphResponse:
     include_type_values = [item.strip() for item in include_types.split(",") if item.strip()]
     try:

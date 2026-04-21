@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.repositories.block_repository import BlockRepository
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from shared.contracts.python.v1.block import (
     BlockBacklinkItem,
     BlockBacklinksResponse,
@@ -20,7 +20,7 @@ router = APIRouter()
 @router.get("/notes/{note_id}/blocks", response_model=ListBlocksResponse)
 def list_blocks_for_note(
     note_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> ListBlocksResponse:
     rows = BlockRepository(session).list_blocks_for_note(note_id)
     return ListBlocksResponse(
@@ -44,7 +44,7 @@ def search_blocks(
     q: str = Query(default=""),
     note_id: str | None = Query(default=None, min_length=1),
     limit: int = Query(default=20, ge=1, le=100),
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> BlockSearchResponse:
     rows = BlockRepository(session).search_blocks(
         query=q,
@@ -67,7 +67,7 @@ def search_blocks(
 @router.get("/blocks/{block_uid}/backlinks", response_model=BlockBacklinksResponse)
 def list_block_backlinks(
     block_uid: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> BlockBacklinksResponse:
     rows = BlockRepository(session).list_block_backlinks(block_uid)
     if rows is None:

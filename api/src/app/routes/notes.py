@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.repositories.note_repository import NoteRepository, NoteTitleConflictError
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.services.note_asset_service import reconcile_note_assets_for_note
 from shared.contracts.python.v1.note import (
     GetNoteResponse,
@@ -27,7 +27,7 @@ def _utc_now_iso() -> str:
 def put_note(
     note_id: str,
     payload: SaveNoteRequest,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> SaveNoteResponse:
     if note_id != payload.note_id:
         raise HTTPException(
@@ -73,7 +73,7 @@ def put_note(
 @router.get("/notes/{note_id}", response_model=GetNoteResponse)
 def fetch_note(
     note_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> GetNoteResponse:
     record = NoteRepository(session).get_note(note_id)
     if record is None:
@@ -104,7 +104,7 @@ def list_notes(
     tag: str | None = Query(default=None, min_length=1),
     is_archived: bool | None = Query(default=False),
     is_pinned: bool | None = Query(default=None),
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> ListNotesResponse:
     items, total = NoteRepository(session).list_notes(
         limit=limit,
@@ -137,7 +137,7 @@ def list_notes(
 @router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_note(
     note_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> Response:
     with session.begin():
         deleted = NoteRepository(session).delete_note(note_id)

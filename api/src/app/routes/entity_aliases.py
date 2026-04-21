@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.repositories.entity_alias_repository import EntityAliasRepository
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.nlp.resolution.resolver import CanonicalAlias, EntityResolver
 from app.nlp.types import ExtractedEntity
 from shared.contracts.python.v1.entity_alias import (
@@ -23,7 +23,7 @@ router = APIRouter()
 @router.post("/entity-aliases/confirm", response_model=ConfirmEntityAliasResponse)
 def confirm_entity_alias(
     payload: ConfirmEntityAliasRequest,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> ConfirmEntityAliasResponse:
     with session.begin():
         record = EntityAliasRepository(session).upsert_alias(
@@ -45,7 +45,7 @@ def confirm_entity_alias(
 
 @router.get("/entity-aliases/calibration", response_model=EntityAliasCalibrationResponse)
 def get_entity_alias_calibration(
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> EntityAliasCalibrationResponse:
     stats = EntityAliasRepository(session).get_calibration_stats()
     return EntityAliasCalibrationResponse(
@@ -57,7 +57,7 @@ def get_entity_alias_calibration(
 @router.post("/entity-aliases/resolve-preview", response_model=ResolveEntitiesResponse)
 def resolve_entities_preview(
     payload: ResolveEntitiesRequest,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> ResolveEntitiesResponse:
     alias_records = EntityAliasRepository(session).list_alias_index()
     alias_index = {

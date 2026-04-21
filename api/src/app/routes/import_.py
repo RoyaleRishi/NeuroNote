@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.repositories.note_repository import NoteRepository
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.import_.markdown_parser import (
     extract_title_from_markdown,
     parse_markdown_to_tiptap,
@@ -42,7 +42,7 @@ def _extract_plain_text(content_json: dict) -> str:  # type: ignore[type-arg]
 def import_note(
     payload: ImportNoteRequest,
     background_tasks: BackgroundTasks,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> ImportNoteResponse:
     filename = payload.filename.strip()
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.repositories.note_repository import NoteRepository
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from shared.contracts.python.v1.backlink import BacklinkItem, BacklinksResponse
 
 router = APIRouter()
@@ -13,7 +13,7 @@ router = APIRouter()
 @router.get("/notes/{note_id}/backlinks", response_model=BacklinksResponse)
 def list_backlinks_for_note(
     note_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> BacklinksResponse:
     repository = NoteRepository(session)
     if repository.get_note(note_id) is None:

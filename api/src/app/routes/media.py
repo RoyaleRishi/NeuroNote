@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.repositories.note_asset_repository import NoteAssetRepository
 from app.db.repositories.note_repository import NoteRepository
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.media.config import get_media_settings
 from app.services.note_asset_service import (
     allowed_image_mime_types,
@@ -28,7 +28,7 @@ router = APIRouter()
 )
 async def upload_media(
     payload: UploadImageRequest,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> UploadImageResponse:
     if not note_assets_table_exists(session):
         raise HTTPException(
@@ -84,7 +84,7 @@ async def upload_media(
 @router.get("/media/{asset_id}")
 def fetch_media(
     asset_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> Response:
     if not note_assets_table_exists(session):
         raise HTTPException(
@@ -107,7 +107,7 @@ def fetch_media(
 @router.delete("/media/{asset_id}", response_model=DeleteImageResponse)
 def delete_media(
     asset_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> DeleteImageResponse:
     if not note_assets_table_exists(session):
         raise HTTPException(

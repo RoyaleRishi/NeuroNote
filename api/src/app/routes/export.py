@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.repositories.note_asset_repository import NoteAssetRepository, NoteAssetRecord
 from app.db.repositories.note_repository import NoteRepository
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.export.markdown import render_note_markdown
 from app.media.references import extract_asset_ids_from_doc
 from app.services.note_asset_service import get_media_storage, note_assets_table_exists
@@ -60,7 +60,7 @@ def _hydrate_image_filenames(
 @router.get("/notes/{note_id}/export/markdown")
 def export_note_markdown(
     note_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> Response:
     note = NoteRepository(session).get_note(note_id)
     if note is None:
