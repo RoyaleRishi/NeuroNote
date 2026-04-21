@@ -62,7 +62,7 @@ def mark_stale_jobs_as_failed() -> None:
                 session.execute(
                     text(
                         """
-                        UPDATE public.processing_jobs
+                        UPDATE processing_jobs
                         SET status = 'failed',
                             error = 'Worker restarted — job was interrupted',
                             updated_at = NOW()
@@ -93,7 +93,7 @@ def _pg_create_or_get_job(*, note_id: str, content_hash: str) -> tuple[ProcessSt
                 text(
                     """
                     SELECT job_id, status, error, created_at, updated_at, extraction_summary
-                    FROM public.processing_jobs
+                    FROM processing_jobs
                     WHERE note_id = :note_id AND content_hash = :content_hash
                       AND status NOT IN ('failed')
                     ORDER BY created_at DESC
@@ -118,7 +118,7 @@ def _pg_create_or_get_job(*, note_id: str, content_hash: str) -> tuple[ProcessSt
             session.execute(
                 text(
                     """
-                    INSERT INTO public.processing_jobs
+                    INSERT INTO processing_jobs
                         (job_id, note_id, content_hash, status, created_at, updated_at)
                     VALUES (:job_id, :note_id, :content_hash, 'queued', NOW(), NOW())
                     """
@@ -146,7 +146,7 @@ def _pg_transition_job(
             row = session.execute(
                 text(
                     """
-                    UPDATE public.processing_jobs
+                    UPDATE processing_jobs
                     SET status = :status,
                         error = :error,
                         extraction_summary = CAST(:extraction_summary AS jsonb),
@@ -180,7 +180,7 @@ def _pg_get_job(job_id: str) -> ProcessStatusResponse | None:
             text(
                 """
                 SELECT job_id, status, error, created_at, updated_at, extraction_summary
-                FROM public.processing_jobs
+                FROM processing_jobs
                 WHERE job_id = :job_id
                 """
             ),

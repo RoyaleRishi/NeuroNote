@@ -220,7 +220,8 @@ class NoteProcessingService:
         # normalisation loop: once "machine learning" is extracted once, future calls
         # see it and reuse that exact form instead of producing "ML" or "machine-learning".
         base_terms = self._build_dictionary_terms(alias_records)
-        known = get_known_concepts()
+        with self._session_factory() as session:
+            known = get_known_concepts(session)
         dictionary_terms = base_terms + [c for c in known if c not in set(t.lower() for t in base_terms)]
 
         profile = getattr(self._pipeline, "extraction_profile", "rule-only")
@@ -245,7 +246,9 @@ class NoteProcessingService:
 
         # Register newly extracted concepts so subsequent notes see them.
         if result.entities:
-            register_concepts([(e.text, e.entity_id) for e in result.entities if e.label == "concept"])
+            with self._session_factory() as session:
+                with session.begin():
+                    register_concepts(session, [(e.text, e.entity_id) for e in result.entities if e.label == "concept"])
         resolution_batch = self._build_resolver(alias_records).resolve(result.entities)
 
         summary = ExtractionSummary(
@@ -314,7 +317,7 @@ class NoteProcessingService:
             with self._session_factory() as session:
                 rows = session.execute(
                     sa_text(
-                        "SELECT concept_text FROM public.concept_registry "
+                        "SELECT concept_text FROM concept_registry "
                         "WHERE concept_text = ANY(:texts) AND meta_classified_at IS NULL"
                     ),
                     {"texts": concept_texts},
@@ -329,7 +332,8 @@ class NoteProcessingService:
 
         # Pass unclassified concepts + a sample of known concepts as context
         # so the SLM can spot cross-note synonyms and hierarchies.
-        known = get_known_concepts()[:60]
+        with self._session_factory() as session:
+            known = get_known_concepts(session)[:60]
         all_concepts = list(dict.fromkeys(unclassified + known))
 
         classifier = ConceptMetaClassifier(
@@ -380,7 +384,7 @@ class NoteProcessingService:
                 with session.begin():
                     session.execute(
                         sa_text(
-                            "UPDATE public.concept_registry SET meta_classified_at = :now "
+                            "UPDATE concept_registry SET meta_classified_at = :now "
                             "WHERE concept_text = ANY(:texts)"
                         ),
                         {"now": now_dt, "texts": concept_texts},
