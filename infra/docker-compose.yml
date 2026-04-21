@@ -58,10 +58,20 @@ services:
       NLP_EXTRACTION_PROFILE: ${NLP_EXTRACTION_PROFILE:-rule-only}
       NLP_ENABLE_REGEX_FALLBACK: ${NLP_ENABLE_REGEX_FALLBACK:-true}
       NLP_ENTITY_SEED_TERMS: ${NLP_ENTITY_SEED_TERMS:-machine learning,entity resolution,graph reasoning,knowledge graph,neural networks}
+      LLM_API_KEY: ${LLM_API_KEY:-${ANTHROPIC_API_KEY:-}}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.anthropic.com/v1/}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       NLP_LLM_MODEL: ${NLP_LLM_MODEL:-claude-haiku-4-5-20251001}
       NLP_USE_SEMANTIC_EMBEDDINGS: ${NLP_USE_SEMANTIC_EMBEDDINGS:-false}
       API_KEY: ${API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-${SESSION_SECRET:-dev-jwt-secret-change-me}}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_BASE_URL: ${OAUTH_REDIRECT_BASE_URL:-http://localhost:8000}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       UV_PROJECT_ENVIRONMENT: /tmp/neuronote-api-venv
       UV_CACHE_DIR: /tmp/uv-cache
       PYTHONPATH: api/src:.

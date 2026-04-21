@@ -37,6 +37,7 @@ _PUBLIC_PATHS = {
     "/health", "/docs", "/openapi.json", "/redoc",
     "/v1/auth/google/login", "/v1/auth/google/callback",
     "/v1/auth/github/login", "/v1/auth/github/callback",
+    "/v1/auth/dev/login", "/v1/auth/dev/status",
 }
 
 class _RequestIdFilter(logging.Filter):

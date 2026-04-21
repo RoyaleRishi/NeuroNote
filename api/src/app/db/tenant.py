@@ -77,21 +77,24 @@ def _pg_create_schema(session: Session, schema_name: str) -> None:
     rendered = template_sql.replace("{schema}", schema_name)
 
     # Split on semicolons and execute each statement individually.
-    # Skip empty / comment-only fragments.
     for stmt in rendered.split(";"):
-        stripped = stmt.strip()
-        if not stripped or stripped.startswith("--"):
+        # Strip leading comment lines so we can detect the actual SQL keyword.
+        lines = stmt.strip().splitlines()
+        sql_lines = [ln for ln in lines if not ln.strip().startswith("--")]
+        cleaned = "\n".join(sql_lines).strip()
+        if not cleaned:
             continue
         # Make CREATE TABLE / CREATE INDEX idempotent.
-        if stripped.upper().startswith("CREATE TABLE"):
-            stripped = stripped.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
-        if stripped.upper().startswith("CREATE INDEX"):
-            stripped = stripped.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS", 1)
-        if stripped.upper().startswith("CREATE UNIQUE INDEX"):
-            stripped = stripped.replace(
+        upper = cleaned.upper()
+        if upper.startswith("CREATE TABLE"):
+            cleaned = cleaned.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
+        elif upper.startswith("CREATE UNIQUE INDEX"):
+            cleaned = cleaned.replace(
                 "CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS", 1
             )
-        session.execute(text(stripped))
+        elif upper.startswith("CREATE INDEX"):
+            cleaned = cleaned.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS", 1)
+        session.execute(text(cleaned))
 
     # Create per-user AGE graph.
     try:

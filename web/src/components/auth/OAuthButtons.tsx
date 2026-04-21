@@ -1,10 +1,37 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { getBaseUrl } from "../../lib/api-client";
 
-/** Full-width OAuth login buttons for Google and GitHub. */
+/** Full-width OAuth login buttons for Google and GitHub, with dev mode fallback. */
 export function OAuthButtons() {
   const apiBase = getBaseUrl();
+  const [devMode, setDevMode] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch(`${apiBase}/v1/auth/dev/status`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => setDevMode(data.dev_mode === true))
+      .catch(() => setDevMode(false));
+  }, [apiBase]);
+
+  async function handleDevLogin() {
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/v1/auth/dev/login`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        window.location.href = "/";
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const buttonStyle: React.CSSProperties = {
     display: "block",
@@ -29,6 +56,21 @@ export function OAuthButtons() {
     color: "#fff",
     border: "1px solid var(--accent)",
   };
+
+  if (devMode === null) return null; // loading state check
+
+  if (devMode) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <button type="button" onClick={() => void handleDevLogin()} disabled={loading} style={accentButtonStyle}>
+          {loading ? "Signing in..." : "Sign in as Dev User"}
+        </button>
+        <p style={{ margin: 0, fontSize: "var(--text-xs)", color: "var(--text-muted)", textAlign: "center" }}>
+          Dev mode — no OAuth providers configured
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
