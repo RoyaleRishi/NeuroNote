@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from datetime import UTC, datetime
 
@@ -35,6 +36,7 @@ _SUPPORTED_PROVIDERS = {"google", "github"}
 
 # Lazy-initialised authlib OAuth instance — built once on first request.
 _oauth: OAuth | None = None
+_oauth_lock = threading.Lock()
 
 
 def _get_oauth() -> OAuth:
@@ -43,33 +45,35 @@ def _get_oauth() -> OAuth:
     if _oauth is not None:
         return _oauth
 
-    settings = get_oauth_settings()
-    oauth = OAuth()
+    with _oauth_lock:
+        if _oauth is not None:
+            return _oauth
 
-    # Register Google (OpenID Connect via discovery document).
-    if settings.google_client_id:
-        oauth.register(
-            name="google",
-            client_id=settings.google_client_id,
-            client_secret=settings.google_client_secret,
-            server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-            client_kwargs={"scope": "openid email profile"},
-        )
+        settings = get_oauth_settings()
+        oauth = OAuth()
 
-    # Register GitHub (manual endpoint URLs).
-    if settings.github_client_id:
-        oauth.register(
-            name="github",
-            client_id=settings.github_client_id,
-            client_secret=settings.github_client_secret,
-            authorize_url="https://github.com/login/oauth/authorize",
-            access_token_url="https://github.com/login/oauth/access_token",
-            api_base_url="https://api.github.com/",
-            client_kwargs={"scope": "read:user user:email"},
-        )
+        if settings.google_client_id:
+            oauth.register(
+                name="google",
+                client_id=settings.google_client_id,
+                client_secret=settings.google_client_secret,
+                server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+                client_kwargs={"scope": "openid email profile"},
+            )
 
-    _oauth = oauth
-    return _oauth
+        if settings.github_client_id:
+            oauth.register(
+                name="github",
+                client_id=settings.github_client_id,
+                client_secret=settings.github_client_secret,
+                authorize_url="https://github.com/login/oauth/authorize",
+                access_token_url="https://github.com/login/oauth/access_token",
+                api_base_url="https://api.github.com/",
+                client_kwargs={"scope": "read:user user:email"},
+            )
+
+        _oauth = oauth
+        return _oauth
 
 
 def _set_auth_cookies(response: RedirectResponse, access: str, refresh: str) -> None:
@@ -86,9 +90,11 @@ def _set_auth_cookies(response: RedirectResponse, access: str, refresh: str) -> 
 
 
 def _clear_auth_cookies(response: JSONResponse) -> None:
-    """Delete auth cookies from the response."""
+    """Delete auth cookies from the response (must match original cookie flags)."""
     for name in (ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME):
-        response.delete_cookie(key=name, path="/")
+        response.delete_cookie(
+            key=name, path="/", httponly=True, secure=True, samesite="lax"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +145,7 @@ async def oauth_callback(
     token = await client.authorize_access_token(request)
 
     # Extract user profile from provider.
-    email, display_name, avatar_url, oauth_provider_id = _extract_profile(
+    email, display_name, avatar_url, oauth_provider_id = await _extract_profile(
         provider, token
     )
 
@@ -165,7 +171,7 @@ async def oauth_callback(
     return response
 
 
-def _extract_profile(
+async def _extract_profile(
     provider: str, token: dict
 ) -> tuple[str | None, str | None, str | None, str]:
     """Return (email, display_name, avatar_url, oauth_provider_id) from token."""
@@ -178,38 +184,43 @@ def _extract_profile(
             userinfo.get("sub", ""),
         )
 
-    # GitHub — user info was fetched during token exchange.
-    # We need to call the GitHub API to get user details.
-    return _fetch_github_profile(token)
+    return await _fetch_github_profile(token)
 
 
-def _fetch_github_profile(
+async def _fetch_github_profile(
     token: dict,
 ) -> tuple[str | None, str | None, str | None, str]:
-    """Fetch GitHub user profile and primary email via API."""
+    """Fetch GitHub user profile and primary email via async API calls."""
     access_token = token.get("access_token", "")
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Accept": "application/json",
     }
 
-    resp = httpx.get("https://api.github.com/user", headers=headers)
-    resp.raise_for_status()
-    data = resp.json()
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("https://api.github.com/user", headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
 
-    email = data.get("email")
-    display_name = data.get("login")
-    avatar_url = data.get("avatar_url")
-    oauth_provider_id = str(data.get("id", ""))
+            email = data.get("email")
+            display_name = data.get("name") or data.get("login")
+            avatar_url = data.get("avatar_url")
+            oauth_provider_id = str(data.get("id", ""))
 
-    # If email is not public, fetch from /user/emails endpoint.
-    if not email:
-        emails_resp = httpx.get("https://api.github.com/user/emails", headers=headers)
-        emails_resp.raise_for_status()
-        for entry in emails_resp.json():
-            if entry.get("primary"):
-                email = entry.get("email")
-                break
+            # If email is not public, fetch from /user/emails endpoint.
+            if not email:
+                emails_resp = await client.get(
+                    "https://api.github.com/user/emails", headers=headers
+                )
+                emails_resp.raise_for_status()
+                for entry in emails_resp.json():
+                    if entry.get("primary"):
+                        email = entry.get("email")
+                        break
+    except httpx.HTTPError as exc:
+        logger.warning("GitHub API error: %s", exc)
+        raise HTTPException(status_code=502, detail="GitHub API unavailable")
 
     return email, display_name, avatar_url, oauth_provider_id
 
@@ -236,6 +247,7 @@ def _upsert_user(
     if user is not None:
         # Returning user — update mutable fields.
         user.last_login_at = datetime.now(UTC)
+        user.email = email
         user.display_name = display_name
         user.avatar_url = avatar_url
         session.commit()

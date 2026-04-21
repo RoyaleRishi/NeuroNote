@@ -102,7 +102,8 @@ app.add_middleware(
 )
 
 # Session middleware required by authlib for OAuth state storage.
-_session_secret = os.environ.get("JWT_SECRET", "dev-session-secret")
+# Uses SESSION_SECRET (separate from JWT_SECRET) to avoid coupling rotation.
+_session_secret = os.environ.get("SESSION_SECRET") or os.environ.get("JWT_SECRET", "dev-session-secret")
 app.add_middleware(SessionMiddleware, secret_key=_session_secret)
 
 
