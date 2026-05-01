@@ -59,6 +59,31 @@ export function getEngine(): WebWorkerMLCEngine | null {
   return engineInstance;
 }
 
+/** Clear all browser cache storage (including a partial/corrupted model download).
+ *
+ * Use this when a model download was interrupted and the next load hangs.
+ * Disposes the engine instance so the next ``initializeEngine`` call
+ * starts fresh.  Caller is responsible for triggering a page reload or
+ * a re-init after this completes.
+ */
+export async function clearModelCache(): Promise<void> {
+  // Tear down the engine first so its workers don't hold cache handles.
+  if (engineInstance) {
+    try {
+      await engineInstance.unload();
+    } catch {
+      // ignore — engine may be in a bad state
+    }
+    engineInstance = null;
+  }
+  statusValue = "idle";
+  lastErrorMessage = null;
+
+  if (typeof caches === "undefined") return;
+  const keys = await caches.keys();
+  await Promise.all(keys.map((key) => caches.delete(key)));
+}
+
 /** Check whether the browser supports WebGPU. */
 export function isWebGPUSupported(): boolean {
   return typeof navigator !== "undefined" && "gpu" in navigator;
