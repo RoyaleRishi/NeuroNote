@@ -16,7 +16,11 @@ import { TemplateGallery } from "../templates/TemplateGallery";
 import { FilterCombobox } from "../ui/FilterCombobox";
 import { HelpWidget } from "../ui/HelpWidget";
 import { LLMSettings } from "../settings/LLMSettings";
+import { ModelStatusIndicator } from "../llm/ModelStatusIndicator";
+import { ModelDownloadProgress } from "../llm/ModelDownloadProgress";
+import { WebGPUCheck } from "../llm/WebGPUCheck";
 import { usePreferences } from "../../lib/hooks/usePreferences";
+import { useEdgeLLM } from "../../lib/hooks/useEdgeLLM";
 import { applyTemplate, type Template } from "../../lib/templates";
 import {
   ApiClientError,
@@ -233,6 +237,13 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   // ── Preferences (LLM settings modal) ──
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { prefs, loading: prefsLoading, reload: reloadPrefs } = usePreferences();
+
+  // ── Edge LLM lifecycle ──
+  // Bumping `edgeRetryToken` re-runs WebGPU detection + engine init
+  // (driven by the WebGPU unsupported modal's "Try Again" button).
+  const [edgeRetryToken, setEdgeRetryToken] = useState(0);
+  const edgeMode = prefs?.llm_mode === "edge";
+  const edge = useEdgeLLM(edgeMode, edgeRetryToken);
 
   // ── Extracted hooks ──
   const qs = useQuickSwitch(notes, selectedNoteId);
@@ -1024,6 +1035,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
 
   return (
     <div className="app-shell">
+      <ModelDownloadProgress status={edge.status} progress={edge.progress} />
       <nav className="app-nav">
         <span className="app-nav-brand">NeuroNote</span>
         <div className="app-nav-tabs" role="tablist" aria-label="App view">
@@ -1070,8 +1082,20 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
+        <ModelStatusIndicator
+          mode={prefs?.llm_mode}
+          status={edge.status}
+          progress={edge.progress}
+        />
         <UserMenu user={user} />
       </nav>
+
+      {/* WebGPU support check — shown when edge mode is selected but unsupported */}
+      <WebGPUCheck
+        isOpen={edgeMode && edge.status === "unsupported"}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onRetry={() => setEdgeRetryToken((n) => n + 1)}
+      />
 
       {/* LLM Settings modal */}
       {settingsOpen && (
@@ -1324,6 +1348,8 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
               setSelectedNoteId(nextNoteId);
               setHighlightedNoteId(nextNoteId);
             }}
+            llmMode={prefs?.llm_mode}
+            edgeReady={edge.isReady}
           />
         ) : (
           <div className="notes-empty-state">
