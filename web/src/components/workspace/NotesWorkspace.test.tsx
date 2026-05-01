@@ -6,8 +6,10 @@ import { NotesWorkspace } from "./NotesWorkspace";
 import {
   ApiClientError,
   deleteNote,
+  fetchCurrentUser,
   fetchLocalGraph,
   fetchNoteBacklinks,
+  fetchPreferences,
   getNote,
   listNotes,
   saveNote,
@@ -22,12 +24,29 @@ vi.mock("../../lib/api-client", () => ({
       this.status = status;
     }
   },
+  getBaseUrl: () => "http://localhost:8000",
   listNotes: vi.fn(),
   saveNote: vi.fn(),
   deleteNote: vi.fn(),
   getNote: vi.fn(),
   fetchNoteBacklinks: vi.fn(),
   fetchLocalGraph: vi.fn(),
+  fetchCurrentUser: vi.fn().mockResolvedValue({
+    id: "test-user",
+    email: "test@test.com",
+    display_name: "Test",
+    avatar_url: null,
+    oauth_provider: "dev",
+    schema_name: "user_test0001",
+  }),
+  logoutUser: vi.fn().mockResolvedValue(undefined),
+  fetchPreferences: vi.fn().mockResolvedValue({
+    llm_mode: "edge",
+    llm_api_key: "",
+    llm_base_url: "https://api.openai.com/v1",
+    llm_model: "gpt-4o-mini",
+  }),
+  updatePreferences: vi.fn(),
 }));
 
 vi.mock("../editor/NoteEditor", () => ({
@@ -66,6 +85,20 @@ describe("NotesWorkspace", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
+    vi.mocked(fetchCurrentUser).mockResolvedValue({
+      id: "test-user",
+      email: "test@test.com",
+      display_name: "Test",
+      avatar_url: null,
+      oauth_provider: "dev",
+      schema_name: "user_test0001",
+    });
+    vi.mocked(fetchPreferences).mockResolvedValue({
+      llm_mode: "edge",
+      llm_api_key: "",
+      llm_base_url: "https://api.openai.com/v1",
+      llm_model: "gpt-4o-mini",
+    });
     vi.mocked(fetchLocalGraph).mockResolvedValue({
       nodes: [],
       edges: [],
