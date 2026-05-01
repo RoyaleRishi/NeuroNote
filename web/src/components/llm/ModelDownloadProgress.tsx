@@ -52,7 +52,7 @@ export function ModelDownloadProgress({
       >
         <strong>Downloading AI model... {pct}%</strong>
         <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-          One-time download (~3GB). The model will be cached for future visits.
+          One-time download (~2GB). The model will be cached for future visits.
         </span>
       </div>
       <div

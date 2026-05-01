@@ -13,11 +13,18 @@ import {
 /**
  * WebLLM model ID to load.
  *
- * TODO: Replace with Gemma 4 E4B model ID once it is available in the
- * WebLLM model registry. For now, use the Gemma 2 2B quantised variant
- * as a development placeholder.
+ * Llama 3.2 3B Instruct (q4f16_1, ~2GB):
+ *   - Officially in WebLLM's prebuilt registry (no custom config needed).
+ *   - Trained for native function calling / structured JSON output.
+ *   - Fits in ~2GB VRAM — works on most laptops with discrete GPUs or
+ *     Apple Silicon.
+ *
+ * Gemma 4 E4B was the original target but is not yet published by
+ * MLC for WebLLM (GitHub issue mlc-ai/web-llm#810 is still open as of
+ * April 2026). Switch to a Gemma 4 model ID once it lands in the
+ * prebuilt list.
  */
-const MODEL_ID = "gemma-2-2b-it-q4f16_1-MLC";
+const MODEL_ID = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
 
 export type ModelStatus =
   | "idle"
