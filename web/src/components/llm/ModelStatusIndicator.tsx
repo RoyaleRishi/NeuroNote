@@ -22,6 +22,8 @@ interface ModelStatusIndicatorProps {
   status: ModelStatus;
   /** Edge download progress (only meaningful when status === "downloading"). */
   progress: ModelProgress | null;
+  /** Most recent error message (shown as tooltip when status is "error"). */
+  error?: string | null;
 }
 
 interface BadgeStyle {
@@ -92,15 +94,19 @@ export function ModelStatusIndicator({
   mode,
   status,
   progress,
+  error,
 }: ModelStatusIndicatorProps) {
   if (!mode) return null;
   const style = styleFor(mode, status, progress);
+  const tooltip = error && (status === "error" || status === "unsupported")
+    ? `${style.label} — ${error}`
+    : style.label;
 
   return (
     <span
       role="status"
       aria-live="polite"
-      title={style.label}
+      title={tooltip}
       style={{
         display: "inline-flex",
         alignItems: "center",

@@ -24,6 +24,8 @@ import {
 export interface UseEdgeLLMResult {
   status: ModelStatus;
   progress: ModelProgress | null;
+  /** Most recent error message from the engine (download/init failure). */
+  error: string | null;
   /** True once the engine has finished downloading and is ready for inference. */
   isReady: boolean;
 }
@@ -39,22 +41,27 @@ export function useEdgeLLM(
 ): UseEdgeLLMResult {
   const [status, setStatus] = useState<ModelStatus>("idle");
   const [progress, setProgress] = useState<ModelProgress | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
     if (!isWebGPUSupported()) {
       setStatus("unsupported");
+      setError("WebGPU is not available in this browser.");
       return;
     }
+    setError(null);
     void initializeEngine(
       (p) => setProgress(p),
       (s) => setStatus(s),
+      (msg) => setError(msg),
     );
   }, [enabled, retryToken]);
 
   return {
     status,
     progress,
+    error,
     isReady: status === "ready",
   };
 }

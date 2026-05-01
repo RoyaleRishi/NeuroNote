@@ -1086,6 +1086,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           mode={prefs?.llm_mode}
           status={edge.status}
           progress={edge.progress}
+          error={edge.error}
         />
         <UserMenu user={user} />
       </nav>
