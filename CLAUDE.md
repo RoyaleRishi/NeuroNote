@@ -63,12 +63,24 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 - `public.users` — OAuth user records for multi-tenant SaaS. Stores identity (`email`, `oauth_provider`, `oauth_provider_id`), display info (`display_name`, `avatar_url`), and tenant mapping (`schema_name`). Each user maps to an isolated tenant schema. Unique constraints on `email`, `schema_name`, and `(oauth_provider, oauth_provider_id)`.
 
 #### Tenant provisioning (`api/src/app/db/tenant.py`)
-- Schema-per-user isolation: each user gets a PostgreSQL schema (`user_xxx`) with all 12 data tables + an AGE graph (`nn_user_xxx`).
+- Schema-per-user isolation: each user gets a PostgreSQL schema (`user_xxx`) with all 13 data tables + an AGE graph (`nn_user_xxx`).
 - `create_user_schema(session, schema_name)` — provisions schema, tables (from `schema_template.sql`), and AGE graph.
 - `drop_user_schema(session, schema_name)` — tears down graph + schema.
 - `apply_ddl_to_all_schemas(session, ddl)` — runs DDL across all tenant schemas (for future migrations).
 - SQLite fallback for tests: emulates schemas via `{schema}__{table}` prefixed table names.
 - Schema names must match `^user_[a-z0-9]{4,32}$`.
+
+#### User preferences (migration 0015)
+- `user_preferences` (per-tenant) — key-value store for per-user settings. Keys: `llm_mode` (`edge` | `cloud`), `llm_api_key`, `llm_base_url`, `llm_model`. Default is `edge`.
+- `GET /v1/preferences` returns all preferences with API key masked (`****abcd`). `PUT /v1/preferences` does partial updates.
+- `POST /v1/preferences/test-connection` validates a cloud-mode API key by making a test completion call.
+
+#### LLM dual-mode architecture
+- **Edge mode** (default): Gemma 4 E4B runs in-browser via WebGPU using `@mlc-ai/web-llm`. Frontend extracts concepts/relations locally, posts results to `POST /v1/extraction-results` and `POST /v1/meta-classification-results`. Server is purely a data layer for these users — no LLM cost.
+- **Cloud mode**: User's `llm_api_key` is read from `user_preferences` and passed to `NoteProcessingService` / `ConceptInsightService` (via `_load_user_llm_config` helpers). Existing `POST /v1/process-note` flow is reused. Falls back to env-var key if user hasn't configured one.
+- Frontend orchestration in `web/src/lib/orchestration/edge-processing.ts` (edge) and existing `process-polling.ts` (cloud). `NoteEditor.startProcessing` branches on `llmMode` prop.
+- Edge LLM lifecycle managed by `useEdgeLLM(enabled, retryToken)` hook — handles WebGPU detection, model download progress, ready state.
+- UI components: `ModelStatusIndicator` (header badge), `ModelDownloadProgress` (download banner), `WebGPUCheck` (modal when WebGPU unsupported).
 
 #### Cache tables (migration 0011)
 - `concept_insight_cache` — caches Claude-generated concept insights keyed by `(concept_label, content_digest)`. The digest is a SHA-256 of sorted `note_id:content_hash` pairs, so the cache auto-invalidates when any relevant note changes.
