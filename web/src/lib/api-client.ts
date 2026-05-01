@@ -364,7 +364,11 @@ export type {
   KnownConceptsResponse,
 };
 
-/** Submit browser-computed extraction results for graph sync. */
+/** Submit browser-computed extraction results for graph sync.
+ *
+ * Long timeout (5 min): graph sync writes many AGE edges and generates
+ * embeddings server-side, both of which can be slow for large notes.
+ */
 export async function submitExtractionResults(
   baseUrl: string,
   payload: SubmitExtractionResultsRequest,
@@ -373,6 +377,7 @@ export async function submitExtractionResults(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    timeoutMs: 300_000,
   });
   return parseJsonResponse<SubmitExtractionResultsResponse>(response);
 }
@@ -386,6 +391,7 @@ export async function submitMetaClassification(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    timeoutMs: 120_000,
   });
   return parseJsonResponse<SubmitMetaClassificationResponse>(response);
 }

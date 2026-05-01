@@ -58,6 +58,8 @@ services:
       NLP_EXTRACTION_PROFILE: ${NLP_EXTRACTION_PROFILE:-rule-only}
       NLP_ENABLE_REGEX_FALLBACK: ${NLP_ENABLE_REGEX_FALLBACK:-true}
       NLP_ENTITY_SEED_TERMS: ${NLP_ENTITY_SEED_TERMS:-machine learning,entity resolution,graph reasoning,knowledge graph,neural networks}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-1}
       LLM_API_KEY: ${LLM_API_KEY:-${ANTHROPIC_API_KEY:-}}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.anthropic.com/v1/}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
