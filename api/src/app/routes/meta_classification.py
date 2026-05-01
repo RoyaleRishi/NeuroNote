@@ -81,6 +81,10 @@ async def submit_meta_classification(
             subtopic_count += 1
 
         session.flush()
+        # Restore tenant search_path after AGE operations.
+        session.execute(
+            sa_text(f"SET search_path TO {user.schema_name}, public")
+        )
 
     # Mark concepts as classified in concept_registry
     if body.classified_concepts:

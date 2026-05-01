@@ -33,6 +33,7 @@ def confirm_entity_alias(
             confidence=payload.confidence,
             source="user_confirmed",
         )
+    session.commit()
 
     return ConfirmEntityAliasResponse(
         alias_text=record.alias_text,

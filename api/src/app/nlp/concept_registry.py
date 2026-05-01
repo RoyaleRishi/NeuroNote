@@ -29,6 +29,8 @@ def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
     if not normalised:
         return
 
+    import logging
+    _log = logging.getLogger(__name__)
     try:
         for concept_text, entity_id in normalised:
             session.execute(
@@ -41,8 +43,9 @@ def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
                 ),
                 {"concept_text": concept_text, "entity_id": entity_id},
             )
-    except Exception:
-        pass  # Registry is best-effort; never fail NLP processing
+    except Exception as exc:
+        _log.warning("register_concepts failed: %s", exc, exc_info=True)
+        # Registry is best-effort; never fail NLP processing
 
 
 def get_known_concepts(session: Session) -> list[str]:

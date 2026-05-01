@@ -71,6 +71,7 @@ async def upload_media(
             byte_size=len(file_bytes),
             relative_path=relative_path,
         )
+    session.commit()
 
     return UploadImageResponse(
         asset_id=asset_id,
@@ -123,5 +124,6 @@ def delete_media(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
         repository.mark_deleted(asset_id)
         storage.delete(relative_path=asset.relative_path)
+    session.commit()
 
     return DeleteImageResponse(asset_id=asset_id, deleted=True)

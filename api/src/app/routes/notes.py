@@ -54,6 +54,7 @@ def put_note(
                 content_json=payload.content_json,
                 session=session,
             )
+        session.commit()
     except NoteTitleConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -67,6 +68,7 @@ def put_note(
         note_id=record.note_id,
         saved_at=_utc_now_iso(),
         version=record.version,
+        content_hash=record.content_hash,
     )
 
 
@@ -90,6 +92,7 @@ def fetch_note(
         is_archived=record.is_archived,
         content_json=record.content_json,
         content_text=record.content_text,
+        content_hash=record.content_hash,
         updated_at=record.updated_at,
         version=record.version,
     )
@@ -141,6 +144,7 @@ def delete_note(
 ) -> Response:
     with session.begin_nested():
         deleted = NoteRepository(session).delete_note(note_id)
+    session.commit()
 
     if not deleted:
         raise HTTPException(

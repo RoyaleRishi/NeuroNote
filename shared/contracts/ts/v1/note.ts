@@ -14,6 +14,7 @@ export interface SaveNoteResponse {
   note_id: string;
   saved_at: string;
   version: number;
+  content_hash?: string;
 }
 
 export interface GetNoteResponse {
@@ -25,6 +26,7 @@ export interface GetNoteResponse {
   is_archived: boolean;
   content_json: Record<string, unknown>;
   content_text: string;
+  content_hash?: string;
   updated_at: string;
   version: number;
 }

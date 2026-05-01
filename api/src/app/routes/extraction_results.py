@@ -116,6 +116,12 @@ async def submit_extraction_results(
             graph_name=graph_name,
         ).sync_note_graph(payload)
         session.flush()
+        # GraphRepository sets search_path to ag_catalog. Restore tenant scope
+        # so subsequent unqualified table references resolve to the user schema.
+        from sqlalchemy import text as _sa_text
+        session.execute(
+            _sa_text(f"SET search_path TO {user.schema_name}, public")
+        )
 
     # 6. Register concepts in concept_registry
     if entities:
