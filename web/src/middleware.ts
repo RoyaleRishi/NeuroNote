@@ -1,31 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-const AUTH_COOKIE = "neuronote_access";
-
-/** Prefixes that bypass the auth gate entirely. */
-const PUBLIC_PREFIXES = ["/login", "/api/", "/_next/"];
-
-export function middleware(req: NextRequest): NextResponse {
-  const { pathname } = req.nextUrl;
-
-  // Allow public paths through without checking auth.
-  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
-  }
-
-  // If the JWT access cookie is present, allow the request.
-  // Actual token validation happens server-side in the API.
-  if (req.cookies.has(AUTH_COOKIE)) {
-    return NextResponse.next();
-  }
-
-  // No cookie — redirect to login, preserving the intended destination.
-  const loginUrl = new URL("/login", req.url);
-  loginUrl.searchParams.set("next", pathname);
-  return NextResponse.redirect(loginUrl);
+/** Pass-through middleware.
+ *
+ * The auth cookies are set by the API on a different origin than the Next.js
+ * server (e.g. localhost:8000 vs localhost:3000), so the middleware cannot
+ * see them.  Auth is enforced client-side by ``useAuth()`` calling
+ * ``GET /v1/auth/me`` and redirecting to ``/login`` when unauthenticated.
+ */
+export function middleware(): NextResponse {
+  return NextResponse.next();
 }
 
 export const config = {
-  // Run on all routes except Next.js internals and static files.
   matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt).*)"],
 };
