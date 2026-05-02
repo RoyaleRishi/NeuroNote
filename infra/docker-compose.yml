@@ -52,6 +52,7 @@ services:
       - "${API_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://neuronote:neuronote@db:5432/neuronote
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       REQUIRE_DB_EXTENSIONS: "false"
       DB_AUTO_CREATE: "false"
       NLP_MODEL_NAME: ${NLP_MODEL_NAME:-rule-based-small}

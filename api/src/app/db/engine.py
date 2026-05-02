@@ -58,31 +58,90 @@ def _build_engine(database_url: str, *, db_echo: bool) -> Engine:
 
     eng = create_engine(database_url, **kwargs)  # type: ignore[arg-type]
 
-    # On every connection checkout, set search_path to either the tenant
-    # schema (from the contextvar) or the default. This guarantees the
-    # right schema is active regardless of which session.commit() releases
-    # and re-acquires the connection.
     if database_url.startswith("postgresql"):
+        # Bulletproof tenant routing.
+        #
+        # Strategy: callers set the tenant schema on a SQLAlchemy
+        # ``Connection.info`` dict via ``bind_session_to_tenant()``, and
+        # the ``before_cursor_execute`` event reads it on every query
+        # and emits ``SET search_path TO {schema}, public`` first.
+        #
+        # Why ``Connection.info`` instead of a ContextVar: FastAPI runs
+        # sync dependencies and sync route handlers in separate
+        # threadpool calls — each gets a fresh contextvars copy, so the
+        # var set in the dependency is invisible to the route. The
+        # Connection object IS shared (the session keeps it across
+        # queries), so ``conn.info`` propagates correctly.
+        #
+        # ``ContextVar`` is still used as a fallback for code paths that
+        # don't have a session/connection (e.g. background tasks that
+        # open ad-hoc sessions). Both are read; the connection's info
+        # wins if present.
 
-        @event.listens_for(eng, "checkout")
-        def _set_search_path_on_checkout(
+        @event.listens_for(eng, "before_cursor_execute")
+        def _apply_tenant_search_path(
+            conn: object,
+            cursor: object,
+            statement: str,
+            parameters: object,
+            context: object,
+            executemany: bool,
+        ) -> None:
+            # Don't recurse on our own SET, or interfere with explicit
+            # session-state changes (LOAD 'age', SET search_path = ...).
+            stripped = statement.lstrip()
+            upper = stripped.upper()
+            if upper.startswith(("SET ", "RESET ", "SHOW ", "LOAD ")):
+                return
+            # AGE Cypher calls already include ag_catalog in their query;
+            # don't clobber the manually-set search_path.
+            if "ag_catalog" in stripped:
+                return
+            # 1. Per-connection override (set by bind_session_to_tenant).
+            tenant = None
+            try:
+                tenant = conn.info.get("tenant_schema")  # type: ignore[attr-defined]
+            except AttributeError:
+                pass
+            # 2. ContextVar fallback (background tasks).
+            if not tenant:
+                tenant = _tenant_schema.get()
+            # Always include ag_catalog so AGE operators stay accessible
+            # across interleaved normal + Cypher queries on the same
+            # connection.
+            target = (
+                f'ag_catalog, "{tenant}", public' if tenant
+                else 'ag_catalog, "$user", public'
+            )
+            cursor.execute(f"SET search_path TO {target}")  # type: ignore[attr-defined]
+
+        # Connection.info is per-DBAPI-connection and persists across pool
+        # checkouts. Wipe the tenant binding on checkin so the next request
+        # to use this connection starts clean.
+        @event.listens_for(eng, "checkin")
+        def _clear_tenant_on_checkin(
             dbapi_conn: object,
             connection_record: ConnectionPoolEntry,
-            connection_proxy: object,
         ) -> None:
-            # Default to "$user", public so non-tenant routes (auth, health)
-            # always start clean. Tenant routes override via the contextvar
-            # below, OR by issuing their own SET via the raw cursor on
-            # session.connection() (see app/db/tenant_session.py).
-            tenant = _tenant_schema.get()
-            target = (
-                f'"{tenant}", public' if tenant else '"$user", public'
-            )
-            cursor = dbapi_conn.cursor()  # type: ignore[union-attr]
-            cursor.execute(f"SET search_path TO {target}")
-            cursor.close()
+            info = getattr(connection_record, "info", None)
+            if info is not None:
+                info.pop("tenant_schema", None)
 
     return eng
+
+
+def bind_session_to_tenant(session: "Session", schema_name: str) -> None:
+    """Attach a tenant schema to the session's underlying Connection.
+
+    Every subsequent query on this session will be prefixed with
+    ``SET search_path TO {schema}, public`` by the
+    ``before_cursor_execute`` event. The binding lasts as long as the
+    session retains the connection (typically the request lifetime).
+    """
+    if not _SCHEMA_PATTERN.fullmatch(schema_name):
+        raise ValueError(f"Invalid schema name: {schema_name!r}")
+    conn = session.connection()
+    conn.info["tenant_schema"] = schema_name
 
 
 def get_engine() -> Engine:
