@@ -1,79 +1,160 @@
 /**
- * Edge LLM processing orchestration.
+ * Edge LLM processing orchestration (chunked map-reduce pipeline).
  *
- * Runs the in-browser extraction + meta-classification pipeline for a note,
- * mirroring the server-side flow used in cloud mode. Results are POSTed to
- * the API for graph synchronisation just as the cloud pipeline does on the
- * server.
+ * For each note:
+ *   1. Chunk the (title + content) into ~500-char windows.
+ *   2. Per chunk: rule-based candidate extraction → LLM filter by index → reducer input.
+ *   3. After all chunks: dedupe across chunks → POST to /v1/extraction-results.
+ *   4. Run meta-classification on the deduped concept list (synonym/subtopic).
  *
- * This module is the browser-side analogue of the server's
- * `process-note` → graph-sync → meta-classify flow. It does not download
- * or initialise the model itself — the caller is responsible for ensuring
- * the WebLLM engine is ready (see `useEdgeLLM`).
+ * Each LLM call has bounded output (max_tokens=256), eliminating the mid-JSON
+ * truncation that the previous one-shot extraction hit on long notes.
  */
 
-import { extractConcepts, classifyMeta } from "../edge-llm/inference-client";
+import { extractFromChunk, classifyMeta } from "../edge-llm/inference-client";
+import { chunkNote } from "../edge-llm/chunker";
+import { extractCandidates } from "../edge-llm/candidates";
+import { canonicalizeConcepts } from "../edge-llm/dedupe";
 import {
   fetchKnownConcepts,
   submitExtractionResults,
   submitMetaClassification,
 } from "../api-client";
+import type {
+  CanonicalConcept,
+  RelationType,
+} from "../edge-llm/types";
 
 export interface EdgeProcessingRequest {
-  /** API base URL — required by the api-client wrappers. */
   baseUrl: string;
   noteId: string;
   noteTitle: string;
   contentText: string;
-  /** Hash of the (title + content) used for cache invalidation. */
   contentHash: string;
+  /** Optional progress callback: (chunksDone, totalChunks) -> void */
+  onProgress?: (done: number, total: number) => void;
 }
 
 export interface EdgeProcessingResult {
   status: "completed" | "failed";
   conceptCount?: number;
   relationCount?: number;
+  chunksProcessed?: number;
   error?: string;
 }
 
-/**
- * Run the full edge extraction pipeline for a note.
- *
- * Steps:
- *   1. Fetch the user's known concepts (used to bias the prompt).
- *   2. Run concept + relation extraction in the WebLLM worker.
- *   3. POST extraction results to the server for graph sync.
- *   4. Run meta-classification (synonym + subtopic) on the new concepts.
- *   5. POST meta-classification results to the server.
- *
- * Errors at any step short-circuit and return a failed result; the caller
- * is responsible for surfacing the error in the UI.
- */
+interface RawRelation {
+  source: string;
+  type: RelationType;
+  target: string;
+}
+
 export async function runEdgeProcessing(
   request: EdgeProcessingRequest,
 ): Promise<EdgeProcessingResult> {
   try {
     const known = await fetchKnownConcepts(request.baseUrl);
 
-    const extraction = await extractConcepts({
-      title: request.noteTitle,
-      content: request.contentText,
-      knownConcepts: known.concepts,
-    });
-    if (!extraction) {
-      return { status: "failed", error: "Extraction returned null" };
+    const chunks = chunkNote(request.noteTitle, request.contentText);
+    if (chunks.length === 0) {
+      return {
+        status: "completed",
+        conceptCount: 0,
+        relationCount: 0,
+        chunksProcessed: 0,
+      };
     }
+
+    const allConcepts: CanonicalConcept[] = [];
+    const allRelations: RawRelation[] = [];
+
+    for (const chunk of chunks) {
+      const candidates = extractCandidates(chunk.text);
+      if (candidates.length === 0) {
+        request.onProgress?.(chunk.index + 1, chunks.length);
+        continue;
+      }
+
+      const result = await extractFromChunk({
+        chunk,
+        candidates,
+        knownConcepts: known.concepts,
+      });
+      request.onProgress?.(chunk.index + 1, chunks.length);
+      if (!result) continue;
+
+      for (const idx of result.keep) {
+        const text = candidates[idx];
+        if (!text) continue;
+        allConcepts.push({
+          text,
+          confidence: 0.9,
+          sources: [chunk.index],
+        });
+      }
+
+      for (const [srcIdx, type, tgtIdx] of result.relations) {
+        const source = candidates[srcIdx];
+        const target = candidates[tgtIdx];
+        if (!source || !target) continue;
+        allRelations.push({ source, type, target });
+      }
+    }
+
+    // Reduce: dedupe concepts, then re-map relations to canonical surfaces.
+    const canonical = canonicalizeConcepts(allConcepts);
+    const canonicalKeys = new Map<string, string>();
+    for (const c of canonical) {
+      canonicalKeys.set(c.text.toLowerCase().trim(), c.text);
+    }
+
+    const findCanonical = (text: string): string | null => {
+      const key = text.toLowerCase().trim();
+      if (canonicalKeys.has(key)) return canonicalKeys.get(key)!;
+      for (const c of canonical) {
+        const ckey = c.text.toLowerCase();
+        if (ckey.includes(key) || key.includes(ckey)) return c.text;
+      }
+      return null;
+    };
+
+    const validRelations: Array<{
+      source: string;
+      type: string;
+      target: string;
+      confidence: number;
+    }> = [];
+    const relSeen = new Set<string>();
+    for (const r of allRelations) {
+      const src = findCanonical(r.source);
+      const tgt = findCanonical(r.target);
+      if (!src || !tgt || src === tgt) continue;
+      const key = `${src}|${r.type}|${tgt}`;
+      if (relSeen.has(key)) continue;
+      relSeen.add(key);
+      validRelations.push({
+        source: src,
+        type: r.type,
+        target: tgt,
+        confidence: 0.85,
+      });
+    }
+
+    const finalConcepts = canonical.map((c) => ({
+      text: c.text,
+      confidence: c.confidence,
+    }));
 
     await submitExtractionResults(request.baseUrl, {
       note_id: request.noteId,
       content_hash: request.contentHash,
-      concepts: extraction.concepts,
-      relations: extraction.relations,
-      summary: extraction.summary,
+      concepts: finalConcepts,
+      relations: validRelations,
+      summary: "",
     });
 
-    const conceptTexts = extraction.concepts.map((c) => c.text);
-    if (conceptTexts.length > 0) {
+    const conceptTexts = finalConcepts.map((c) => c.text);
+    if (conceptTexts.length >= 2) {
       const meta = await classifyMeta({
         concepts: conceptTexts,
         knownConcepts: known.concepts,
@@ -89,8 +170,9 @@ export async function runEdgeProcessing(
 
     return {
       status: "completed",
-      conceptCount: extraction.concepts.length,
-      relationCount: extraction.relations.length,
+      conceptCount: finalConcepts.length,
+      relationCount: validRelations.length,
+      chunksProcessed: chunks.length,
     };
   } catch (error) {
     return {
