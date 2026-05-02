@@ -35,16 +35,27 @@ export function SaveStatusBadge({ status }: { status: SaveStatus }) {
   );
 }
 
-export function ProcessStatusBadge({ status }: { status: ProcessStatus }) {
+export function ProcessStatusBadge({
+  status,
+  progress,
+}: {
+  status: ProcessStatus;
+  progress?: { done: number; total: number } | null;
+}) {
   const config = PROCESS_STATUS_CONFIG[status];
   if (!config.label) return null;
+
+  const label =
+    status === "running" && progress && progress.total > 1
+      ? `${config.label} ${progress.done}/${progress.total}`
+      : config.label;
 
   return (
     <span className={`status-badge ${config.className}`} role="status">
       <span className="status-icon" aria-hidden="true">
         {config.icon}
       </span>
-      <span className="status-label">{config.label}</span>
+      <span className="status-label">{label}</span>
     </span>
   );
 }
