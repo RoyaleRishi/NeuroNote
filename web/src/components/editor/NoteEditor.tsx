@@ -59,6 +59,12 @@ interface NoteEditorProps {
    * indicator.
    */
   edgeReady?: boolean;
+  /**
+   * Optional callback to mark the edge engine as stable (clears the
+   * crash-recovery flag) — invoked after the first successful edge
+   * processing completes.
+   */
+  edgeMarkStableInference?: () => void;
 }
 
 interface NoteSnapshot {
@@ -250,6 +256,7 @@ export function NoteEditor({
   onOpenNote,
   llmMode,
   edgeReady = false,
+  edgeMarkStableInference,
 }: NoteEditorProps) {
   const [documentJson, setDocumentJson] = useState<EditorDoc>(createEmptyEditorDoc());
   const [noteTitle, setNoteTitle] = useState("Untitled");
@@ -261,6 +268,11 @@ export function NoteEditor({
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [processStatus, setProcessStatus] = useState<ProcessStatus>("idle");
+  const [processProgress, setProcessProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const [liveConcepts, setLiveConcepts] = useState<string[]>([]);
   const [extractionSummary, setExtractionSummary] = useState<ExtractionSummary | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -486,6 +498,8 @@ export function NoteEditor({
         // cache key); fall back to the local hash on first save before the
         // server response arrives.
         const contentHash = lastContentHashRef.current ?? localHash;
+        setProcessProgress(null);
+        setLiveConcepts([]);
         const result = await runEdgeProcessing({
           baseUrl,
           noteId,
@@ -494,6 +508,22 @@ export function NoteEditor({
           contentHash,
           onProgress: (done, total) => {
             console.info(`[edge-llm] chunk ${done}/${total}`);
+            setProcessProgress({ done, total });
+          },
+          onChunkResult: (concepts) => {
+            setLiveConcepts((prev) => {
+              const seen = new Set(prev.map((c) => c.toLowerCase()));
+              const merged = [...prev];
+              for (const c of concepts) {
+                const key = c.toLowerCase();
+                if (!seen.has(key)) {
+                  merged.push(c);
+                  seen.add(key);
+                }
+              }
+              // Cap at 50 — popover unhelpful beyond that.
+              return merged.length > 50 ? merged.slice(-50) : merged;
+            });
           },
         });
         if (result.status === "completed") {
@@ -504,14 +534,17 @@ export function NoteEditor({
             keyphrase_count: 0,
             top_entities: [],
           });
+          edgeMarkStableInference?.();
         } else {
           setProcessStatus("failed");
           if (result.error) {
             console.error("[NeuroNote] Edge processing failed:", result.error);
           }
         }
+        setProcessProgress(null);
       } catch (err) {
         console.error("[NeuroNote] Edge processing error:", err);
+        setProcessProgress(null);
         setProcessStatus("failed");
       }
       return;
@@ -754,7 +787,13 @@ export function NoteEditor({
     <section className="note-editor" data-testid="note-editor">
       <div className="note-editor-top-bar">
         <div className="note-editor-status-row">
-          <EditorToolbar dirty={dirty} saveStatus={saveStatus} processStatus={processStatus} />
+          <EditorToolbar
+            dirty={dirty}
+            saveStatus={saveStatus}
+            processStatus={processStatus}
+            processProgress={processProgress}
+            liveConcepts={liveConcepts}
+          />
           <ExtractionSummaryBadge summary={extractionSummary} />
           <NoteOptionsMenu
             subjectId={subjectId}
