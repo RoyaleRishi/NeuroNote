@@ -81,6 +81,8 @@ export function useEdgeLLM(
   useEffect(() => {
     if (!enabled) {
       setStatus("idle");
+      // Reset so a later re-enable still honours a fresh pending flag.
+      recoveryHandledRef.current = false;
       return;
     }
 
@@ -122,6 +124,9 @@ export function useEdgeLLM(
 
   const acknowledgeRecovery = useCallback(
     (action: "retry" | "switchToCloud") => {
+      // Multi-tab note: clearing here and re-arming in startInit means two
+      // tabs racing 'retry' can momentarily both pass the crash gate. The
+      // model-manager singleton dedupes the actual engine init.
       clearPendingFlag();
       recoveryHandledRef.current = true;
       if (action === "switchToCloud") {
