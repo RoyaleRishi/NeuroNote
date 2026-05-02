@@ -7,14 +7,14 @@
  */
 import { getEngine } from "./model-manager";
 import {
-  buildExtractionPrompt,
+  buildChunkExtractionPrompt,
   buildMetaPrompt,
   buildInsightPrompt,
 } from "./prompts";
-import { EXTRACTION_SCHEMA, META_SCHEMA, INSIGHT_SCHEMA } from "./schemas";
+import { CHUNK_EXTRACTION_SCHEMA, META_SCHEMA, INSIGHT_SCHEMA } from "./schemas";
 import type {
-  ExtractionRequest,
-  ExtractionResult,
+  ChunkExtractionRequest,
+  ChunkExtractionResult,
   MetaClassificationRequest,
   MetaClassificationResult,
   InsightRequest,
@@ -22,30 +22,36 @@ import type {
 } from "./types";
 
 /**
- * Extract concepts, relations, and summary from a note.
+ * Run the LLM "map" step for one note chunk.
  *
- * Returns null if the engine is not initialised or inference fails.
+ * Returns indices into the candidates array (concepts to keep) plus
+ * relation tuples. Bounded output size: max_tokens=256 is plenty
+ * because the model emits integers, not full concept strings.
  */
-export async function extractConcepts(
-  req: ExtractionRequest,
-): Promise<ExtractionResult | null> {
+export async function extractFromChunk(
+  req: ChunkExtractionRequest,
+): Promise<ChunkExtractionResult | null> {
   const engine = getEngine();
   if (!engine) {
-    console.warn("[edge-llm] extractConcepts: engine not initialised");
+    console.warn("[edge-llm] extractFromChunk: engine not initialised");
     return null;
   }
 
-  const { system, user } = buildExtractionPrompt(
-    req.title,
-    req.content,
+  if (req.candidates.length === 0) {
+    return { keep: [], relations: [] };
+  }
+
+  const { system, user } = buildChunkExtractionPrompt(
+    req.chunk.text,
+    req.candidates,
     req.knownConcepts,
   );
 
   const t0 = performance.now();
-  console.info("[edge-llm] extractConcepts: starting inference", {
-    titleLen: req.title.length,
-    contentLen: req.content.length,
-    knownConcepts: req.knownConcepts.length,
+  console.info("[edge-llm] extractFromChunk: starting", {
+    chunkIdx: req.chunk.index,
+    candidates: req.candidates.length,
+    chunkLen: req.chunk.text.length,
   });
 
   let response;
@@ -56,33 +62,64 @@ export async function extractConcepts(
         { role: "user", content: user },
       ],
       temperature: 0.1,
-      max_tokens: 1024,
+      max_tokens: 256,
       response_format: {
         type: "json_object",
-        schema: JSON.stringify(EXTRACTION_SCHEMA),
+        schema: JSON.stringify(CHUNK_EXTRACTION_SCHEMA),
       },
     });
   } catch (err) {
-    console.error("[edge-llm] extractConcepts: inference threw", err);
+    console.error("[edge-llm] extractFromChunk: inference threw", err);
     return null;
   }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   const text = response.choices[0]?.message?.content;
-  console.info("[edge-llm] extractConcepts: done", {
+  console.info("[edge-llm] extractFromChunk: done", {
+    chunkIdx: req.chunk.index,
     elapsedSeconds: elapsed,
     outputLen: text?.length ?? 0,
-    usage: response.usage,
   });
-
   if (!text) return null;
 
+  let parsed: { keep?: number[]; relations?: unknown[] };
   try {
-    return JSON.parse(text) as ExtractionResult;
+    parsed = JSON.parse(text) as typeof parsed;
   } catch (err) {
-    console.error("[edge-llm] extractConcepts: JSON parse failed", err, text);
+    console.error(
+      "[edge-llm] extractFromChunk: JSON parse failed",
+      err,
+      text.slice(0, 200),
+    );
     return null;
   }
+
+  const maxIdx = req.candidates.length;
+  const keep = Array.isArray(parsed.keep)
+    ? parsed.keep.filter(
+        (n): n is number =>
+          typeof n === "number" && Number.isInteger(n) && n >= 0 && n < maxIdx,
+      )
+    : [];
+
+  const relations: ChunkExtractionResult["relations"] = [];
+  if (Array.isArray(parsed.relations)) {
+    for (const r of parsed.relations) {
+      if (!Array.isArray(r) || r.length !== 3) continue;
+      const [src, type, tgt] = r as [unknown, unknown, unknown];
+      if (typeof src !== "number" || typeof tgt !== "number") continue;
+      if (typeof type !== "string") continue;
+      if (src < 0 || src >= maxIdx || tgt < 0 || tgt >= maxIdx) continue;
+      if (src === tgt) continue;
+      relations.push([
+        src as number,
+        type as ChunkExtractionResult["relations"][number][1],
+        tgt as number,
+      ]);
+    }
+  }
+
+  return { keep, relations };
 }
 
 /**
