@@ -8,13 +8,20 @@
 import { getEngine } from "./model-manager";
 import {
   buildChunkExtractionPrompt,
+  buildSummaryPrompt,
   buildMetaPrompt,
   buildInsightPrompt,
 } from "./prompts";
-import { CHUNK_EXTRACTION_SCHEMA, META_SCHEMA, INSIGHT_SCHEMA } from "./schemas";
+import {
+  CHUNK_EXTRACTION_SCHEMA,
+  SUMMARY_SCHEMA,
+  META_SCHEMA,
+  INSIGHT_SCHEMA,
+} from "./schemas";
 import type {
   ChunkExtractionRequest,
   ChunkExtractionResult,
+  SummaryRequest,
   MetaClassificationRequest,
   MetaClassificationResult,
   InsightRequest,
@@ -120,6 +127,66 @@ export async function extractFromChunk(
   }
 
   return { keep, relations };
+}
+
+/**
+ * Generate a one-sentence summary of a note.
+ *
+ * Runs after dedup so the summary can reference canonical concept names.
+ * Bounded output (max_tokens=128) — model emits a short sentence; budget
+ * has plenty of headroom.  Returns empty string on any failure so the
+ * caller can submit `summary: ""` without branching.
+ */
+export async function generateSummary(req: SummaryRequest): Promise<string> {
+  const engine = getEngine();
+  if (!engine) return "";
+
+  const { system, user } = buildSummaryPrompt(
+    req.title,
+    req.content,
+    req.concepts,
+  );
+
+  const t0 = performance.now();
+  console.info("[edge-llm] generateSummary: starting", {
+    contentLen: req.content.length,
+    conceptCount: req.concepts.length,
+  });
+
+  let response;
+  try {
+    response = await engine.chat.completions.create({
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature: 0.3,
+      max_tokens: 128,
+      response_format: {
+        type: "json_object",
+        schema: JSON.stringify(SUMMARY_SCHEMA),
+      },
+    });
+  } catch (err) {
+    console.error("[edge-llm] generateSummary: inference threw", err);
+    return "";
+  }
+
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  const text = response.choices[0]?.message?.content;
+  console.info("[edge-llm] generateSummary: done", {
+    elapsedSeconds: elapsed,
+    outputLen: text?.length ?? 0,
+  });
+  if (!text) return "";
+
+  try {
+    const data = JSON.parse(text) as { summary?: unknown };
+    return typeof data.summary === "string" ? data.summary : "";
+  } catch (err) {
+    console.error("[edge-llm] generateSummary: JSON parse failed", err, text);
+    return "";
+  }
 }
 
 /**

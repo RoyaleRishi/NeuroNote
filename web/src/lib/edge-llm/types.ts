@@ -91,3 +91,10 @@ export interface CanonicalConcept {
   confidence: number;
   sources: number[];
 }
+
+export interface SummaryRequest {
+  title: string;
+  content: string;
+  /** The deduped canonical concept list — used to ground the summary. */
+  concepts: string[];
+}

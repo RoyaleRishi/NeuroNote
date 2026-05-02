@@ -4,14 +4,20 @@
  * For each note:
  *   1. Chunk the (title + content) into ~500-char windows.
  *   2. Per chunk: rule-based candidate extraction → LLM filter by index → reducer input.
- *   3. After all chunks: dedupe across chunks → POST to /v1/extraction-results.
- *   4. Run meta-classification on the deduped concept list (synonym/subtopic).
+ *   3. After all chunks: dedupe across chunks.
+ *   4. One short LLM call to generate a one-sentence summary.
+ *   5. POST extraction results (concepts + relations + summary) to the API.
+ *   6. Run meta-classification on the deduped concept list (synonym/subtopic).
  *
- * Each LLM call has bounded output (max_tokens=256), eliminating the mid-JSON
- * truncation that the previous one-shot extraction hit on long notes.
+ * Each LLM call has bounded output, eliminating the mid-JSON truncation
+ * that the previous one-shot extraction hit on long notes.
  */
 
-import { extractFromChunk, classifyMeta } from "../edge-llm/inference-client";
+import {
+  extractFromChunk,
+  generateSummary,
+  classifyMeta,
+} from "../edge-llm/inference-client";
 import { chunkNote } from "../edge-llm/chunker";
 import { extractCandidates } from "../edge-llm/candidates";
 import { canonicalizeConcepts } from "../edge-llm/dedupe";
@@ -145,12 +151,21 @@ export async function runEdgeProcessing(
       confidence: c.confidence,
     }));
 
+    // Generate one-sentence summary so edge mode reaches feature parity
+    // with cloud mode (which always populates summary). Failure returns "",
+    // matching the previous behaviour — never blocks the submit.
+    const summary = await generateSummary({
+      title: request.noteTitle,
+      content: request.contentText,
+      concepts: finalConcepts.map((c) => c.text),
+    });
+
     await submitExtractionResults(request.baseUrl, {
       note_id: request.noteId,
       content_hash: request.contentHash,
       concepts: finalConcepts,
       relations: validRelations,
-      summary: "",
+      summary,
     });
 
     const conceptTexts = finalConcepts.map((c) => c.text);

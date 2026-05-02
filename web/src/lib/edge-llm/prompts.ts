@@ -59,6 +59,44 @@ export function buildChunkExtractionPrompt(
   return { system, user };
 }
 
+// -- Summary prompt (one-sentence note summary, run after dedup) -------------
+
+const SUMMARY_SYSTEM_PROMPT = `You write a single-sentence summary of a note for use in a knowledge graph.
+
+Rules:
+- Exactly one sentence, max 25 words.
+- Capture the central topic, not a comprehensive description.
+- No preamble like "This note is about...". Just the summary.
+- Reference 1-2 of the key concepts when natural.
+
+Return ONLY valid JSON, no markdown fences:
+{ "summary": "<one sentence>" }`;
+
+/**
+ * Build messages for the summary step.
+ *
+ * Runs once after canonical concepts are known. Bounded output (~100 tokens)
+ * keeps it safely under the model's budget.
+ */
+export function buildSummaryPrompt(
+  title: string,
+  content: string,
+  concepts: string[],
+): { system: string; user: string } {
+  const conceptList =
+    concepts.length > 0 ? concepts.slice(0, 12).join(", ") : "(none)";
+  // Cap content to keep prefill cost predictable on long notes.
+  const trimmedContent = content.length > 1500
+    ? content.slice(0, 1500) + "..."
+    : content;
+  const user = `Title: ${title || "(untitled)"}
+Key concepts: ${conceptList}
+
+Content:
+${trimmedContent}`;
+  return { system: SUMMARY_SYSTEM_PROMPT, user };
+}
+
 // -- Meta-classification prompts (from api/src/app/nlp/concept_meta.py) -----
 
 const META_SYSTEM_PROMPT = `You are a concept taxonomy assistant. Given a list of concepts from a personal \

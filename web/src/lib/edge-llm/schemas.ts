@@ -51,6 +51,16 @@ export const CHUNK_EXTRACTION_SCHEMA = {
   additionalProperties: false,
 };
 
+/** Schema for one-sentence note summary output. */
+export const SUMMARY_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    summary: { type: "string" as const },
+  },
+  required: ["summary"],
+  additionalProperties: false,
+};
+
 /** Schema for meta-classification (synonym/subtopic pairs) output. */
 export const META_SCHEMA = {
   type: "object" as const,
