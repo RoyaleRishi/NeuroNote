@@ -42,8 +42,38 @@ export function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 }
 
+/** Concurrent refresh requests share a single in-flight promise. */
+let refreshPromise: Promise<boolean> | null = null;
+
+/** Hit /v1/auth/refresh to issue a new access cookie from the refresh cookie. */
+async function tryRefreshAccessToken(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  const base = getBaseUrl();
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${base}/v1/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+/** Check if a URL is an auth endpoint where 401 should not trigger a refresh loop. */
+function isAuthUrl(url: string): boolean {
+  return url.includes("/v1/auth/");
+}
+
 /**
- * fetch wrapper that sends cookies cross-origin and enforces a request timeout.
+ * fetch wrapper that sends cookies cross-origin, enforces a request timeout,
+ * and transparently refreshes expired access tokens on 401.
+ *
  * Pass signal: null to opt out of the timeout for a specific call (e.g. long uploads).
  */
 async function apiFetch(
@@ -52,28 +82,51 @@ async function apiFetch(
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = options;
 
-  let controller: AbortController | null = null;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let effectiveSignal: AbortSignal | undefined = signal as AbortSignal | undefined;
+  const doFetch = async (): Promise<Response> => {
+    let controller: AbortController | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let effectiveSignal: AbortSignal | undefined =
+      signal as AbortSignal | undefined;
 
-  if (timeoutMs > 0) {
-    controller = new AbortController();
-    timeoutId = setTimeout(() => controller!.abort(), timeoutMs);
-    effectiveSignal = controller.signal;
+    if (timeoutMs > 0) {
+      controller = new AbortController();
+      timeoutId = setTimeout(() => controller!.abort(), timeoutMs);
+      effectiveSignal = controller.signal;
+    }
+
+    try {
+      return await fetch(url, {
+        ...rest,
+        credentials: "include",
+        signal: effectiveSignal,
+        headers: {
+          ...(rest.headers as Record<string, string> | undefined),
+        },
+      });
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+  };
+
+  const response = await doFetch();
+
+  // On 401, try refreshing the access token once and retry the request.
+  // Skip the auth endpoints themselves to avoid loops.
+  if (response.status === 401 && !isAuthUrl(url)) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      return doFetch();
+    }
+    // Refresh failed → user truly logged out. Bounce to login.
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      const next = encodeURIComponent(
+        window.location.pathname + window.location.search,
+      );
+      window.location.href = `/login?next=${next}`;
+    }
   }
 
-  try {
-    return await fetch(url, {
-      ...rest,
-      credentials: "include",
-      signal: effectiveSignal,
-      headers: {
-        ...(rest.headers as Record<string, string> | undefined),
-      },
-    });
-  } finally {
-    if (timeoutId !== null) clearTimeout(timeoutId);
-  }
+  return response;
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
