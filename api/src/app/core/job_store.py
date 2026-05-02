@@ -53,23 +53,39 @@ def reset_job_store() -> None:
 
 
 def mark_stale_jobs_as_failed() -> None:
-    """Mark in-progress/queued jobs as failed. Call once on startup. Postgres-only."""
+    """Mark in-progress/queued jobs as failed across ALL tenant schemas.
+
+    ``processing_jobs`` lives in each tenant schema, so we iterate
+    ``public.users`` and run the UPDATE inside each tenant context.
+    Called once on startup; safe before users exist (catches DB error).
+    """
     if not _is_postgres():
         return
     try:
+        from app.db.engine import set_tenant_schema
+
         with _get_session() as session:
-            with session.begin():
-                session.execute(
-                    text(
-                        """
-                        UPDATE processing_jobs
-                        SET status = 'failed',
-                            error = 'Worker restarted — job was interrupted',
-                            updated_at = NOW()
-                        WHERE status IN ('queued', 'running')
-                        """
-                    )
-                )
+            rows = session.execute(
+                text("SELECT schema_name FROM users")
+            ).all()
+        for (schema_name,) in rows:
+            try:
+                set_tenant_schema(schema_name)
+                with _get_session() as session:
+                    with session.begin():
+                        session.execute(
+                            text(
+                                """
+                                UPDATE processing_jobs
+                                SET status = 'failed',
+                                    error = 'Worker restarted — job was interrupted',
+                                    updated_at = NOW()
+                                WHERE status IN ('queued', 'running')
+                                """
+                            )
+                        )
+            finally:
+                set_tenant_schema(None)
     except Exception:
         pass  # DB may not have the table yet (pre-migration); safe to ignore
 
