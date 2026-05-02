@@ -19,6 +19,8 @@ import { LLMSettings } from "../settings/LLMSettings";
 import { ModelStatusIndicator } from "../llm/ModelStatusIndicator";
 import { ModelDownloadProgress } from "../llm/ModelDownloadProgress";
 import { WebGPUCheck } from "../llm/WebGPUCheck";
+import { EdgeConsentDialog } from "../llm/EdgeConsentDialog";
+import { EdgeCrashBanner } from "../llm/EdgeCrashBanner";
 import { usePreferences } from "../../lib/hooks/usePreferences";
 import { useEdgeLLM } from "../../lib/hooks/useEdgeLLM";
 import { applyTemplate, type Template } from "../../lib/templates";
@@ -29,6 +31,7 @@ import {
   importNote,
   listNotes,
   saveNote,
+  updatePreferences,
 } from "../../lib/api-client";
 import type { WorkspaceFilters } from "../../lib/workspace/types";
 import type { QuickSwitchItem } from "../../lib/workspace/quick-switch";
@@ -244,6 +247,15 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const [edgeRetryToken, setEdgeRetryToken] = useState(0);
   const edgeMode = prefs?.llm_mode === "edge";
   const edge = useEdgeLLM(edgeMode, edgeRetryToken);
+
+  const switchToCloud = useCallback(async () => {
+    try {
+      await updatePreferences({ llm_mode: "cloud" });
+      void reloadPrefs();
+    } catch (err) {
+      console.error("[NotesWorkspace] switchToCloud failed", err);
+    }
+  }, [reloadPrefs]);
 
   // ── Extracted hooks ──
   const qs = useQuickSwitch(notes, selectedNoteId);
@@ -1035,6 +1047,15 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
 
   return (
     <div className="app-shell">
+      <EdgeCrashBanner
+        isOpen={edgeMode && edge.status === "awaiting-recovery"}
+        onAcknowledge={(action) => {
+          edge.acknowledgeRecovery(action);
+          if (action === "switchToCloud") {
+            void switchToCloud();
+          }
+        }}
+      />
       <ModelDownloadProgress status={edge.status} progress={edge.progress} />
       <nav className="app-nav">
         <span className="app-nav-brand">NeuroNote</span>
@@ -1090,6 +1111,20 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         />
         <UserMenu user={user} />
       </nav>
+
+      <EdgeConsentDialog
+        isOpen={edgeMode && edge.status === "awaiting-consent"}
+        onAccept={edge.acceptConsent}
+        onDecline={() => {
+          edge.declineConsent();
+          void switchToCloud();
+        }}
+        onDismiss={() => {
+          // Leave consent absent; the dialog re-shows on reload.
+          // No state change needed because the hook's status remains
+          // 'awaiting-consent' until the user makes a choice.
+        }}
+      />
 
       {/* WebGPU support check — shown when edge mode is selected but unsupported */}
       <WebGPUCheck
@@ -1351,6 +1386,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             }}
             llmMode={prefs?.llm_mode}
             edgeReady={edge.isReady}
+            edgeMarkStableInference={edge.markStableInference}
           />
         ) : (
           <div className="notes-empty-state">
