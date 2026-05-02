@@ -492,6 +492,9 @@ export function NoteEditor({
           noteTitle: snapshot.noteTitle.trim() || "Untitled",
           contentText: snapshot.plainText,
           contentHash,
+          onProgress: (done, total) => {
+            console.info(`[edge-llm] chunk ${done}/${total}`);
+          },
         });
         if (result.status === "completed") {
           setProcessStatus("completed");
