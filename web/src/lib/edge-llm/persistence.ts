@@ -41,7 +41,7 @@ function safeRemove(key: string): void {
   try {
     window.localStorage.removeItem(key);
   } catch {
-    // ignore
+    // private-mode / quota — removal cannot throw into callers.
   }
 }
 
