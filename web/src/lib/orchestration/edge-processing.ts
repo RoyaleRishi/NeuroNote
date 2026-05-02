@@ -39,6 +39,8 @@ export interface EdgeProcessingRequest {
   contentHash: string;
   /** Optional progress callback: (chunksDone, totalChunks) -> void */
   onProgress?: (done: number, total: number) => void;
+  /** Optional callback fired with new concepts after each chunk's LLM call. */
+  onChunkResult?: (chunkConcepts: string[]) => void;
 }
 
 export interface EdgeProcessingResult {
@@ -89,6 +91,7 @@ export async function runEdgeProcessing(
       request.onProgress?.(chunk.index + 1, chunks.length);
       if (!result) continue;
 
+      const chunkConcepts: string[] = [];
       for (const idx of result.keep) {
         const text = candidates[idx];
         if (!text) continue;
@@ -97,7 +100,9 @@ export async function runEdgeProcessing(
           confidence: 0.9,
           sources: [chunk.index],
         });
+        chunkConcepts.push(text);
       }
+      request.onChunkResult?.(chunkConcepts);
 
       for (const [srcIdx, type, tgtIdx] of result.relations) {
         const source = candidates[srcIdx];
