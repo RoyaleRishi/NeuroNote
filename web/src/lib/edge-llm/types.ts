@@ -54,3 +54,40 @@ export interface InsightResult {
     description: string;
   }>;
 }
+
+export interface NoteChunk {
+  /** 0-based chunk index. */
+  index: number;
+  /** The chunk's text content. */
+  text: string;
+  /** Character offset of chunk start in the full note. */
+  startOffset: number;
+}
+
+export interface ChunkExtractionRequest {
+  chunk: NoteChunk;
+  candidates: string[];
+  knownConcepts: string[];
+}
+
+export type RelationType =
+  | "IS_A"
+  | "PART_OF"
+  | "CAUSES"
+  | "CONTRASTS_WITH"
+  | "USES"
+  | "PRODUCES"
+  | "RELATED_TO";
+
+export interface ChunkExtractionResult {
+  /** Indices of candidates the LLM kept as real concepts. */
+  keep: number[];
+  /** Tuples of (sourceIdx, relationType, targetIdx) — both indices into candidates. */
+  relations: Array<[number, RelationType, number]>;
+}
+
+export interface CanonicalConcept {
+  text: string;
+  confidence: number;
+  sources: number[];
+}
