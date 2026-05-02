@@ -30,7 +30,10 @@ export async function extractConcepts(
   req: ExtractionRequest,
 ): Promise<ExtractionResult | null> {
   const engine = getEngine();
-  if (!engine) return null;
+  if (!engine) {
+    console.warn("[edge-llm] extractConcepts: engine not initialised");
+    return null;
+  }
 
   const { system, user } = buildExtractionPrompt(
     req.title,
@@ -38,23 +41,48 @@ export async function extractConcepts(
     req.knownConcepts,
   );
 
-  const response = await engine.chat.completions.create({
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    temperature: 0.1,
-    max_tokens: 2048,
-    response_format: {
-      type: "json_object",
-      schema: JSON.stringify(EXTRACTION_SCHEMA),
-    },
+  const t0 = performance.now();
+  console.info("[edge-llm] extractConcepts: starting inference", {
+    titleLen: req.title.length,
+    contentLen: req.content.length,
+    knownConcepts: req.knownConcepts.length,
   });
 
+  let response;
+  try {
+    response = await engine.chat.completions.create({
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature: 0.1,
+      max_tokens: 1024,
+      response_format: {
+        type: "json_object",
+        schema: JSON.stringify(EXTRACTION_SCHEMA),
+      },
+    });
+  } catch (err) {
+    console.error("[edge-llm] extractConcepts: inference threw", err);
+    return null;
+  }
+
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   const text = response.choices[0]?.message?.content;
+  console.info("[edge-llm] extractConcepts: done", {
+    elapsedSeconds: elapsed,
+    outputLen: text?.length ?? 0,
+    usage: response.usage,
+  });
+
   if (!text) return null;
 
-  return JSON.parse(text) as ExtractionResult;
+  try {
+    return JSON.parse(text) as ExtractionResult;
+  } catch (err) {
+    console.error("[edge-llm] extractConcepts: JSON parse failed", err, text);
+    return null;
+  }
 }
 
 /**
@@ -74,31 +102,51 @@ export async function classifyMeta(
 
   const { system, user } = buildMetaPrompt(req.concepts);
 
-  const response = await engine.chat.completions.create({
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    temperature: 0.1,
-    max_tokens: 512,
-    response_format: {
-      type: "json_object",
-      schema: JSON.stringify(META_SCHEMA),
-    },
+  const t0 = performance.now();
+  console.info("[edge-llm] classifyMeta: starting", {
+    conceptCount: req.concepts.length,
   });
 
+  let response;
+  try {
+    response = await engine.chat.completions.create({
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature: 0.1,
+      max_tokens: 512,
+      response_format: {
+        type: "json_object",
+        schema: JSON.stringify(META_SCHEMA),
+      },
+    });
+  } catch (err) {
+    console.error("[edge-llm] classifyMeta: inference threw", err);
+    return null;
+  }
+
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   const text = response.choices[0]?.message?.content;
+  console.info("[edge-llm] classifyMeta: done", {
+    elapsedSeconds: elapsed,
+    outputLen: text?.length ?? 0,
+  });
   if (!text) return null;
 
-  const data = JSON.parse(text) as {
-    synonym_pairs: Array<{ a: string; b: string }>;
-    subtopic_pairs: Array<{ specific: string; broader: string }>;
-  };
-
-  return {
-    synonymPairs: data.synonym_pairs ?? [],
-    subtopicPairs: data.subtopic_pairs ?? [],
-  };
+  try {
+    const data = JSON.parse(text) as {
+      synonym_pairs: Array<{ a: string; b: string }>;
+      subtopic_pairs: Array<{ specific: string; broader: string }>;
+    };
+    return {
+      synonymPairs: data.synonym_pairs ?? [],
+      subtopicPairs: data.subtopic_pairs ?? [],
+    };
+  } catch (err) {
+    console.error("[edge-llm] classifyMeta: JSON parse failed", err, text);
+    return null;
+  }
 }
 
 /**
