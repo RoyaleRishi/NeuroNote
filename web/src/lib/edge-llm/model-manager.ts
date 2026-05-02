@@ -28,6 +28,8 @@ const MODEL_ID = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
 
 export type ModelStatus =
   | "idle"
+  | "awaiting-consent"
+  | "awaiting-recovery"
   | "downloading"
   | "ready"
   | "error"
