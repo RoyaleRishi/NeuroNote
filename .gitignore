@@ -67,3 +67,4 @@ web/.eslintcache
 *.tmp
 /.claude/*
 
+.vite/
