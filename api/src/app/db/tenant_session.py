@@ -28,10 +28,11 @@ from app.db.tenant import validate_schema_name
 def get_tenant_session(request: Request) -> Iterator[Session]:
     """Yield a SQLAlchemy session scoped to the authenticated user's tenant schema.
 
-    On PostgreSQL the session's ``search_path`` is set to
-    ``{schema_name}, public`` so ORM queries hit the correct tenant tables.
-    On SQLite (test environments) the search_path step is skipped because
-    SQLite has no schema support.
+    Sets ``search_path`` directly on the session via ``session.execute``
+    (after an explicit commit so the auto-begun transaction is closed
+    before the route handler runs ``with session.begin():``). The
+    connection stays attached to the session across the commit, so the
+    SET persists for the session's lifetime.
     """
     user = get_current_user(request)
     validate_schema_name(user.schema_name)
@@ -40,13 +41,19 @@ def get_tenant_session(request: Request) -> Iterator[Session]:
     with session_factory() as session:
         url = str(session.get_bind().url)
         if url.startswith("postgresql"):
-            # Pin the connection to this session so it isn't released back to
-            # the pool after commit() — the pool checkout event resets
-            # search_path, which would undo our tenant scoping.
+            # Acquire the connection and set search_path on its raw DBAPI
+            # cursor. This bypasses SQLAlchemy's auto-begin so downstream
+            # `with session.begin():` and `with session.begin_nested():`
+            # blocks both work cleanly.
             conn = session.connection()
-            conn.execute(
-                text(f"SET search_path TO {user.schema_name}, public")
-            )
+            raw = conn.connection.dbapi_connection  # psycopg connection
+            cursor = raw.cursor()
+            try:
+                cursor.execute(
+                    f"SET search_path TO {user.schema_name}, public"
+                )
+            finally:
+                cursor.close()
         yield session
 
 

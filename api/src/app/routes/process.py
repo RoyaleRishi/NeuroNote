@@ -36,20 +36,19 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
     Returns an overridden NlpSettings for cloud mode with an API key,
     or None for edge mode / missing key (fall back to server defaults).
     """
-    from app.db.engine import get_session_factory
+    from app.db.engine import get_session_factory, set_tenant_schema
     from app.db.tenant import validate_schema_name
 
     validate_schema_name(schema_name)
     factory = get_session_factory()
-    with factory() as session:
-        url = str(session.get_bind().url)
-        if url.startswith("postgresql"):
-            session.execute(
-                sa_text(f"SET search_path TO {schema_name}, public")
-            )
-        rows = session.execute(
-            sa_text("SELECT key, value FROM user_preferences")
-        ).all()
+    set_tenant_schema(schema_name)
+    try:
+        with factory() as session:
+            rows = session.execute(
+                sa_text("SELECT key, value FROM user_preferences")
+            ).all()
+    finally:
+        set_tenant_schema(None)
 
     prefs = {str(r[0]): str(r[1]) for r in rows}
     if prefs.get("llm_mode") != "cloud" or not prefs.get("llm_api_key"):
@@ -68,24 +67,36 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
 def _run_processing_job(
     *, job_id: str, payload: ProcessNoteRequest, schema_name: str, graph_name: str
 ) -> None:
-    mark_job_running(job_id)
-    try:
-        user_settings = _load_user_llm_config(schema_name)
-        pipeline = NoteNlpPipeline(settings=user_settings) if user_settings else None
-        summary = NoteProcessingService(
-            schema_name=schema_name,
-            graph_name=graph_name,
-            pipeline=pipeline,
-        ).process_note(payload)
-    except NoteNotFoundError as exc:
-        mark_job_failed(job_id, error=str(exc))
-        return
-    except Exception as exc:  # pragma: no cover - defensive runtime guard
-        _LOG.exception("Processing job %s failed: %s", job_id, exc)
-        mark_job_failed(job_id, error=str(exc))
-        return
+    # Pin the tenant schema for the entire background task so every session
+    # opened by job_store, _load_user_llm_config, and NoteProcessingService
+    # picks up the right search_path on connection checkout.
+    from app.db.engine import set_tenant_schema
 
-    mark_job_completed(job_id, extraction_summary=summary.model_dump() if summary else None)
+    set_tenant_schema(schema_name)
+    try:
+        mark_job_running(job_id)
+        try:
+            user_settings = _load_user_llm_config(schema_name)
+            pipeline = NoteNlpPipeline(settings=user_settings) if user_settings else None
+            summary = NoteProcessingService(
+                schema_name=schema_name,
+                graph_name=graph_name,
+                pipeline=pipeline,
+            ).process_note(payload)
+        except NoteNotFoundError as exc:
+            mark_job_failed(job_id, error=str(exc))
+            return
+        except Exception as exc:  # pragma: no cover - defensive runtime guard
+            _LOG.exception("Processing job %s failed: %s", job_id, exc)
+            mark_job_failed(job_id, error=str(exc))
+            return
+
+        mark_job_completed(
+            job_id,
+            extraction_summary=summary.model_dump() if summary else None,
+        )
+    finally:
+        set_tenant_schema(None)
 
 
 @router.post(

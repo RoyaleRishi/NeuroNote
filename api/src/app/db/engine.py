@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+from contextvars import ContextVar
 from threading import Lock
 
 from sqlalchemy import create_engine, event
@@ -14,6 +16,27 @@ _ENGINE: Engine | None = None
 _SESSION_FACTORY: sessionmaker[Session] | None = None
 _ACTIVE_DATABASE_URL: str | None = None
 _LOCK = Lock()
+
+# Per-thread/task tenant schema. When set, the pool checkout event applies
+# `SET search_path TO {schema}, public` to every checked-out connection.
+# When unset, search_path defaults to "$user", public (the public schema).
+_tenant_schema: ContextVar[str | None] = ContextVar("_tenant_schema", default=None)
+_SCHEMA_PATTERN = re.compile(r"^user_[a-z0-9]{4,32}$")
+
+
+def set_tenant_schema(schema_name: str | None) -> None:
+    """Set (or clear) the tenant schema for the current async task / thread.
+
+    Connections checked out from the pool while a schema is active have
+    their ``search_path`` set to ``{schema}, public``. Pass None to clear.
+    """
+    if schema_name is not None and not _SCHEMA_PATTERN.fullmatch(schema_name):
+        raise ValueError(f"Invalid schema name: {schema_name!r}")
+    _tenant_schema.set(schema_name)
+
+
+def get_tenant_schema() -> str | None:
+    return _tenant_schema.get()
 
 
 def _build_engine(database_url: str, *, db_echo: bool) -> Engine:
@@ -35,17 +58,28 @@ def _build_engine(database_url: str, *, db_echo: bool) -> Engine:
 
     eng = create_engine(database_url, **kwargs)  # type: ignore[arg-type]
 
-    # Reset search_path on checkout so non-tenant sessions always start clean.
+    # On every connection checkout, set search_path to either the tenant
+    # schema (from the contextvar) or the default. This guarantees the
+    # right schema is active regardless of which session.commit() releases
+    # and re-acquires the connection.
     if database_url.startswith("postgresql"):
 
         @event.listens_for(eng, "checkout")
-        def _reset_search_path(
+        def _set_search_path_on_checkout(
             dbapi_conn: object,
             connection_record: ConnectionPoolEntry,
             connection_proxy: object,
         ) -> None:
+            # Default to "$user", public so non-tenant routes (auth, health)
+            # always start clean. Tenant routes override via the contextvar
+            # below, OR by issuing their own SET via the raw cursor on
+            # session.connection() (see app/db/tenant_session.py).
+            tenant = _tenant_schema.get()
+            target = (
+                f'"{tenant}", public' if tenant else '"$user", public'
+            )
             cursor = dbapi_conn.cursor()  # type: ignore[union-attr]
-            cursor.execute('SET search_path TO "$user", public')
+            cursor.execute(f"SET search_path TO {target}")
             cursor.close()
 
     return eng

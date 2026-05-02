@@ -72,16 +72,9 @@ class NoteProcessingService:
         self._schema_name = schema_name
 
     def _open_session(self) -> Session:
-        """Open a session with the tenant search_path set (if multi-tenant)."""
-        session = self._session_factory()
-        if self._schema_name:
-            validate_schema_name(self._schema_name)
-            url = str(session.get_bind().url)
-            if url.startswith("postgresql"):
-                session.execute(sa_text(
-                    f"SET search_path TO {self._schema_name}, public"
-                ))
-        return session
+        """Open a session — search_path is set by the engine's pool checkout
+        event based on the contextvar set in ``process_note``."""
+        return self._session_factory()
 
     def _load_snapshot(self, note_id: str) -> ProcessedNoteSnapshot:
         with self._open_session() as session:
@@ -408,5 +401,14 @@ class NoteProcessingService:
             _LOGGER.debug("concept_meta: failed to mark classified", exc_info=True)
 
     def process_note(self, payload: ProcessNoteRequest) -> ExtractionSummary:
-        snapshot = self._load_snapshot(payload.note_id)
-        return self._persist_graph_and_vector(snapshot=snapshot)
+        # Set the tenant schema contextvar so connections checked out from the
+        # pool by every internal session apply the right SET search_path.
+        from app.db.engine import set_tenant_schema
+        if self._schema_name:
+            validate_schema_name(self._schema_name)
+        set_tenant_schema(self._schema_name)
+        try:
+            snapshot = self._load_snapshot(payload.note_id)
+            return self._persist_graph_and_vector(snapshot=snapshot)
+        finally:
+            set_tenant_schema(None)
