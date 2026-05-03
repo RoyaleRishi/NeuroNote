@@ -65,6 +65,8 @@ interface NoteEditorProps {
    * processing completes.
    */
   edgeMarkStableInference?: () => void;
+  /** Minimum confidence threshold applied when fetching the local graph. Defaults to 0.9. */
+  confidenceThreshold?: number;
 }
 
 interface NoteSnapshot {
@@ -238,13 +240,6 @@ function NoteOptionsMenu({
   );
 }
 
-const DEFAULT_LOCAL_GRAPH_FILTERS = {
-  max_hops: 1 as const,
-  limit_nodes: 80,
-  min_confidence: 0.35,
-  include_types: ["note", "entity", "relation"],
-};
-
 export function NoteEditor({
   noteId,
   baseUrl,
@@ -257,6 +252,7 @@ export function NoteEditor({
   llmMode,
   edgeReady = false,
   edgeMarkStableInference,
+  confidenceThreshold = 0.9,
 }: NoteEditorProps) {
   const [documentJson, setDocumentJson] = useState<EditorDoc>(createEmptyEditorDoc());
   const [noteTitle, setNoteTitle] = useState("Untitled");
@@ -281,8 +277,6 @@ export function NoteEditor({
   const [localGraph, setLocalGraph] = useState<LocalGraphResponse | null>(null);
   const [localGraphLoading, setLocalGraphLoading] = useState(false);
   const [localGraphErrorMessage, setLocalGraphErrorMessage] = useState<string | null>(null);
-  const [localGraphFilters, setLocalGraphFilters] = useState({ ...DEFAULT_LOCAL_GRAPH_FILTERS, include_types: [...DEFAULT_LOCAL_GRAPH_FILTERS.include_types] });
-
   const latestSnapshotRef = useRef<NoteSnapshot>({
     noteTitle: "Untitled",
     subjectId: "inbox",
@@ -760,7 +754,12 @@ export function NoteEditor({
     setLocalGraphLoading(true);
     setLocalGraphErrorMessage(null);
     try {
-      const result = await fetchLocalGraph(baseUrl, noteId, localGraphFilters);
+      const result = await fetchLocalGraph(baseUrl, noteId, {
+        max_hops: 1,
+        limit_nodes: 80,
+        min_confidence: confidenceThreshold,
+        include_types: ["note", "entity"],
+      });
       if (token !== localGraphRequestTokenRef.current) return;
       setLocalGraph(result);
     } catch {
@@ -771,7 +770,7 @@ export function NoteEditor({
         setLocalGraphLoading(false);
       }
     }
-  }, [baseUrl, noteId, localGraphFilters]);
+  }, [baseUrl, noteId, confidenceThreshold]);
 
   useEffect(() => {
     if (noteView === "graph") {
@@ -863,11 +862,9 @@ export function NoteEditor({
           noteId={noteId}
           baseUrl={baseUrl}
           graph={localGraph}
-          filters={localGraphFilters}
           isLoading={localGraphLoading}
           errorMessage={localGraphErrorMessage}
           onRetry={() => { void loadLocalGraph(); }}
-          onFiltersChange={(next) => { setLocalGraphFilters({ ...next, max_hops: next.max_hops as 1 }); }}
           onOpenNote={(nextNoteId) => { onOpenNote?.(nextNoteId); }}
         />
       )}

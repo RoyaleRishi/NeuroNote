@@ -11,20 +11,12 @@ describe("LocalGraphPanel", () => {
         noteId="note-1"
         baseUrl="http://localhost:8000"
         graph={null}
-        filters={{
-          max_hops: 1,
-          limit_nodes: 80,
-          min_confidence: 0.35,
-          include_types: ["note", "entity", "relation"],
-        }}
         isLoading
         errorMessage={null}
         onRetry={() => {}}
-        onFiltersChange={() => {}}
         onOpenNote={() => {}}
       />,
     );
-
     expect(document.querySelector(".skeleton-graph")).toBeInTheDocument();
   });
 
@@ -35,85 +27,46 @@ describe("LocalGraphPanel", () => {
         noteId="note-1"
         baseUrl="http://localhost:8000"
         graph={null}
-        filters={{
-          max_hops: 1,
-          limit_nodes: 80,
-          min_confidence: 0.35,
-          include_types: ["note", "entity", "relation"],
-        }}
         isLoading={false}
         errorMessage="Failed to load local graph"
         onRetry={onRetry}
-        onFiltersChange={() => {}}
         onOpenNote={() => {}}
       />,
     );
-
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it("renders graph summary counts", () => {
+  it("renders graph canvas and stats footer without filter controls", () => {
     render(
       <LocalGraphPanel
         noteId="note-1"
         baseUrl="http://localhost:8000"
         graph={{
           nodes: [
-            {
-              id: "note-1",
-              type: "note",
-              label: "Note 1",
-              confidence: null,
-              source_note_id: "note-1",
-              metadata: {},
-            },
-            {
-              id: "note-2",
-              type: "note",
-              label: "Note 2",
-              confidence: null,
-              source_note_id: "note-2",
-              metadata: {},
-            },
+            { id: "note-1", type: "note", label: "Note 1", confidence: null, source_note_id: "note-1", metadata: {} },
+            { id: "note-2", type: "note", label: "Note 2", confidence: null, source_note_id: "note-2", metadata: {} },
           ],
           edges: [
-            {
-              id: "edge-1",
-              source: "note-1",
-              target: "note-2",
-              type: "LINKS_TO",
-              confidence: 1,
-              source_note_id: "note-1",
-            },
+            { id: "edge-1", source: "note-1", target: "note-2", type: "LINKS_TO", confidence: 1, source_note_id: "note-1" },
           ],
           meta: {
             root_note_id: "note-1",
-            applied_filters: {
-              max_hops: 1,
-              limit_nodes: 80,
-              min_confidence: 0,
-              include_types: ["note", "entity", "relation"],
-            },
+            applied_filters: { max_hops: 1, limit_nodes: 80, min_confidence: 0.9, include_types: ["note", "entity"] },
             truncated: false,
           },
-        }}
-        filters={{
-          max_hops: 1,
-          limit_nodes: 80,
-          min_confidence: 0.35,
-          include_types: ["note", "entity", "relation"],
         }}
         isLoading={false}
         errorMessage={null}
         onRetry={() => {}}
-        onFiltersChange={() => {}}
         onOpenNote={() => {}}
       />,
     );
-
-    expect(screen.getByText("2 nodes")).toBeInTheDocument();
-    expect(screen.getByText("1 edges")).toBeInTheDocument();
     expect(screen.getByLabelText("Local graph canvas")).toBeInTheDocument();
+    expect(screen.getByText("2 nodes · 1 edges")).toBeInTheDocument();
+    // No filter controls
+    expect(screen.queryByLabelText("Graph depth")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Minimum confidence")).not.toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: "Local graph nodes" })).not.toBeInTheDocument();
   });
 });
