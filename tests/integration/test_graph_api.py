@@ -162,3 +162,44 @@ def test_local_graph_excludes_note_titles_and_link_targets_from_entities(
     assert "machine learning" in entity_labels
     assert "noise root" not in entity_labels
     assert "noise neighbor" not in entity_labels
+
+
+def test_global_graph_filters_by_subject_id(client: TestClient) -> None:
+    client.put(
+        "/v1/notes/subj-physics-1",
+        json={**_payload("subj-physics-1", "Physics Note", "Newton laws", "2026-05-02T10:00:00Z"),
+              "subject_id": "physics"},
+    )
+    client.put(
+        "/v1/notes/subj-math-1",
+        json={**_payload("subj-math-1", "Math Note", "Calculus derivatives", "2026-05-02T10:01:00Z"),
+              "subject_id": "math"},
+    )
+
+    resp = client.get("/v1/graph/global", params={"subject_id": "physics", "include_types": "note"})
+    assert resp.status_code == 200
+    body = resp.json()
+    note_ids = {n["id"] for n in body["nodes"]}
+    assert "subj-physics-1" in note_ids
+    assert "subj-math-1" not in note_ids
+    assert body["meta"]["applied_filters"]["subject_id"] == "physics"
+
+
+def test_global_graph_filters_by_tag(client: TestClient) -> None:
+    client.put(
+        "/v1/notes/tag-lecture-1",
+        json={**_payload("tag-lecture-1", "Lecture Note", "Today we covered photosynthesis", "2026-05-02T11:00:00Z"),
+              "tags": ["lecture"]},
+    )
+    client.put(
+        "/v1/notes/tag-notag-1",
+        json=_payload("tag-notag-1", "Untagged Note", "Some content", "2026-05-02T11:01:00Z"),
+    )
+
+    resp = client.get("/v1/graph/global", params={"tag": "lecture", "include_types": "note"})
+    assert resp.status_code == 200
+    body = resp.json()
+    note_ids = {n["id"] for n in body["nodes"]}
+    assert "tag-lecture-1" in note_ids
+    assert "tag-notag-1" not in note_ids
+    assert body["meta"]["applied_filters"]["tag"] == "lecture"

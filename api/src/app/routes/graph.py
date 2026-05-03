@@ -18,6 +18,8 @@ def get_global_graph(
     limit_nodes: int = Query(default=500, ge=1, le=2000),
     min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
     include_types: str = Query(default="note,entity,relation"),
+    subject_id: str | None = Query(default=None),
+    tag: str | None = Query(default=None),
     session: Session = Depends(get_tenant_session),
 ) -> GlobalGraphResponse:
     include_type_values = [item.strip() for item in include_types.split(",") if item.strip()]
@@ -26,6 +28,8 @@ def get_global_graph(
             limit_nodes=limit_nodes,
             min_confidence=min_confidence,
             include_types=include_type_values,
+            subject_id=subject_id,
+            tag=tag,
         )
     )
 

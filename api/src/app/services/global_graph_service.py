@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.graph_cache import get_cached, get_notes_version, set_cached
 from app.db.models.block import Block
 from app.db.models.note import Note
+from app.db.models.note_tag import NoteTag
+from app.db.models.tag import Tag
 from app.db.repositories.entity_alias_repository import EntityAliasRepository
 from app.nlp.pipeline import NoteNlpPipeline
 from app.nlp.types import BlockTextInput
@@ -30,6 +32,8 @@ class GlobalGraphQuery:
     limit_nodes: int
     min_confidence: float
     include_types: list[str]
+    subject_id: str | None = None
+    tag: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,16 +62,33 @@ class GlobalGraphService:
     def _normalize_include_types(values: list[str]) -> list[str]:
         return normalize_include_types(values)
 
-    def _list_notes(self, *, limit: int) -> list[_NoteSnapshot]:
-        # Fetch the most-recently-updated notes up to the requested limit to
-        # avoid loading the entire corpus when limit_nodes is small.
-        rows = self._session.execute(
+    def _list_notes(
+        self,
+        *,
+        limit: int,
+        subject_id: str | None = None,
+        tag: str | None = None,
+    ) -> list[_NoteSnapshot]:
+        # Fetch the most-recently-updated notes up to the requested limit,
+        # optionally narrowed by subject or tag, to avoid loading the full corpus.
+        stmt = (
             select(Note.note_id, Note.note_title, Note.content_text, Note.subject_id)
             .order_by(desc(Note.updated_at))
             .limit(limit)
-        ).all()
-        note_ids = [str(row[0]) for row in rows]
+        )
+        if subject_id:
+            stmt = stmt.where(Note.subject_id == subject_id)
+        if tag:
+            stmt = stmt.where(
+                Note.note_id.in_(
+                    select(NoteTag.note_id)
+                    .join(Tag, NoteTag.tag_id == Tag.id)
+                    .where(Tag.name == tag)
+                )
+            )
+        rows = self._session.execute(stmt).all()
 
+        note_ids = [str(row[0]) for row in rows]
         block_rows = self._session.execute(
             select(Block.note_id, Block.block_index, Block.content_text)
             .where(Block.note_id.in_(note_ids))
@@ -135,7 +156,8 @@ class GlobalGraphService:
         notes_version = get_notes_version(self._session)
         cache_key = (
             f"global:{query.limit_nodes}:{query.min_confidence}"
-            f":{'|'.join(sorted(include_types))}:{notes_version}"
+            f":{'|'.join(sorted(include_types))}"
+            f":{query.subject_id or ''}:{query.tag or ''}:{notes_version}"
         )
         cached = get_cached(cache_key)
         if cached is not None:
@@ -143,7 +165,11 @@ class GlobalGraphService:
 
         include_type_set = set(include_types)
 
-        notes = self._list_notes(limit=query.limit_nodes * 2)
+        notes = self._list_notes(
+            limit=query.limit_nodes * 2,
+            subject_id=query.subject_id,
+            tag=query.tag,
+        )
         dictionary_terms = self._build_dictionary_terms()
         total_notes = len(notes)
 
@@ -280,6 +306,8 @@ class GlobalGraphService:
                     limit_nodes=query.limit_nodes,
                     min_confidence=query.min_confidence,
                     include_types=include_types,
+                    subject_id=query.subject_id,
+                    tag=query.tag,
                 ),
                 truncated=truncated,
             ),
