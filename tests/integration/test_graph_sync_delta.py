@@ -169,7 +169,6 @@ def test_fetch_graph_for_notes_returns_mentions_and_relations(db_session) -> Non
 # ---------------------------------------------------------------------------
 
 def _note_payload(note_id: str, title: str, text: str) -> dict:
-    import hashlib
     return {
         "note_id": note_id,
         "note_title": title,
