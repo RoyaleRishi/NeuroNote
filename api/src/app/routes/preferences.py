@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.crypto import decrypt_api_key, encrypt_api_key
+from app.core.crypto import decrypt_api_key, encrypt_api_key, InvalidToken
 from app.db.tenant_session import get_tenant_session
 from shared.contracts.python.v1.preferences import (
     TestConnectionResponse,
@@ -36,7 +36,11 @@ def _load_preferences(session: Session) -> dict[str, str]:
     stored = {str(row[0]): str(row[1]) for row in rows}
     prefs = {**_DEFAULTS, **stored}
     if prefs.get("llm_api_key"):
-        prefs["llm_api_key"] = decrypt_api_key(prefs["llm_api_key"])
+        try:
+            prefs["llm_api_key"] = decrypt_api_key(prefs["llm_api_key"])
+        except InvalidToken:
+            _LOG.warning("llm_api_key could not be decrypted (wrong key or plaintext); clearing.")
+            prefs["llm_api_key"] = ""
     return prefs
 
 

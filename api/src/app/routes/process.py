@@ -36,6 +36,7 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
     Returns an overridden NlpSettings for cloud mode with an API key,
     or None for edge mode / missing key (fall back to server defaults).
     """
+    from app.core.crypto import decrypt_api_key, InvalidToken
     from app.db.engine import bind_session_to_tenant, get_session_factory
     from app.db.tenant import validate_schema_name
 
@@ -53,11 +54,22 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
     if prefs.get("llm_mode") != "cloud" or not prefs.get("llm_api_key"):
         return None
 
+    # Decrypt the API key; if it's invalid (wrong key or plaintext), log and skip.
+    api_key = prefs["llm_api_key"]
+    try:
+        api_key = decrypt_api_key(api_key)
+    except InvalidToken:
+        _LOG.warning("llm_api_key could not be decrypted (wrong key or plaintext); skipping cloud mode.")
+        return None
+
+    if not api_key:
+        return None
+
     base = get_nlp_settings()
     return _dataclass_replace(
         base,
         extraction_profile="llm-enhanced",
-        llm_api_key=prefs["llm_api_key"],
+        llm_api_key=api_key,
         llm_base_url=prefs.get("llm_base_url", base.llm_base_url),
         llm_model=prefs.get("llm_model", base.llm_model),
     )

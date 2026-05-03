@@ -23,7 +23,9 @@ def _get_fernet() -> Fernet | None:
 
 
 def encrypt_api_key(plaintext: str) -> str:
-    """Encrypt plaintext; no-op if PREF_ENCRYPTION_KEY is unset."""
+    """Encrypt plaintext; no-op if PREF_ENCRYPTION_KEY is unset or value is empty."""
+    if not plaintext:
+        return plaintext
     f = _get_fernet()
     if f is None:
         return plaintext
@@ -31,10 +33,12 @@ def encrypt_api_key(plaintext: str) -> str:
 
 
 def decrypt_api_key(ciphertext: str) -> str:
-    """Decrypt ciphertext; no-op if PREF_ENCRYPTION_KEY is unset.
+    """Decrypt ciphertext; no-op if PREF_ENCRYPTION_KEY is unset or value is empty.
 
     Raises ``InvalidToken`` if the key is set but ciphertext is invalid/tampered.
     """
+    if not ciphertext:
+        return ciphertext
     f = _get_fernet()
     if f is None:
         return ciphertext
