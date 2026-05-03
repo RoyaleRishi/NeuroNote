@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import pytest
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
-from app.core.crypto import decrypt_api_key, encrypt_api_key
+from app.core.crypto import decrypt_api_key, encrypt_api_key, InvalidToken
 
 
 def test_encrypt_decrypt_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
