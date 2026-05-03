@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from app.core.backfill_store import (
     BackfillStatusSnapshot,
@@ -11,6 +12,9 @@ from app.core.backfill_store import (
 from app.db.engine import get_session_factory
 from app.db.repositories.note_repository import NoteRepository
 from shared.contracts.python.v1.process import ProcessNoteRequest
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +38,41 @@ class StartupBackfillService:
     def shutdown(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=False)
 
+    def _filter_stale_notes(self, session: "Session", note_ids: list[str]) -> list[str]:
+        """Return only note_ids that have missing or stale Block nodes in AGE.
+
+        Compares each note's relational Block rows against the AGE graph. A note
+        is considered stale if any of its blocks are absent from AGE or have a
+        differing content_hash (meaning the note was edited since the last sync).
+
+        Falls back to returning all note_ids if AGE is unavailable, so backfill
+        remains safe in environments without AGE support.
+        """
+        try:
+            from sqlalchemy import select as _select
+
+            from app.db.models.block import Block as _Block
+            from app.db.repositories.graph_repository import GraphRepository
+
+            repo = GraphRepository(session)
+            stale: list[str] = []
+            for note_id in note_ids:
+                # Fetch {block_uid: content_hash} map from AGE for this note.
+                age_states = repo.fetch_block_states(note_id=note_id, graph_name="neuronote")
+                # Fetch the authoritative block rows from the relational DB.
+                block_rows = session.execute(
+                    _select(_Block.block_uid, _Block.content_hash).where(
+                        _Block.note_id == note_id
+                    )
+                ).all()
+                # Note is stale when any block is absent or has a hash mismatch.
+                if any(age_states.get(str(uid)) != str(chash) for uid, chash in block_rows):
+                    stale.append(note_id)
+            return stale
+        except Exception:
+            # AGE unavailable or unexpected error — process all notes to be safe.
+            return note_ids
+
     def run_note_reprocessing_backfill(self) -> None:
         if not self._options.enabled:
             set_backfill_status(
@@ -48,7 +87,8 @@ class StartupBackfillService:
 
         session_factory = get_session_factory()
         with session_factory() as session:
-            note_ids = NoteRepository(session).list_note_ids()
+            all_note_ids = NoteRepository(session).list_note_ids()
+            note_ids = self._filter_stale_notes(session, all_note_ids)
 
         total = len(note_ids)
         processed = 0
