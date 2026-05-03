@@ -11,6 +11,7 @@ class UserPreferences(BaseModel):
     llm_api_key: str = Field(default="")
     llm_base_url: str = Field(default="https://api.openai.com/v1")
     llm_model: str = Field(default="gpt-4o-mini")
+    confidence_threshold: float = Field(default=0.9, ge=0.5, le=1.0)
 
 
 class UpdatePreferencesRequest(BaseModel):
@@ -20,6 +21,7 @@ class UpdatePreferencesRequest(BaseModel):
     llm_api_key: str | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
+    confidence_threshold: float | None = Field(default=None, ge=0.5, le=1.0)
 
 
 class TestConnectionResponse(BaseModel):

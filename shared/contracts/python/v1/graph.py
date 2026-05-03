@@ -44,6 +44,8 @@ class GlobalGraphFilters(BaseModel):
     limit_nodes: int = Field(ge=1, le=2000)
     min_confidence: float = Field(ge=0.0, le=1.0)
     include_types: list[str] = Field(default_factory=list)
+    subject_id: str | None = None
+    tag: str | None = None
 
 
 class GlobalGraphMeta(BaseModel):

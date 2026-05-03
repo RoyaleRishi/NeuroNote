@@ -98,6 +98,7 @@ describe("NotesWorkspace", () => {
       llm_api_key: "",
       llm_base_url: "https://api.openai.com/v1",
       llm_model: "gpt-4o-mini",
+      confidence_threshold: 0.9,
     });
     vi.mocked(fetchLocalGraph).mockResolvedValue({
       nodes: [],

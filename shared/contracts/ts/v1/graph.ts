@@ -39,6 +39,8 @@ export interface GlobalGraphFilters {
   limit_nodes: number;
   min_confidence: number;
   include_types: string[];
+  subject_id?: string;
+  tag?: string;
 }
 
 export interface GlobalGraphMeta {
