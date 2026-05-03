@@ -155,6 +155,29 @@ def test_load_user_llm_config_cloud_without_key_returns_none(
     assert result is None
 
 
+def test_load_user_llm_config_does_not_clobber_context_var(
+    client: TestClient,
+) -> None:
+    """_load_user_llm_config must not alter the tenant-schema ContextVar.
+
+    Before the fix, the function reset the ContextVar to None in its finally
+    block. This broke mark_job_running/mark_job_completed calls in
+    _run_processing_job that rely on the ContextVar after this helper returns.
+    """
+    from app.db.engine import get_tenant_schema, set_tenant_schema
+    from app.routes.process import _load_user_llm_config
+
+    set_tenant_schema("user_test0001")
+    try:
+        result = _load_user_llm_config("user_test0001")
+        assert result is None  # edge mode (default) returns None
+        assert get_tenant_schema() == "user_test0001", (
+            "_load_user_llm_config must not reset the tenant-schema ContextVar"
+        )
+    finally:
+        set_tenant_schema(None)  # always clean up so other tests are unaffected
+
+
 # ── _resolve_llm_settings (concepts route helper) ──────────────────────────
 
 

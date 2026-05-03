@@ -42,7 +42,9 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
     validate_schema_name(schema_name)
     factory = get_session_factory()
     with factory() as session:
-        bind_session_to_tenant(session, schema_name)
+        url = str(session.get_bind().url)
+        if url.startswith("postgresql"):
+            bind_session_to_tenant(session, schema_name)
         rows = session.execute(
             sa_text("SELECT key, value FROM user_preferences")
         ).all()
