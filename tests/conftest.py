@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 if TYPE_CHECKING:
@@ -31,6 +32,7 @@ def configured_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
         monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{test_db_path}")
     monkeypatch.setenv("DB_AUTO_CREATE", "true")
     monkeypatch.setenv("REQUIRE_DB_EXTENSIONS", "false")
+    monkeypatch.setenv("PREF_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
     from app.db.engine import initialize_database, reset_engine
     from app.core.backfill_store import reset_backfill_status

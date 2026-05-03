@@ -207,3 +207,31 @@ def test_resolve_llm_settings_cloud_mode(
     assert result is not None
     assert result.llm_api_key == "sk-insight-key"
     assert result.llm_model == "insight-model"
+
+
+# ── encryption at rest ──────────────────────────────────────────────────────
+
+
+def test_put_preferences_api_key_is_encrypted_in_db(
+    client: TestClient, db_session: "Session"
+) -> None:
+    """Raw DB value after PUT must differ from the plaintext key (i.e. encrypted)."""
+    from sqlalchemy import text as sa_text
+
+    client.put("/v1/preferences", json={"llm_api_key": "sk-real-key-abc123"})
+    row = db_session.execute(
+        sa_text("SELECT value FROM user_preferences WHERE key = 'llm_api_key'")
+    ).first()
+    assert row is not None
+    assert row[0] != "sk-real-key-abc123"
+
+
+def test_put_preferences_api_key_round_trips(
+    client: TestClient, db_session: "Session"
+) -> None:
+    """PUT an API key; _load_preferences must return the decrypted plaintext."""
+    from app.routes.preferences import _load_preferences
+
+    client.put("/v1/preferences", json={"llm_api_key": "sk-real-key-abc123"})
+    prefs = _load_preferences(db_session)
+    assert prefs["llm_api_key"] == "sk-real-key-abc123"

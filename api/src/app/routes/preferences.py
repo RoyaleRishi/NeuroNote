@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.crypto import decrypt_api_key, encrypt_api_key
 from app.db.tenant_session import get_tenant_session
 from shared.contracts.python.v1.preferences import (
     TestConnectionResponse,
@@ -28,12 +29,15 @@ _DEFAULTS: dict[str, str] = {
 
 
 def _load_preferences(session: Session) -> dict[str, str]:
-    """Load all preference rows and merge with defaults."""
+    """Load all preference rows, merge with defaults, and decrypt llm_api_key."""
     rows = session.execute(
         text("SELECT key, value FROM user_preferences")
     ).all()
     stored = {str(row[0]): str(row[1]) for row in rows}
-    return {**_DEFAULTS, **stored}
+    prefs = {**_DEFAULTS, **stored}
+    if prefs.get("llm_api_key"):
+        prefs["llm_api_key"] = decrypt_api_key(prefs["llm_api_key"])
+    return prefs
 
 
 @router.get("/preferences", response_model=UserPreferences)
@@ -62,15 +66,16 @@ def update_preferences(
     # Load current state before writes so we can merge for the response.
     prefs = _load_preferences(session)
     for key, value in updates.items():
+        stored_value = encrypt_api_key(value) if key == "llm_api_key" else value
         session.execute(
             text(
                 "INSERT INTO user_preferences (key, value, updated_at) "
                 "VALUES (:key, :value, CURRENT_TIMESTAMP) "
                 "ON CONFLICT (key) DO UPDATE SET value = :value, updated_at = CURRENT_TIMESTAMP"
             ),
-            {"key": key, "value": value},
+            {"key": key, "value": stored_value},
         )
-        prefs[key] = value
+        prefs[key] = value  # keep plaintext in-memory for the response
     session.commit()
 
     # Mask API key in response (use in-memory prefs, not a second DB read).
