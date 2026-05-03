@@ -1230,6 +1230,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           </label>
         </div>
 
+        <div className="notes-sections-scroller">
         {recentNotes.length > 0 ? (
           <section className="notes-section" data-testid="notes-section-recent">
             <h2>
@@ -1335,6 +1336,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             onAction={() => void refreshNotes(selectedNoteId)}
           />
         ) : null}
+        </div>
       </aside>
 
       <main className="notes-editor-panel">

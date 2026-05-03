@@ -105,7 +105,7 @@ body {
 .notes-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border-strong);
   border-radius: 24px;
@@ -114,6 +114,15 @@ body {
   height: 100%;
   overflow: hidden;
   transition: padding 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.notes-sections-scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .notes-sidebar-header {
@@ -391,9 +400,6 @@ body {
   display: grid;
   gap: 6px;
   align-content: start;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .note-list-button {
