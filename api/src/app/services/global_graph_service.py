@@ -8,7 +8,7 @@ from app.core.graph_cache import get_cached, get_notes_version, set_cached
 from app.db.models.note import Note
 from app.db.models.note_tag import NoteTag
 from app.db.models.tag import Tag
-from app.db.repositories.graph_repository import GraphRepository
+from app.db.repositories.graph_repository import EntityMention, GraphRepository
 from app.utils.text import (
     extract_wiki_link_titles,
     normalize_include_types,
@@ -159,7 +159,7 @@ class GlobalGraphService:
             )
 
             # Deduplicate entities by highest confidence across all source notes
-            entity_best: dict[str, tuple[float, object]] = {}
+            entity_best: dict[str, tuple[float, EntityMention]] = {}
             for mention in graph_result.mentions:
                 if (mention.entity_id not in entity_best
                         or mention.confidence > entity_best[mention.entity_id][0]):

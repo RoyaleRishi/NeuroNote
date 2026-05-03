@@ -318,13 +318,30 @@ class GraphSyncService:
             )
 
         # Note→Entity aggregate MENTIONS: always recompute (we deleted these before entering)
+        self._recompute_note_entity_mentions(payload=payload, now_iso=now_iso)
+
+    def _recompute_note_entity_mentions(
+        self,
+        *,
+        payload: GraphSyncPayload,
+        now_iso: str,
+    ) -> None:
+        """Recompute Note→Entity aggregate MENTIONS edges from all entity mentions.
+
+        Finds the highest-confidence mention per canonical entity across all
+        blocks and upserts a single Note→Entity MENTIONS edge for each. Called
+        after deleting stale Note→Entity edges so the aggregate stays fresh.
+        """
+        entity_by_id = {entity.entity_id: entity for entity in payload.entities}
         note_entity_max_conf: dict[str, float] = {}
         for mention in payload.entity_mentions:
             source_entity = entity_by_id.get(mention.entity_id)
             if source_entity is None:
                 continue
             resolved = payload.resolved_entities.get(source_entity.entity_id)
-            canonical_id = resolved.canonical_entity_id if resolved is not None else source_entity.entity_id
+            canonical_id = (
+                resolved.canonical_entity_id if resolved is not None else source_entity.entity_id
+            )
             conf = float(source_entity.confidence)
             if resolved is not None:
                 conf = max(conf, float(resolved.confidence))
@@ -510,6 +527,23 @@ class GraphSyncService:
         dirty_block_indices: set[int] = {
             b.block_index for b in blocks if b.block_uid in dirty_uids
         }
+
+        # All-unchanged fast path: skip entity/relation/block writes, only
+        # recompute Note→Entity aggregate (cheap; note content unchanged).
+        if not dirty_uids and not deleted_uids:
+            self._upsert_note_and_subject(payload=payload, now_iso=now_iso)
+            self._repository.delete_note_mention_edges(
+                note_id=payload.note_id,
+                graph_name=self._graph_name,
+            )
+            self._recompute_note_entity_mentions(payload=payload, now_iso=now_iso)
+            if payload.embedding is not None:
+                EmbeddingRepository(self._session).upsert_embedding(
+                    item_id=payload.note_id,
+                    item_type="note",
+                    embedding=payload.embedding,
+                )
+            return
 
         # Remove stale Block nodes (DETACH DELETE cascades their edges)
         for uid in dirty_uids | deleted_uids:

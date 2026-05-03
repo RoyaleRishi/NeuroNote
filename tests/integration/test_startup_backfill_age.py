@@ -70,7 +70,7 @@ def test_filter_stale_notes_excludes_fully_synced_note(db_session) -> None:
     )
     db_session.flush()
 
-    # Upsert matching Block node into AGE using the default graph ("neuronote").
+    # Upsert matching Block node into AGE using the test tenant's graph.
     repo = GraphRepository(db_session)
     repo.upsert_node(
         label="Block",
@@ -84,10 +84,12 @@ def test_filter_stale_notes_excludes_fully_synced_note(db_session) -> None:
             "created_at": "2026-05-03T10:00:00Z",
             "updated_at": "2026-05-03T10:00:00Z",
         },
-        graph_name="neuronote",
+        graph_name="nn_user_test0001",
     )
     db_session.commit()
 
     service = StartupBackfillService()
-    stale = service._filter_stale_notes(db_session, ["backfill-synced"])
+    stale = service._filter_stale_notes(
+        db_session, ["backfill-synced"], graph_name="nn_user_test0001"
+    )
     assert "backfill-synced" not in stale

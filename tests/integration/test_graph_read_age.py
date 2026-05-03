@@ -6,6 +6,7 @@ or: TEST_DATABASE_URL=postgresql://... uv run --project api python -m pytest tes
 from __future__ import annotations
 
 import time
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 
@@ -48,17 +49,17 @@ def test_local_graph_returns_entity_nodes_from_age(client: TestClient, db_sessio
     from sqlalchemy import inspect as sa_inspect
     if sa_inspect(db_session.bind).dialect.name != "postgresql":
         pytest.skip("PostgreSQL + AGE required")
-    _process_and_wait(
-        client, "age-local-entity-test",
-        "machine learning improves computer vision",
-        "Entity Test"
-    )
-    resp = client.get("/v1/graph/local/age-local-entity-test", params={
+    suffix = uuid.uuid4().hex[:8]
+    note_id = f"age-local-entity-{suffix}"
+    _process_and_wait(client, note_id, "machine learning improves computer vision", "Entity Test")
+    resp = client.get(f"/v1/graph/local/{note_id}", params={
         "include_types": "note,entity,relation",
         "min_confidence": 0.0,
     })
     assert resp.status_code == 200
     body = resp.json()
+    note_ids_in_response = {n["id"] for n in body["nodes"] if n["type"] == "note"}
+    assert note_id in note_ids_in_response
     entity_nodes = [n for n in body["nodes"] if n["type"] == "entity"]
     assert entity_nodes, "Expected entity nodes from AGE after processing"
 
@@ -67,17 +68,17 @@ def test_local_graph_returns_relation_edges_from_age(client: TestClient, db_sess
     from sqlalchemy import inspect as sa_inspect
     if sa_inspect(db_session.bind).dialect.name != "postgresql":
         pytest.skip("PostgreSQL + AGE required")
-    _process_and_wait(
-        client, "age-local-relation-test",
-        "Python uses Django for web development",
-        "Relation Test"
-    )
-    resp = client.get("/v1/graph/local/age-local-relation-test", params={
+    suffix = uuid.uuid4().hex[:8]
+    note_id = f"age-local-relation-{suffix}"
+    _process_and_wait(client, note_id, "Python uses Django for web development", "Relation Test")
+    resp = client.get(f"/v1/graph/local/{note_id}", params={
         "include_types": "note,entity,relation",
         "min_confidence": 0.0,
     })
     assert resp.status_code == 200
     body = resp.json()
+    note_ids_in_response = {n["id"] for n in body["nodes"] if n["type"] == "note"}
+    assert note_id in note_ids_in_response
     edge_types = {e["type"] for e in body["edges"]}
     # MENTIONS edges should appear (Note→Entity)
     assert "MENTIONS" in edge_types or len(body["nodes"]) > 1
@@ -87,26 +88,32 @@ def test_local_graph_still_returns_links_to_edges(client: TestClient, db_session
     from sqlalchemy import inspect as sa_inspect
     if sa_inspect(db_session.bind).dialect.name != "postgresql":
         pytest.skip("PostgreSQL + AGE required")
-    _process_and_wait(client, "age-links-root", "See [[Age Links Target]]", "Links Root")
-    _process_and_wait(client, "age-links-target", "Target content", "Age Links Target")
-    resp = client.get("/v1/graph/local/age-links-root", params={
+    suffix = uuid.uuid4().hex[:8]
+    root_id = f"age-links-root-{suffix}"
+    target_id = f"age-links-target-{suffix}"
+    target_title = f"Age Links Target {suffix}"
+    _process_and_wait(client, root_id, f"See [[{target_title}]]", f"Links Root {suffix}")
+    _process_and_wait(client, target_id, "Target content", target_title)
+    resp = client.get(f"/v1/graph/local/{root_id}", params={
         "include_types": "note,relation",
         "max_hops": 1,
     })
     assert resp.status_code == 200
     body = resp.json()
     edge_pairs = {(e["source"], e["target"], e["type"]) for e in body["edges"]}
-    assert ("age-links-root", "age-links-target", "LINKS_TO") in edge_pairs
+    assert (root_id, target_id, "LINKS_TO") in edge_pairs
 
 
 def test_global_graph_returns_entity_nodes_from_age(client: TestClient, db_session) -> None:
     from sqlalchemy import inspect as sa_inspect
     if sa_inspect(db_session.bind).dialect.name != "postgresql":
         pytest.skip("PostgreSQL + AGE required")
+    suffix = uuid.uuid4().hex[:8]
+    note_id = f"age-global-entity-{suffix}"
     _process_and_wait(
-        client, "age-global-entity-test",
+        client, note_id,
         "neural networks enable deep learning",
-        "Global Entity Test"
+        f"Global Entity Test {suffix}",
     )
     resp = client.get("/v1/graph/global", params={
         "include_types": "note,entity,relation",
@@ -115,6 +122,6 @@ def test_global_graph_returns_entity_nodes_from_age(client: TestClient, db_sessi
     assert resp.status_code == 200
     body = resp.json()
     assert "nodes" in body
-    # At least our processed note should appear
+    # The processed note must appear in the global graph
     note_ids = {n["id"] for n in body["nodes"] if n["type"] == "note"}
-    assert "age-global-entity-test" in note_ids
+    assert note_id in note_ids

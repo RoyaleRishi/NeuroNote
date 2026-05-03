@@ -38,7 +38,12 @@ class StartupBackfillService:
     def shutdown(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=False)
 
-    def _filter_stale_notes(self, session: "Session", note_ids: list[str]) -> list[str]:
+    def _filter_stale_notes(
+        self,
+        session: "Session",
+        note_ids: list[str],
+        graph_name: str = "neuronote",
+    ) -> list[str]:
         """Return only note_ids that have missing or stale Block nodes in AGE.
 
         Compares each note's relational Block rows against the AGE graph. A note
@@ -47,6 +52,11 @@ class StartupBackfillService:
 
         Falls back to returning all note_ids if AGE is unavailable, so backfill
         remains safe in environments without AGE support.
+
+        Args:
+            graph_name: AGE graph to query. Defaults to ``"neuronote"`` (single-tenant).
+                Pass a per-tenant graph name (e.g. ``"nn_user_abc123"``) for multi-tenant
+                deployments.
         """
         try:
             from sqlalchemy import select as _select
@@ -58,7 +68,7 @@ class StartupBackfillService:
             stale: list[str] = []
             for note_id in note_ids:
                 # Fetch {block_uid: content_hash} map from AGE for this note.
-                age_states = repo.fetch_block_states(note_id=note_id, graph_name="neuronote")
+                age_states = repo.fetch_block_states(note_id=note_id, graph_name=graph_name)
                 # Fetch the authoritative block rows from the relational DB.
                 block_rows = session.execute(
                     _select(_Block.block_uid, _Block.content_hash).where(
