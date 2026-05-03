@@ -53,7 +53,7 @@ function AvatarCircle({
         height: `${size}px`,
         borderRadius: "50%",
         background: "var(--accent)",
-        color: "#fff",
+        color: "white",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
