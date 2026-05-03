@@ -200,7 +200,8 @@ def _process_note(client, note_id: str, text: str, title: str = "Test") -> None:
     assert resp.status_code in (200, 202), (
         f"POST /v1/process-note returned {resp.status_code}: {resp.text[:200]}"
     )
-    # Poll until done (max 10s)
+    # Poll until done (max 10s), then add a fixed settle wait so the background
+    # worker has time to commit its AGE writes before the caller reads AGE state.
     job_id = resp.json().get("job_id")
     if job_id:
         for _ in range(20):
@@ -208,49 +209,67 @@ def _process_note(client, note_id: str, text: str, title: str = "Test") -> None:
             if s.get("status") in ("completed", "failed"):
                 break
             time.sleep(0.5)
+    time.sleep(1)  # Allow background-thread DB commit to flush
 
 
 def test_delta_sync_skips_unchanged_blocks(client, db_session) -> None:
     """Re-syncing an unchanged note must not replace its Block nodes."""
+    import uuid
     from sqlalchemy import inspect as sa_inspect
     if sa_inspect(db_session.bind).dialect.name != "postgresql":
         pytest.skip("PostgreSQL + AGE required")
     from app.db.repositories.graph_repository import GraphRepository
 
     _GRAPH = "nn_user_test0001"
-    note_id = "delta-unchanged-test"
-    _process_note(client, note_id, "machine learning improves reasoning", title="Delta Unchanged Test")
+    # Use a unique note ID per run to avoid stale state from previous test runs
+    note_id = f"delta-unchanged-{uuid.uuid4().hex[:8]}"
+    _process_note(client, note_id, "machine learning improves reasoning", title=f"Delta Unchanged {note_id}")
 
-    # Capture the Block node IDs currently in AGE
+    # Commit to advance our transaction snapshot past the API session's writes.
+    # Create a new GraphRepository after commit so _age_ready_graphs is reset —
+    # AGE requires LOAD 'age' + SET search_path to be re-run in each transaction.
+    db_session.commit()
     repo = GraphRepository(db_session)
     states_before = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
     assert states_before, "Expected blocks in AGE after first sync"
 
     # Re-process without changing content — all blocks should stay identical
-    _process_note(client, note_id, "machine learning improves reasoning", title="Delta Unchanged Test")
+    _process_note(client, note_id, "machine learning improves reasoning", title=f"Delta Unchanged {note_id}")
 
-    states_after = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
+    # Commit again so we see any changes (should be none for unchanged content)
+    db_session.commit()
+    repo2 = GraphRepository(db_session)
+    states_after = repo2.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
     assert states_before == states_after, "Unchanged blocks should not be re-synced"
 
 
 def test_delta_sync_only_updates_changed_block(client, db_session) -> None:
     """Changing one block must update only that block's AGE state."""
+    import uuid
     from sqlalchemy import inspect as sa_inspect
     if sa_inspect(db_session.bind).dialect.name != "postgresql":
         pytest.skip("PostgreSQL + AGE required")
     from app.db.repositories.graph_repository import GraphRepository
 
     _GRAPH = "nn_user_test0001"
-    note_id = "delta-partial-change-test"
-    _process_note(client, note_id, "first paragraph content here", title="Delta Partial Change Test")
+    # Use a unique note ID per run to avoid stale state from previous test runs
+    note_id = f"delta-change-{uuid.uuid4().hex[:8]}"
+    _process_note(client, note_id, "first paragraph content here", title=f"Delta Change {note_id}")
 
+    # Commit to get a fresh transaction snapshot of the API session's writes.
+    # Create a new GraphRepository after commit so _age_ready_graphs is reset —
+    # AGE requires LOAD 'age' + SET search_path to be re-run in each transaction.
+    db_session.commit()
     repo = GraphRepository(db_session)
     states_before = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
     assert len(states_before) >= 1
 
     # Change content (new hash), re-process
-    _process_note(client, note_id, "completely different paragraph content", title="Delta Partial Change Test")
+    _process_note(client, note_id, "completely different paragraph content", title=f"Delta Change {note_id}")
 
-    states_after = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
+    # Commit again so we see the AGE writes from the second processing run.
+    db_session.commit()
+    repo2 = GraphRepository(db_session)
+    states_after = repo2.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
     # Block hashes must differ (content changed)
     assert states_before != states_after
