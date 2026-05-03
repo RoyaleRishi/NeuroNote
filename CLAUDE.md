@@ -210,6 +210,7 @@ Frontend tests: `web/src/**/*.test.tsx`
 | `NEXT_PUBLIC_API_BASE_URL` | `web/.env` | API URL for the browser (`http://localhost:8000`) |
 | `APP_PASSWORD` | `infra/.env` or compose | Password gate for the web UI. Unset = disabled (dev mode). When set, all routes require login. |
 | `SESSION_SECRET` | `infra/.env` or compose | Secret for HMAC-SHA256 session token. Falls back to `APP_PASSWORD` if unset. Use `openssl rand -hex 32`. |
+| `PREF_ENCRYPTION_KEY` | `api/.env` or compose | Base64url Fernet key for encrypting `llm_api_key` at rest. Generate with: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Unset = no-op (plaintext stored). |
 | `NEXT_PUBLIC_AUTH_ENABLED` | Set automatically by compose | `"true"` when `APP_PASSWORD` is non-empty. Controls logout button visibility. Do not set manually. |
 
 ## Files to be careful with
