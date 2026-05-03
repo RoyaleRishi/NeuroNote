@@ -206,6 +206,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 type="button"
                 className={`user-menu-mode-btn${llmMode === "edge" ? " active" : ""}`}
                 onClick={() => void handleModeChange("edge")}
+                aria-pressed={llmMode === "edge"}
               >
                 Edge AI
               </button>
@@ -213,6 +214,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 type="button"
                 className={`user-menu-mode-btn${llmMode === "cloud" ? " active" : ""}`}
                 onClick={() => void handleModeChange("cloud")}
+                aria-pressed={llmMode === "cloud"}
               >
                 Cloud AI
               </button>
@@ -241,6 +243,7 @@ export function UserMenu({ user }: UserMenuProps) {
                     setCloudDraft((d) => ({ ...d, llm_api_key: e.target.value }))
                   }
                   style={{ fontSize: "var(--text-xs)" }}
+                  aria-label="API Key"
                 />
                 <input
                   type="text"
@@ -251,6 +254,7 @@ export function UserMenu({ user }: UserMenuProps) {
                     setCloudDraft((d) => ({ ...d, llm_base_url: e.target.value }))
                   }
                   style={{ fontSize: "var(--text-xs)" }}
+                  aria-label="Base URL"
                 />
                 <div style={{ display: "flex", gap: "6px" }}>
                   <input
@@ -262,6 +266,7 @@ export function UserMenu({ user }: UserMenuProps) {
                       setCloudDraft((d) => ({ ...d, llm_model: e.target.value }))
                     }
                     style={{ flex: 1, fontSize: "var(--text-xs)" }}
+                    aria-label="Model"
                   />
                   <button
                     type="button"
@@ -304,9 +309,10 @@ export function UserMenu({ user }: UserMenuProps) {
               min={0.5}
               max={1}
               step={0.05}
-              defaultValue={confidenceThreshold}
+              value={confidenceThreshold}
               style={{ width: "100%", accentColor: "var(--accent)" }}
               onChange={(e) => handleConfidenceChange(Number(e.target.value))}
+              aria-label="Confidence threshold"
             />
             <div
               style={{
