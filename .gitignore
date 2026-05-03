@@ -47,6 +47,9 @@ api/dev.db
 
 # Next.js / Turbopack
 .turbo/
+
+# Superpowers brainstorming sessions
+.superpowers/
 web/.eslintcache
 
 # Legacy tracked tool dirs (keep untracked)
