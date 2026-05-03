@@ -260,7 +260,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   // ── Extracted hooks ──
   const qs = useQuickSwitch(notes, selectedNoteId);
   const backlinks = useBacklinks(baseUrl);
-  const globalGraph = useGlobalGraph(baseUrl);
+  const globalGraph = useGlobalGraph(baseUrl, prefs?.confidence_threshold ?? 0.9);
   const selection = useSelectionMode();
 
   const filters: WorkspaceFilters = useMemo(
@@ -1150,6 +1150,8 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           filters={globalGraph.filters}
           isLoading={globalGraph.isLoading}
           errorMessage={globalGraph.errorMessage}
+          availableSubjects={availableSubjects}
+          availableTags={availableTags}
           onRetry={() => { void globalGraph.load(); }}
           onFiltersChange={(next) => { globalGraph.setFilters(next); }}
           onOpenNote={(nextNoteId) => {
@@ -1385,6 +1387,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
               setHighlightedNoteId(nextNoteId);
             }}
             llmMode={prefs?.llm_mode}
+            confidenceThreshold={prefs?.confidence_threshold ?? 0.9}
             edgeReady={edge.isReady}
             edgeMarkStableInference={edge.markStableInference}
           />

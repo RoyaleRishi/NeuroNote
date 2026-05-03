@@ -8,20 +8,20 @@ import type { GlobalGraphResponse, LocalGraphNode } from "../../../../shared/con
 import { SkeletonGraph } from "../ui/Skeleton";
 import { EmptyState } from "../ui/EmptyState";
 import { ErrorMessage } from "../ui/ErrorMessage";
+import type { GlobalGraphFilters } from "../../lib/hooks/useGlobalGraph";
 
-export interface GlobalGraphFilterState {
-  min_confidence: number;
-  include_types: string[];
-}
+export type { GlobalGraphFilters };
 
 interface GlobalGraphPanelProps {
   baseUrl: string;
   graph: GlobalGraphResponse | null;
-  filters: GlobalGraphFilterState;
+  filters: GlobalGraphFilters;
   isLoading: boolean;
   errorMessage: string | null;
+  availableSubjects: string[];
+  availableTags: string[];
   onRetry: () => void;
-  onFiltersChange: (next: GlobalGraphFilterState) => void;
+  onFiltersChange: (next: GlobalGraphFilters) => void;
   onOpenNote: (noteId: string) => void;
 }
 
@@ -31,11 +31,17 @@ export function GlobalGraphPanel({
   filters,
   isLoading,
   errorMessage,
+  availableSubjects,
+  availableTags,
   onRetry,
   onFiltersChange,
   onOpenNote,
 }: GlobalGraphPanelProps) {
   const [insightNode, setInsightNode] = useState<LocalGraphNode | null>(null);
+  const [nodeSearch, setNodeSearch] = useState("");
+  const [canvasWidth, setCanvasWidth] = useState(800);
+  const [canvasHeight, setCanvasHeight] = useState(600);
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
 
   function handleNodeClick(node: LocalGraphNode) {
     if (node.type === "note") {
@@ -44,10 +50,6 @@ export function GlobalGraphPanel({
       setInsightNode(node);
     }
   }
-  const [nodeSearch, setNodeSearch] = useState("");
-  const [canvasWidth, setCanvasWidth] = useState(800);
-  const [canvasHeight, setCanvasHeight] = useState(600);
-  const canvasAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = canvasAreaRef.current;
@@ -85,6 +87,43 @@ export function GlobalGraphPanel({
           value={nodeSearch}
           onChange={(e) => setNodeSearch(e.target.value)}
         />
+
+        <div className="local-graph-filters">
+          <label className="notes-filter-label">
+            Subject
+            <select
+              className="notes-filter-input"
+              aria-label="Filter by subject"
+              value={filters.subject_id ?? ""}
+              onChange={(e) =>
+                onFiltersChange({ ...filters, subject_id: e.target.value || undefined })
+              }
+            >
+              <option value="">All subjects</option>
+              {availableSubjects.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="notes-filter-label">
+            Tag
+            <select
+              className="notes-filter-input"
+              aria-label="Filter by tag"
+              value={filters.tag ?? ""}
+              onChange={(e) =>
+                onFiltersChange({ ...filters, tag: e.target.value || undefined })
+              }
+            >
+              <option value="">All tags</option>
+              {availableTags.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         <div className="local-graph-summary">
           <p>{nodeCount} nodes</p>
           <p>{edgeCount} edges</p>
@@ -94,48 +133,13 @@ export function GlobalGraphPanel({
             Showing top {graph.meta.applied_filters.limit_nodes} nodes
           </p>
         )}
-        <div className="local-graph-filters">
-          <label>
-            Min confidence
-            <input
-              aria-label="Minimum confidence"
-              type="range" min={0} max={1} step={0.05}
-              value={filters.min_confidence}
-              onChange={(e) => onFiltersChange({ ...filters, min_confidence: Number(e.target.value) })}
-            />
-            <span>{filters.min_confidence.toFixed(2)}</span>
-          </label>
-          <fieldset className="local-graph-type-filters">
-            <legend>Include</legend>
-            {["note", "entity", "relation"].map((item) => (
-              <label key={item}>
-                <input
-                  type="checkbox"
-                  aria-label={`Include ${item}`}
-                  checked={filters.include_types.includes(item)}
-                  onChange={(e) => {
-                    const current = new Set(filters.include_types);
-                    if (e.target.checked) current.add(item); else current.delete(item);
-                    if (current.size === 0) return;
-                    onFiltersChange({ ...filters, include_types: Array.from(current) });
-                  }}
-                />
-                {item}
-              </label>
-            ))}
-          </fieldset>
-        </div>
       </aside>
 
       <div className="global-graph-canvas-area" ref={canvasAreaRef}>
         {isLoading ? (
           <SkeletonGraph />
         ) : errorMessage ? (
-          <ErrorMessage
-            message={errorMessage}
-            actionLabel="Retry"
-            onAction={onRetry}
-          />
+          <ErrorMessage message={errorMessage} actionLabel="Retry" onAction={onRetry} />
         ) : !graph || nodeCount === 0 ? (
           <EmptyState
             icon="🕸️"
