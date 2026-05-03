@@ -36,19 +36,16 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
     Returns an overridden NlpSettings for cloud mode with an API key,
     or None for edge mode / missing key (fall back to server defaults).
     """
-    from app.db.engine import get_session_factory, set_tenant_schema
+    from app.db.engine import bind_session_to_tenant, get_session_factory
     from app.db.tenant import validate_schema_name
 
     validate_schema_name(schema_name)
     factory = get_session_factory()
-    set_tenant_schema(schema_name)
-    try:
-        with factory() as session:
-            rows = session.execute(
-                sa_text("SELECT key, value FROM user_preferences")
-            ).all()
-    finally:
-        set_tenant_schema(None)
+    with factory() as session:
+        bind_session_to_tenant(session, schema_name)
+        rows = session.execute(
+            sa_text("SELECT key, value FROM user_preferences")
+        ).all()
 
     prefs = {str(r[0]): str(r[1]) for r in rows}
     if prefs.get("llm_mode") != "cloud" or not prefs.get("llm_api_key"):
