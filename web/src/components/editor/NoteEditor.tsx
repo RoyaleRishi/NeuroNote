@@ -67,6 +67,8 @@ interface NoteEditorProps {
   edgeMarkStableInference?: () => void;
   /** Minimum confidence threshold applied when fetching the local graph. Defaults to 0.9. */
   confidenceThreshold?: number;
+  /** Opens the linked mentions (backlinks) modal for the current note. */
+  onShowBacklinks?: () => void;
 }
 
 interface NoteSnapshot {
@@ -144,6 +146,7 @@ interface NoteOptionsMenuProps {
   isArchived: boolean;
   onArchivedChange: (value: boolean) => void;
   onExport: () => void;
+  onShowBacklinks?: () => void;
   disabled: boolean;
 }
 
@@ -159,6 +162,7 @@ function NoteOptionsMenu({
   isArchived,
   onArchivedChange,
   onExport,
+  onShowBacklinks,
   disabled,
 }: NoteOptionsMenuProps) {
   const [open, setOpen] = useState(false);
@@ -226,6 +230,15 @@ function NoteOptionsMenu({
             Archived
           </label>
           <div className="note-options-divider" />
+          {onShowBacklinks && (
+            <button
+              type="button"
+              className="note-options-action"
+              onClick={() => { onShowBacklinks(); setOpen(false); }}
+            >
+              Linked mentions
+            </button>
+          )}
           <button
             type="button"
             className="note-options-action"
@@ -253,6 +266,7 @@ export function NoteEditor({
   edgeReady = false,
   edgeMarkStableInference,
   confidenceThreshold = 0.9,
+  onShowBacklinks,
 }: NoteEditorProps) {
   const [documentJson, setDocumentJson] = useState<EditorDoc>(createEmptyEditorDoc());
   const [noteTitle, setNoteTitle] = useState("Untitled");
@@ -785,35 +799,19 @@ export function NoteEditor({
   return (
     <section className="note-editor" data-testid="note-editor">
       <div className="note-editor-top-bar">
-        <div className="note-editor-status-row">
-          <EditorToolbar
-            dirty={dirty}
-            saveStatus={saveStatus}
-            processStatus={processStatus}
-            processProgress={processProgress}
-            liveConcepts={liveConcepts}
-          />
-          <ExtractionSummaryBadge summary={extractionSummary} />
-          <NoteOptionsMenu
-            subjectId={subjectId}
-            onSubjectChange={handleSubjectChange}
-            availableSubjects={availableSubjects}
-            tags={parseTagsInput(tagsInput)}
-            onTagsChange={(newTags) => handleTagsChange(newTags.join(", "))}
-            availableTags={availableTags}
-            isPinned={isPinned}
-            onPinnedChange={handlePinnedChange}
-            isArchived={isArchived}
-            onArchivedChange={handleArchivedChange}
-            onExport={() => { void handleExportMarkdown(); }}
-            disabled={isLoading}
-          />
-        </div>
-        <div className="note-tabs" role="tablist" aria-label="Note view">
+        <EditorToolbar
+          dirty={dirty}
+          saveStatus={saveStatus}
+          processStatus={processStatus}
+          processProgress={processProgress}
+          liveConcepts={liveConcepts}
+        />
+        <ExtractionSummaryBadge summary={extractionSummary} />
+        <div className="note-view-tabs" role="tablist" aria-label="Note view">
           <button
             type="button"
             role="tab"
-            className={`note-tab${noteView === "write" ? " active" : ""}`}
+            className={`note-view-tab${noteView === "write" ? " active" : ""}`}
             aria-selected={noteView === "write"}
             onClick={() => setNoteView("write")}
           >
@@ -822,13 +820,28 @@ export function NoteEditor({
           <button
             type="button"
             role="tab"
-            className={`note-tab${noteView === "graph" ? " active" : ""}`}
+            className={`note-view-tab${noteView === "graph" ? " active" : ""}`}
             aria-selected={noteView === "graph"}
             onClick={() => setNoteView("graph")}
           >
             Graph
           </button>
         </div>
+        <NoteOptionsMenu
+          subjectId={subjectId}
+          onSubjectChange={handleSubjectChange}
+          availableSubjects={availableSubjects}
+          tags={parseTagsInput(tagsInput)}
+          onTagsChange={(newTags) => handleTagsChange(newTags.join(", "))}
+          availableTags={availableTags}
+          isPinned={isPinned}
+          onPinnedChange={handlePinnedChange}
+          isArchived={isArchived}
+          onArchivedChange={handleArchivedChange}
+          onExport={() => { void handleExportMarkdown(); }}
+          onShowBacklinks={onShowBacklinks}
+          disabled={isLoading}
+        />
       </div>
 
       {noteView === "write" ? (

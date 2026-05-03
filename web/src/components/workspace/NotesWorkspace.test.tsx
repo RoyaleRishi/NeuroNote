@@ -50,7 +50,22 @@ vi.mock("../../lib/api-client", () => ({
 }));
 
 vi.mock("../editor/NoteEditor", () => ({
-  NoteEditor: ({ noteId }: { noteId: string }) => <div data-testid="active-note-id">{noteId}</div>,
+  NoteEditor: ({
+    noteId,
+    onShowBacklinks,
+  }: {
+    noteId: string;
+    onShowBacklinks?: () => void;
+  }) => (
+    <div data-testid="active-note-id">
+      {noteId}
+      {onShowBacklinks && (
+        <button type="button" onClick={onShowBacklinks}>
+          Linked mentions
+        </button>
+      )}
+    </div>
+  ),
 }));
 
 function noteSummary(
@@ -750,41 +765,33 @@ describe("NotesWorkspace", () => {
       ],
     });
 
-    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
-    await screen.findByTestId("notes-section-all");
+    render(<NotesWorkspace baseUrl="http://localhost:8000" initialNoteId="note-a" />);
+    await screen.findByTestId("active-note-id");
 
-    const openButton = screen.getByRole("button", { name: "Linked mentions" });
-    fireEvent.click(openButton);
+    fireEvent.click(screen.getByRole("button", { name: "Linked mentions" }));
 
     expect(await screen.findByRole("dialog", { name: "Linked mentions" })).toBeInTheDocument();
     expect(await screen.findByText(/Source Note/)).toBeInTheDocument();
     expect(fetchNoteBacklinks).toHaveBeenCalledWith("http://localhost:8000", "note-a");
   });
 
-  it("supports escape to close linked mentions modal and restores focus", async () => {
+  it("supports escape to close linked mentions modal", async () => {
     vi.mocked(listNotes).mockResolvedValue({
       items: [noteSummary("note-a", { note_title: "Target Note" })],
       total: 1,
     });
-    vi.mocked(fetchNoteBacklinks).mockResolvedValue({
-      note_id: "note-a",
-      items: [],
-    });
+    vi.mocked(fetchNoteBacklinks).mockResolvedValue({ note_id: "note-a", items: [] });
 
-    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
-    await screen.findByTestId("notes-section-all");
+    render(<NotesWorkspace baseUrl="http://localhost:8000" initialNoteId="note-a" />);
+    await screen.findByTestId("active-note-id");
 
-    const openButton = screen.getByRole("button", { name: "Linked mentions" });
-    openButton.focus();
-    fireEvent.click(openButton);
-
+    fireEvent.click(screen.getByRole("button", { name: "Linked mentions" }));
     expect(await screen.findByRole("dialog", { name: "Linked mentions" })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Linked mentions" })).not.toBeInTheDocument();
     });
-    expect(openButton).toHaveFocus();
   });
 
   it("shows retry when linked mentions request fails", async () => {
@@ -794,13 +801,10 @@ describe("NotesWorkspace", () => {
     });
     vi.mocked(fetchNoteBacklinks)
       .mockRejectedValueOnce(new Error("backlink failure"))
-      .mockResolvedValueOnce({
-        note_id: "note-a",
-        items: [],
-      });
+      .mockResolvedValueOnce({ note_id: "note-a", items: [] });
 
-    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
-    await screen.findByTestId("notes-section-all");
+    render(<NotesWorkspace baseUrl="http://localhost:8000" initialNoteId="note-a" />);
+    await screen.findByTestId("active-note-id");
 
     fireEvent.click(screen.getByRole("button", { name: "Linked mentions" }));
     expect(await screen.findByText("Failed to load linked mentions")).toBeInTheDocument();

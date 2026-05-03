@@ -85,6 +85,21 @@ body {
   height: calc(100vh - 48px);
   padding: 24px;
   overflow: hidden;
+  transition: grid-template-columns 0.22s ease, column-gap 0.22s ease, padding-left 0.22s ease;
+}
+
+.notes-workspace.sidebar-collapsed {
+  grid-template-columns: 0px minmax(0, 1fr);
+  column-gap: 0;
+  padding-left: 8px;
+}
+
+.notes-workspace.sidebar-collapsed .notes-sidebar {
+  overflow: hidden;
+  padding: 0;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 .notes-sidebar {
@@ -98,12 +113,19 @@ body {
   padding: 20px;
   height: 100%;
   overflow: hidden;
+  transition: padding 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
 }
 
 .notes-sidebar-header {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.notes-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .notes-sidebar-header h1 {
@@ -117,6 +139,28 @@ body {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.sidebar-collapse-btn:hover {
+  color: var(--text-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* Split New Note button */
@@ -509,14 +553,35 @@ body {
   box-shadow: var(--shadow-panel);
   background: var(--panel-bg);
   overflow-y: auto;
+  position: relative;
 }
 
-.notes-editor-actions {
+.sidebar-expand-btn {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 2;
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
+
+.sidebar-expand-btn:hover {
+  color: var(--text-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 
 .local-graph-panel {
   margin: 10px 16px 0;
@@ -684,19 +749,19 @@ body {
   padding: 20px 22px;
 }
 
-/* Note editor top bar */
+/* Note editor top bar — single row: toolbar | badge | view-tabs | options-menu */
 .note-editor-top-bar {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 6px 0;
+  border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
 }
 
-.note-editor-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-bottom: 6px;
+.note-editor-top-bar .editor-toolbar {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Extraction summary badge */
@@ -2483,35 +2548,33 @@ select:focus-visible {
   border-color: var(--danger);
 }
 
-/* ── Note Write / Graph tabs ───────────────────────────── */
-.note-tabs {
+/* ── Note Write / Graph inline tabs ─────────────────────── */
+.note-view-tabs {
   display: flex;
-  border-bottom: 1px solid var(--panel-border);
-  padding: 0 16px;
-  gap: 0;
-  flex-shrink: 0;
+  gap: 2px;
 }
 
-.note-tab {
-  padding: 8px 14px;
+.note-view-tab {
+  padding: 4px 12px;
   font-size: var(--text-sm);
   font-weight: 500;
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-muted);
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
 
-.note-tab:hover {
+.note-view-tab:hover {
   color: var(--text-strong);
+  background: var(--accent-soft);
 }
 
-.note-tab.active,
-.note-tab[aria-selected="true"] {
+.note-view-tab.active,
+.note-view-tab[aria-selected="true"] {
   color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--accent-soft);
   font-weight: 600;
 }
 

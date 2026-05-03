@@ -229,6 +229,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const createInFlightRef = useRef(false);
   const contextMenuRef = useRef<HTMLUListElement | null>(null);
   const filtersInitializedRef = useRef(false);
@@ -1129,10 +1130,21 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         />
       ) : (
       <FileDropZone onFileContent={(name, content) => void handleFileImport(name, content)}>
-      <section className="notes-workspace" data-testid="notes-workspace">
+      <section className={`notes-workspace${sidebarOpen ? "" : " sidebar-collapsed"}`} data-testid="notes-workspace">
       <aside className="notes-sidebar">
         <header className="notes-sidebar-header">
-          <h1>Notes</h1>
+          <div className="notes-sidebar-title-row">
+            <h1>Notes</h1>
+            <button
+              type="button"
+              className="sidebar-collapse-btn"
+              onClick={() => setSidebarOpen(false)}
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              ‹
+            </button>
+          </div>
           <div className="notes-sidebar-actions">
             <button
               type="button"
@@ -1326,17 +1338,17 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
       </aside>
 
       <main className="notes-editor-panel">
-        <div className="notes-editor-actions">
+        {!sidebarOpen && (
           <button
             type="button"
-            className="editor-command-button"
-            ref={backlinks.triggerRef as React.RefObject<HTMLButtonElement>}
-            onClick={() => selectedNoteId && backlinks.open(selectedNoteId)}
-            disabled={!selectedNoteId}
+            className="sidebar-expand-btn"
+            onClick={() => setSidebarOpen(true)}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
           >
-            Linked mentions
+            ›
           </button>
-        </div>
+        )}
         {selectedNoteId ? (
           <NoteEditor
             key={selectedNoteId}
@@ -1356,6 +1368,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             confidenceThreshold={prefs?.confidence_threshold ?? 0.9}
             edgeReady={edge.isReady}
             edgeMarkStableInference={edge.markStableInference}
+            onShowBacklinks={selectedNoteId ? () => backlinks.open(selectedNoteId) : undefined}
           />
         ) : (
           <div className="notes-empty-state">
