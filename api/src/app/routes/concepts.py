@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import replace as _dataclass_replace
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -20,11 +21,11 @@ from shared.contracts.python.v1.extraction import (
 from shared.contracts.python.v1.graph import ConceptInsightResponse
 
 router = APIRouter()
+_LOG = logging.getLogger(__name__)
 
 
 def _resolve_llm_settings(session: Session) -> NlpSettings | None:
     """Read tenant preferences; return overridden NlpSettings for cloud mode, else None."""
-    import logging
     from app.core.crypto import decrypt_api_key, InvalidToken
 
     rows = session.execute(
@@ -39,7 +40,6 @@ def _resolve_llm_settings(session: Session) -> NlpSettings | None:
     try:
         api_key = decrypt_api_key(api_key)
     except InvalidToken:
-        _LOG = logging.getLogger(__name__)
         _LOG.warning("llm_api_key could not be decrypted (wrong key or plaintext); skipping cloud mode.")
         return None
 
