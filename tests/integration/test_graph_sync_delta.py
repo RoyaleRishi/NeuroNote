@@ -11,6 +11,10 @@ _GRAPH = "nn_user_test0001"
 
 
 def test_fetch_block_states_returns_empty_for_unsynced_note(db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+
     from app.db.repositories.graph_repository import GraphRepository
 
     repo = GraphRepository(db_session)
@@ -19,6 +23,10 @@ def test_fetch_block_states_returns_empty_for_unsynced_note(db_session) -> None:
 
 
 def test_fetch_block_states_returns_correct_hash_after_upsert(db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+
     from app.db.repositories.graph_repository import GraphRepository
 
     repo = GraphRepository(db_session)
@@ -44,6 +52,10 @@ def test_fetch_block_states_returns_correct_hash_after_upsert(db_session) -> Non
 
 
 def test_fetch_graph_for_notes_returns_empty_when_no_data(db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+
     from app.db.repositories.graph_repository import GraphRepository
 
     repo = GraphRepository(db_session)
@@ -57,6 +69,10 @@ def test_fetch_graph_for_notes_returns_empty_when_no_data(db_session) -> None:
 
 
 def test_fetch_graph_for_notes_returns_mentions_and_relations(db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+
     from app.db.repositories.graph_repository import GraphRepository
 
     repo = GraphRepository(db_session)

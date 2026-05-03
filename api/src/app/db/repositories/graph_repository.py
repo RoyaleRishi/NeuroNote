@@ -33,7 +33,7 @@ class RelationEdge:
     source_note_id: str
 
 
-@dataclass
+@dataclass(slots=True)
 class GraphFetchResult:
     """Aggregated AGE query result for a set of notes."""
 
