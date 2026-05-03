@@ -35,6 +35,15 @@ def test_graph_sync_collapses_relation_edges_to_related_to(
         def __init__(self, _session) -> None:
             return
 
+        def fetch_block_states(self, **_kwargs) -> dict:
+            return {}
+
+        def delete_block_node(self, **_kwargs) -> None:
+            return
+
+        def delete_note_mention_edges(self, **_kwargs) -> None:
+            return
+
         def delete_source_artifacts(self, **_kwargs) -> None:
             return
 
@@ -108,6 +117,15 @@ def test_graph_sync_uses_entity_mentions_evidence_for_block_edges(
 
     class _FakeGraphRepository:
         def __init__(self, _session) -> None:
+            return
+
+        def fetch_block_states(self, **_kwargs) -> dict:
+            return {}
+
+        def delete_block_node(self, **_kwargs) -> None:
+            return
+
+        def delete_note_mention_edges(self, **_kwargs) -> None:
             return
 
         def delete_source_artifacts(self, **_kwargs) -> None:
@@ -213,6 +231,15 @@ def test_graph_sync_emits_refers_to_edges_from_block_tokens(
         def __init__(self, _session) -> None:
             return
 
+        def fetch_block_states(self, **_kwargs) -> dict:
+            return {}
+
+        def delete_block_node(self, **_kwargs) -> None:
+            return
+
+        def delete_note_mention_edges(self, **_kwargs) -> None:
+            return
+
         def delete_source_artifacts(self, **_kwargs) -> None:
             return
 
@@ -311,6 +338,15 @@ def test_graph_sync_emits_refers_to_edges_from_reference_link_marks(
 
     class _FakeGraphRepository:
         def __init__(self, _session) -> None:
+            return
+
+        def fetch_block_states(self, **_kwargs) -> dict:
+            return {}
+
+        def delete_block_node(self, **_kwargs) -> None:
+            return
+
+        def delete_note_mention_edges(self, **_kwargs) -> None:
             return
 
         def delete_source_artifacts(self, **_kwargs) -> None:

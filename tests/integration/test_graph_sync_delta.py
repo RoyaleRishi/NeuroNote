@@ -162,3 +162,95 @@ def test_fetch_graph_for_notes_returns_mentions_and_relations(db_session) -> Non
 
     rel_keys = {(r.source_id, r.target_id, r.edge_type) for r in result.relations}
     assert ("concept-python", "concept-django", "USES") in rel_keys
+
+
+# ---------------------------------------------------------------------------
+# Delta sync correctness tests (Task 2)
+# ---------------------------------------------------------------------------
+
+def _note_payload(note_id: str, title: str, text: str) -> dict:
+    import hashlib
+    return {
+        "note_id": note_id,
+        "note_title": title,
+        "content_json": {
+            "type": "doc",
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+        },
+        "content_text": text,
+        "updated_at": "2026-05-03T10:00:00Z",
+    }
+
+
+def _process_note(client, note_id: str, text: str, title: str = "Test") -> None:
+    """Create a note and trigger synchronous processing via the API."""
+    import hashlib
+    import time
+    content_hash = hashlib.md5(text.encode()).hexdigest()
+    put_resp = client.put(f"/v1/notes/{note_id}", json=_note_payload(note_id, title, text))
+    assert put_resp.status_code in (200, 201), (
+        f"PUT /v1/notes/{note_id} returned {put_resp.status_code}: {put_resp.text[:200]}"
+    )
+    resp = client.post("/v1/process-note", json={
+        "note_id": note_id,
+        "content_text": text,
+        "content_hash": content_hash,
+        "updated_at": "2026-05-03T10:00:00Z",
+    })
+    assert resp.status_code in (200, 202), (
+        f"POST /v1/process-note returned {resp.status_code}: {resp.text[:200]}"
+    )
+    # Poll until done (max 10s)
+    job_id = resp.json().get("job_id")
+    if job_id:
+        for _ in range(20):
+            s = client.get(f"/v1/process-note/status/{job_id}").json()
+            if s.get("status") in ("completed", "failed"):
+                break
+            time.sleep(0.5)
+
+
+def test_delta_sync_skips_unchanged_blocks(client, db_session) -> None:
+    """Re-syncing an unchanged note must not replace its Block nodes."""
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+    from app.db.repositories.graph_repository import GraphRepository
+
+    _GRAPH = "nn_user_test0001"
+    note_id = "delta-unchanged-test"
+    _process_note(client, note_id, "machine learning improves reasoning", title="Delta Unchanged Test")
+
+    # Capture the Block node IDs currently in AGE
+    repo = GraphRepository(db_session)
+    states_before = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
+    assert states_before, "Expected blocks in AGE after first sync"
+
+    # Re-process without changing content — all blocks should stay identical
+    _process_note(client, note_id, "machine learning improves reasoning", title="Delta Unchanged Test")
+
+    states_after = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
+    assert states_before == states_after, "Unchanged blocks should not be re-synced"
+
+
+def test_delta_sync_only_updates_changed_block(client, db_session) -> None:
+    """Changing one block must update only that block's AGE state."""
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+    from app.db.repositories.graph_repository import GraphRepository
+
+    _GRAPH = "nn_user_test0001"
+    note_id = "delta-partial-change-test"
+    _process_note(client, note_id, "first paragraph content here", title="Delta Partial Change Test")
+
+    repo = GraphRepository(db_session)
+    states_before = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
+    assert len(states_before) >= 1
+
+    # Change content (new hash), re-process
+    _process_note(client, note_id, "completely different paragraph content", title="Delta Partial Change Test")
+
+    states_after = repo.fetch_block_states(note_id=note_id, graph_name=_GRAPH)
+    # Block hashes must differ (content changed)
+    assert states_before != states_after

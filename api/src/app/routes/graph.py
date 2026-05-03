@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import UserContext, get_current_user
 from app.db.tenant_session import get_tenant_session
 from app.services.global_graph_service import GlobalGraphQuery, GlobalGraphService
 from app.services.local_graph_service import LocalGraphNoteNotFoundError
@@ -21,9 +22,11 @@ def get_global_graph(
     subject_id: str | None = Query(default=None),
     tag: str | None = Query(default=None),
     session: Session = Depends(get_tenant_session),
+    user: UserContext = Depends(get_current_user),
 ) -> GlobalGraphResponse:
     include_type_values = [item.strip() for item in include_types.split(",") if item.strip()]
-    return GlobalGraphService(session).get_global_graph(
+    graph_name = f"nn_{user.schema_name}"
+    return GlobalGraphService(session, graph_name=graph_name).get_global_graph(
         GlobalGraphQuery(
             limit_nodes=limit_nodes,
             min_confidence=min_confidence,
@@ -42,10 +45,12 @@ def get_local_graph(
     min_confidence: float = Query(default=0.35, ge=0.0, le=1.0),
     include_types: str = Query(default="note,entity,relation"),
     session: Session = Depends(get_tenant_session),
+    user: UserContext = Depends(get_current_user),
 ) -> LocalGraphResponse:
     include_type_values = [item.strip() for item in include_types.split(",") if item.strip()]
+    graph_name = f"nn_{user.schema_name}"
     try:
-        return LocalGraphService(session).get_local_graph(
+        return LocalGraphService(session, graph_name=graph_name).get_local_graph(
             LocalGraphQuery(
                 note_id=note_id,
                 max_hops=max_hops,
