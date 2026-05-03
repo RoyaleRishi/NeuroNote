@@ -44,7 +44,10 @@ def _process_and_wait(client: TestClient, note_id: str, text: str, title: str = 
             time.sleep(0.5)
 
 
-def test_local_graph_returns_entity_nodes_from_age(client: TestClient) -> None:
+def test_local_graph_returns_entity_nodes_from_age(client: TestClient, db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
     _process_and_wait(
         client, "age-local-entity-test",
         "machine learning improves computer vision",
@@ -60,7 +63,10 @@ def test_local_graph_returns_entity_nodes_from_age(client: TestClient) -> None:
     assert entity_nodes, "Expected entity nodes from AGE after processing"
 
 
-def test_local_graph_returns_relation_edges_from_age(client: TestClient) -> None:
+def test_local_graph_returns_relation_edges_from_age(client: TestClient, db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
     _process_and_wait(
         client, "age-local-relation-test",
         "Python uses Django for web development",
@@ -77,7 +83,10 @@ def test_local_graph_returns_relation_edges_from_age(client: TestClient) -> None
     assert "MENTIONS" in edge_types or len(body["nodes"]) > 1
 
 
-def test_local_graph_still_returns_links_to_edges(client: TestClient) -> None:
+def test_local_graph_still_returns_links_to_edges(client: TestClient, db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
     _process_and_wait(client, "age-links-root", "See [[Age Links Target]]", "Links Root")
     _process_and_wait(client, "age-links-target", "Target content", "Age Links Target")
     resp = client.get("/v1/graph/local/age-links-root", params={
@@ -90,7 +99,10 @@ def test_local_graph_still_returns_links_to_edges(client: TestClient) -> None:
     assert ("age-links-root", "age-links-target", "LINKS_TO") in edge_pairs
 
 
-def test_global_graph_returns_entity_nodes_from_age(client: TestClient) -> None:
+def test_global_graph_returns_entity_nodes_from_age(client: TestClient, db_session) -> None:
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
     _process_and_wait(
         client, "age-global-entity-test",
         "neural networks enable deep learning",
