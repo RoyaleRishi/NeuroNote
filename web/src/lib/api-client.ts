@@ -363,6 +363,8 @@ interface GlobalGraphQuery {
   limit_nodes?: number;
   min_confidence?: number;
   include_types?: string[];
+  subject_id?: string;
+  tag?: string;
 }
 
 export async function fetchGlobalGraph(
@@ -373,6 +375,8 @@ export async function fetchGlobalGraph(
   if (query.limit_nodes !== undefined) params.set("limit_nodes", String(query.limit_nodes));
   if (query.min_confidence !== undefined) params.set("min_confidence", String(query.min_confidence));
   if (query.include_types && query.include_types.length > 0) params.set("include_types", query.include_types.join(","));
+  if (query.subject_id) params.set("subject_id", query.subject_id);
+  if (query.tag) params.set("tag", query.tag);
   const suffix = params.toString();
   const response = await apiFetch(
     `${baseUrl}/v1/graph/global${suffix ? `?${suffix}` : ""}`,
