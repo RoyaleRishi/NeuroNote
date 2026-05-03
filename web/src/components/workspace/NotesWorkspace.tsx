@@ -1077,13 +1077,15 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             Graph
           </button>
         </div>
-        <ModelStatusIndicator
-          mode={prefs?.llm_mode}
-          status={edge.status}
-          progress={edge.progress}
-          error={edge.error}
-        />
-        <UserMenu user={user} />
+        <div className="app-nav-right">
+          <ModelStatusIndicator
+            mode={prefs?.llm_mode}
+            status={edge.status}
+            progress={edge.progress}
+            error={edge.error}
+          />
+          <UserMenu user={user} />
+        </div>
       </nav>
 
       <EdgeConsentDialog

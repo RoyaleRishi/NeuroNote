@@ -80,9 +80,11 @@ body {
 .notes-workspace {
   display: grid;
   grid-template-columns: 390px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 24px;
-  min-height: 100vh;
+  height: calc(100vh - 48px);
   padding: 24px;
+  overflow: hidden;
 }
 
 .notes-sidebar {
@@ -94,8 +96,8 @@ body {
   border-radius: 24px;
   box-shadow: var(--shadow-panel);
   padding: 20px;
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  height: 100%;
+  overflow: hidden;
 }
 
 .notes-sidebar-header {
@@ -344,6 +346,10 @@ body {
   padding: 0;
   display: grid;
   gap: 6px;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .note-list-button {
@@ -495,13 +501,14 @@ body {
 
 .notes-editor-panel {
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--panel-border-strong);
   border-radius: 24px;
   box-shadow: var(--shadow-panel);
   background: var(--panel-bg);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .notes-editor-actions {
@@ -2407,7 +2414,6 @@ select:focus-visible {
 .app-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 24px;
   height: 48px;
   background: var(--panel-bg);
@@ -2416,10 +2422,19 @@ select:focus-visible {
 }
 
 .app-nav-brand {
+  flex: 1;
   font-weight: 600;
   font-size: 1rem;
   color: var(--text-strong);
   letter-spacing: -0.01em;
+}
+
+.app-nav-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .app-nav-tabs {

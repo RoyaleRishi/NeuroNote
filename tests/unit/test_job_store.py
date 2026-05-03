@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.core.job_store import (
     create_or_get_job,
     get_job,
@@ -10,7 +12,7 @@ from app.core.job_store import (
 )
 
 
-def test_create_or_get_job_coalesces_same_note_version() -> None:
+def test_create_or_get_job_coalesces_same_note_version(configured_db: None) -> None:
     reset_job_store()
 
     first, first_created = create_or_get_job(
@@ -28,7 +30,7 @@ def test_create_or_get_job_coalesces_same_note_version() -> None:
     assert second.status == "queued"
 
 
-def test_job_status_transitions_from_running_to_completed() -> None:
+def test_job_status_transitions_from_running_to_completed(configured_db: None) -> None:
     reset_job_store()
     record, _ = create_or_get_job(note_id="note-job-2", content_hash="hash-job-2")
 
@@ -44,7 +46,7 @@ def test_job_status_transitions_from_running_to_completed() -> None:
     assert completed.error is None
 
 
-def test_failed_job_allows_new_job_for_same_note_version() -> None:
+def test_failed_job_allows_new_job_for_same_note_version(configured_db: None) -> None:
     reset_job_store()
     first, _ = create_or_get_job(note_id="note-job-3", content_hash="hash-job-3")
     mark_job_failed(first.job_id, error="failed-run")
