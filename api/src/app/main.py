@@ -22,6 +22,7 @@ from app.routes.backlinks import router as backlinks_router
 from app.routes.blocks import router as blocks_router
 from app.routes.entity_aliases import router as entity_aliases_router
 from app.routes.export import router as export_router
+from app.routes.extraction_candidates import router as extraction_candidates_router
 from app.routes.extraction_results import router as extraction_results_router
 from app.routes.graph import router as graph_router
 from app.routes.meta_classification import router as meta_classification_router
@@ -163,5 +164,6 @@ app.include_router(connections_router, prefix="/v1")
 app.include_router(concepts_router, prefix="/v1")
 app.include_router(preferences_router, prefix="/v1")
 app.include_router(import_router, prefix="/v1")
+app.include_router(extraction_candidates_router, prefix="/v1")
 app.include_router(extraction_results_router, prefix="/v1")
 app.include_router(meta_classification_router, prefix="/v1")
