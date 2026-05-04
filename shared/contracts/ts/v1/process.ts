@@ -17,6 +17,7 @@ export interface ExtractionSummary {
   relation_count: number;
   keyphrase_count: number;
   top_entities: string[];
+  extraction_profile_used?: string | null;
 }
 
 export interface ProcessStatusResponse {

@@ -102,10 +102,11 @@ def _run_processing_job(
             mark_job_failed(job_id, error=str(exc))
             return
 
-        mark_job_completed(
-            job_id,
-            extraction_summary=summary.model_dump() if summary else None,
+        summary_dict: dict[str, object] = summary.model_dump() if summary else {}
+        summary_dict["extraction_profile_used"] = (
+            user_settings.extraction_profile if user_settings else "rule-only"
         )
+        mark_job_completed(job_id, extraction_summary=summary_dict)
     finally:
         set_tenant_schema(None)
 

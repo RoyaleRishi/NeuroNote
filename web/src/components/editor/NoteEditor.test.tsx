@@ -3,12 +3,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NoteEditor } from "./NoteEditor";
+import { ToastProvider } from "../../lib/toast";
 import {
   getNote,
   queueNoteProcessing,
   saveNote,
   fetchLocalGraph,
 } from "../../lib/api-client";
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
 
 vi.mock("../../lib/api-client", () => ({
   getNote: vi.fn(),
@@ -102,7 +107,7 @@ describe("NoteEditor", () => {
       status: "queued",
     });
 
-    render(<NoteEditor noteId="note-1" baseUrl="http://localhost:8000" />);
+    renderWithProviders(<NoteEditor noteId="note-1" baseUrl="http://localhost:8000" />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("TipTap editor")).toHaveValue("Loaded text");
@@ -133,7 +138,7 @@ describe("NoteEditor", () => {
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-2"
         baseUrl="http://localhost:8000"
@@ -178,7 +183,7 @@ describe("NoteEditor", () => {
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-title-1"
         baseUrl="http://localhost:8000"
@@ -220,7 +225,7 @@ describe("NoteEditor", () => {
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-3"
         baseUrl="http://localhost:8000"
@@ -268,7 +273,7 @@ describe("NoteEditor", () => {
       },
     });
 
-    render(<NoteEditor noteId="note-tab-1" baseUrl="http://localhost:8000" />);
+    renderWithProviders(<NoteEditor noteId="note-tab-1" baseUrl="http://localhost:8000" />);
 
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Write" })).toBeInTheDocument(),
@@ -308,7 +313,7 @@ describe("NoteEditor", () => {
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-meta-1"
         baseUrl="http://localhost:8000"

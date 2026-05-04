@@ -25,6 +25,7 @@ class ExtractionSummary(BaseModel):
     relation_count: int = Field(ge=0)
     keyphrase_count: int = Field(ge=0)
     top_entities: list[str] = Field(default_factory=list)
+    extraction_profile_used: str | None = None
 
 
 class ProcessStatusResponse(BaseModel):
