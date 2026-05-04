@@ -7,7 +7,7 @@
  */
 import { getEngine } from "./model-manager";
 import {
-  buildChunkExtractionPrompt,
+  buildFilterPrompt,
   buildSummaryPrompt,
   buildMetaPrompt,
   buildInsightPrompt,
@@ -19,7 +19,6 @@ import {
   INSIGHT_SCHEMA,
 } from "./schemas";
 import type {
-  ChunkExtractionRequest,
   ChunkExtractionResult,
   SummaryRequest,
   MetaClassificationRequest,
@@ -29,36 +28,32 @@ import type {
 } from "./types";
 
 /**
- * Run the LLM "map" step for one note chunk.
+ * Filter server-generated candidates using the in-browser LLM.
  *
- * Returns indices into the candidates array (concepts to keep) plus
- * relation tuples. Bounded output size: max_tokens=256 is plenty
- * because the model emits integers, not full concept strings.
+ * Mirrors SLMExtractor.extract() on the Python side. Returns indices
+ * into the candidates array plus relation triples.
  */
-export async function extractFromChunk(
-  req: ChunkExtractionRequest,
+export async function filterCandidates(
+  noteContent: string,
+  candidates: string[],
+  knownConcepts: string[],
 ): Promise<ChunkExtractionResult | null> {
   const engine = getEngine();
   if (!engine) {
-    console.warn("[edge-llm] extractFromChunk: engine not initialised");
+    console.warn("[edge-llm] filterCandidates: engine not initialised");
     return null;
   }
 
-  if (req.candidates.length === 0) {
+  if (candidates.length === 0) {
     return { keep: [], relations: [] };
   }
 
-  const { system, user } = buildChunkExtractionPrompt(
-    req.chunk.text,
-    req.candidates,
-    req.knownConcepts,
-  );
+  const { system, user } = buildFilterPrompt(noteContent, candidates, knownConcepts);
 
   const t0 = performance.now();
-  console.info("[edge-llm] extractFromChunk: starting", {
-    chunkIdx: req.chunk.index,
-    candidates: req.candidates.length,
-    chunkLen: req.chunk.text.length,
+  console.info("[edge-llm] filterCandidates: starting", {
+    candidates: candidates.length,
+    contentLen: noteContent.length,
   });
 
   let response;
@@ -76,14 +71,13 @@ export async function extractFromChunk(
       },
     });
   } catch (err) {
-    console.error("[edge-llm] extractFromChunk: inference threw", err);
+    console.error("[edge-llm] filterCandidates: inference threw", err);
     return null;
   }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   const text = response.choices[0]?.message?.content;
-  console.info("[edge-llm] extractFromChunk: done", {
-    chunkIdx: req.chunk.index,
+  console.info("[edge-llm] filterCandidates: done", {
     elapsedSeconds: elapsed,
     outputLen: text?.length ?? 0,
   });
@@ -93,15 +87,11 @@ export async function extractFromChunk(
   try {
     parsed = JSON.parse(text) as typeof parsed;
   } catch (err) {
-    console.error(
-      "[edge-llm] extractFromChunk: JSON parse failed",
-      err,
-      text.slice(0, 200),
-    );
+    console.error("[edge-llm] filterCandidates: JSON parse failed", err, text.slice(0, 200));
     return null;
   }
 
-  const maxIdx = req.candidates.length;
+  const maxIdx = candidates.length;
   const keep = Array.isArray(parsed.keep)
     ? parsed.keep.filter(
         (n): n is number =>

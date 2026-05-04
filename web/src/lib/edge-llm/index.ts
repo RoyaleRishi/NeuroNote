@@ -15,13 +15,13 @@ export {
 } from "./model-manager";
 
 export {
-  extractFromChunk,
+  filterCandidates,
+  generateSummary,
   classifyMeta,
   generateInsight,
 } from "./inference-client";
 
 export type {
-  ChunkExtractionRequest,
   ChunkExtractionResult,
   MetaClassificationRequest,
   MetaClassificationResult,

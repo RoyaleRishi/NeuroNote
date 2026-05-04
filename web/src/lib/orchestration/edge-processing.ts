@@ -14,7 +14,7 @@
  */
 
 import {
-  extractFromChunk,
+  filterCandidates,
   generateSummary,
   classifyMeta,
 } from "../edge-llm/inference-client";
@@ -83,11 +83,12 @@ export async function runEdgeProcessing(
         continue;
       }
 
-      const result = await extractFromChunk({
-        chunk,
+      // TODO(Task 9): replace per-chunk loop with single whole-note filterCandidates call.
+      const result = await filterCandidates(
+        chunk.text,
         candidates,
-        knownConcepts: known.concepts,
-      });
+        known.concepts,
+      );
       request.onProgress?.(chunk.index + 1, chunks.length);
       if (!result) continue;
 
