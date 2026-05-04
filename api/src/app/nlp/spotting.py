@@ -94,9 +94,9 @@ _LOWERCASE_VERB_TOKENS = {
 }
 
 _CODE_KEYWORDS = frozenset({
-    "var", "let", "const", "return", "import", "from", "export",
-    "function", "class", "async", "await", "null", "true", "false",
-    "undefined", "type", "interface", "enum",
+    "var", "let", "const", "return", "import", "export",
+    "function", "async", "await", "null", "true", "false",
+    "undefined", "enum",
 })
 
 _CAMEL_CASE_RE = re.compile(r"^[a-z]+[A-Z]")

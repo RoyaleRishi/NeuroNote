@@ -295,7 +295,7 @@ def test_spotter_quality_gate_filters_code_variable_from_block() -> None:
         blocks=[
             BlockTextInput(
                 block_index=0,
-                content_text="The useEffect hook triggers setState on render in React components.",
+                content_text="The useEffect and useState hooks trigger setState on render in React components.",
             )
         ],
     )
@@ -306,3 +306,10 @@ def test_spotter_quality_gate_filters_code_variable_from_block() -> None:
     # Verify no camelCase slipped through at all
     for text in texts:
         assert not re.match(r"^[a-z]+[A-Z]", text), f"camelCase leaked: {text}"
+
+
+def test_quality_gate_keeps_english_noun_class_and_type() -> None:
+    # "class" and "type" are legitimate English nouns in multi-word phrases.
+    assert _passes_quality_gate("class diagram") is True
+    assert _passes_quality_gate("type theory") is True
+    assert _passes_quality_gate("interface design") is True
