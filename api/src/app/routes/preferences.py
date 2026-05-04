@@ -70,6 +70,11 @@ def update_preferences(
     # Load current state before writes so we can merge for the response.
     prefs = _load_preferences(session)
     for key, value in updates.items():
+        # Don't overwrite an existing API key with an empty string — the client
+        # may send "" because GET returned "" after a decryption failure.  An
+        # empty update should be treated as "no change", not "clear".
+        if key == "llm_api_key" and not value:
+            continue
         stored_value = encrypt_api_key(value) if key == "llm_api_key" else value
         session.execute(
             text(
