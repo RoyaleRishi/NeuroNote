@@ -1,35 +1,23 @@
 /**
- * Edge LLM processing orchestration (chunked map-reduce pipeline).
+ * Edge LLM processing orchestration.
  *
- * For each note:
- *   1. Chunk the (title + content) into ~500-char windows.
- *   2. Per chunk: rule-based candidate extraction → LLM filter by index → reducer input.
- *   3. After all chunks: dedupe across chunks.
- *   4. One short LLM call to generate a one-sentence summary.
- *   5. POST extraction results (concepts + relations + summary) to the API.
- *   6. Run meta-classification on the deduped concept list (synonym/subtopic).
+ * 1. Fetch server-generated candidates (POST /v1/extract-candidates).
+ * 2. Pass candidates to in-browser Gemma for index-based filtering.
+ * 3. Map indices back to concept strings.
+ * 4. Generate one-sentence summary (separate Gemma call).
+ * 5. Submit results + meta-classification to the API.
  *
- * Each LLM call has bounded output, eliminating the mid-JSON truncation
- * that the previous one-shot extraction hit on long notes.
+ * The server is the single source of truth for candidate generation, so
+ * cloud and edge modes always operate on an identical candidate pool.
  */
 
-import {
-  filterCandidates,
-  generateSummary,
-  classifyMeta,
-} from "../edge-llm/inference-client";
-import { chunkNote } from "../edge-llm/chunker";
-import { extractCandidates } from "../edge-llm/candidates";
-import { canonicalizeConcepts } from "../edge-llm/dedupe";
+import { filterCandidates, generateSummary, classifyMeta } from "../edge-llm/inference-client";
 import {
   fetchKnownConcepts,
+  fetchCandidates,
   submitExtractionResults,
   submitMetaClassification,
 } from "../api-client";
-import type {
-  CanonicalConcept,
-  RelationType,
-} from "../edge-llm/types";
 
 export interface EdgeProcessingRequest {
   baseUrl: string;
@@ -37,10 +25,8 @@ export interface EdgeProcessingRequest {
   noteTitle: string;
   contentText: string;
   contentHash: string;
-  /** Optional progress callback: (chunksDone, totalChunks) -> void */
   onProgress?: (done: number, total: number) => void;
-  /** Optional callback fired with new concepts after each chunk's LLM call. */
-  onChunkResult?: (chunkConcepts: string[]) => void;
+  onChunkResult?: (concepts: string[]) => void;
 }
 
 export interface EdgeProcessingResult {
@@ -51,84 +37,44 @@ export interface EdgeProcessingResult {
   error?: string;
 }
 
-interface RawRelation {
-  source: string;
-  type: RelationType;
-  target: string;
-}
-
 export async function runEdgeProcessing(
   request: EdgeProcessingRequest,
 ): Promise<EdgeProcessingResult> {
   try {
-    const known = await fetchKnownConcepts(request.baseUrl);
+    const [known, candidateResp] = await Promise.all([
+      fetchKnownConcepts(request.baseUrl),
+      fetchCandidates(request.baseUrl, {
+        note_id: request.noteId,
+        title: request.noteTitle,
+        content_text: request.contentText,
+        content_hash: request.contentHash,
+      }),
+    ]);
 
-    const chunks = chunkNote(request.noteTitle, request.contentText);
-    if (chunks.length === 0) {
-      return {
-        status: "completed",
-        conceptCount: 0,
-        relationCount: 0,
-        chunksProcessed: 0,
-      };
+    const { candidates } = candidateResp;
+
+    if (candidates.length === 0) {
+      request.onProgress?.(1, 1);
+      return { status: "completed", conceptCount: 0, relationCount: 0, chunksProcessed: 1 };
     }
 
-    const allConcepts: CanonicalConcept[] = [];
-    const allRelations: RawRelation[] = [];
+    const result = await filterCandidates(
+      request.contentText,
+      candidates,
+      known.concepts,
+    );
+    request.onProgress?.(1, 1);
 
-    for (const chunk of chunks) {
-      const candidates = extractCandidates(chunk.text);
-      if (candidates.length === 0) {
-        request.onProgress?.(chunk.index + 1, chunks.length);
-        continue;
-      }
-
-      // TODO(Task 9): replace per-chunk loop with single whole-note filterCandidates call.
-      const result = await filterCandidates(
-        chunk.text,
-        candidates,
-        known.concepts,
-      );
-      request.onProgress?.(chunk.index + 1, chunks.length);
-      if (!result) continue;
-
-      const chunkConcepts: string[] = [];
-      for (const idx of result.keep) {
-        const text = candidates[idx];
-        if (!text) continue;
-        allConcepts.push({
-          text,
-          confidence: 0.9,
-          sources: [chunk.index],
-        });
-        chunkConcepts.push(text);
-      }
-      request.onChunkResult?.(chunkConcepts);
-
-      for (const [srcIdx, type, tgtIdx] of result.relations) {
-        const source = candidates[srcIdx];
-        const target = candidates[tgtIdx];
-        if (!source || !target) continue;
-        allRelations.push({ source, type, target });
-      }
+    if (!result) {
+      return { status: "failed", error: "LLM inference returned null" };
     }
 
-    // Reduce: dedupe concepts, then re-map relations to canonical surfaces.
-    const canonical = canonicalizeConcepts(allConcepts);
-    const canonicalKeys = new Map<string, string>();
-    for (const c of canonical) {
-      canonicalKeys.set(c.text.toLowerCase().trim(), c.text);
-    }
+    const finalConcepts = result.keep
+      .map((idx) => candidates[idx])
+      .filter((c): c is string => c !== undefined)
+      .map((text) => ({ text, confidence: 0.9 }));
 
-    const findCanonical = (text: string): string | null => {
-      const key = text.toLowerCase().trim();
-      if (canonicalKeys.has(key)) return canonicalKeys.get(key)!;
-      for (const c of canonical) {
-        const ckey = c.text.toLowerCase();
-        if (ckey.includes(key) || key.includes(ckey)) return c.text;
-      }
-      return null;
-    };
+    request.onChunkResult?.(finalConcepts.map((c) => c.text));
 
     const validRelations: Array<{
       source: string;
@@ -137,29 +83,16 @@ export async function runEdgeProcessing(
       confidence: number;
     }> = [];
     const relSeen = new Set<string>();
-    for (const r of allRelations) {
-      const src = findCanonical(r.source);
-      const tgt = findCanonical(r.target);
+    for (const [srcIdx, type, tgtIdx] of result.relations) {
+      const src = candidates[srcIdx];
+      const tgt = candidates[tgtIdx];
       if (!src || !tgt || src === tgt) continue;
-      const key = `${src}|${r.type}|${tgt}`;
+      const key = `${src}|${type}|${tgt}`;
       if (relSeen.has(key)) continue;
       relSeen.add(key);
-      validRelations.push({
-        source: src,
-        type: r.type,
-        target: tgt,
-        confidence: 0.85,
-      });
+      validRelations.push({ source: src, type, target: tgt, confidence: 0.85 });
     }
 
-    const finalConcepts = canonical.map((c) => ({
-      text: c.text,
-      confidence: c.confidence,
-    }));
-
-    // Generate one-sentence summary so edge mode reaches feature parity
-    // with cloud mode (which always populates summary). Failure returns "",
-    // matching the previous behaviour — never blocks the submit.
     const summary = await generateSummary({
       title: request.noteTitle,
       content: request.contentText,
@@ -193,7 +126,7 @@ export async function runEdgeProcessing(
       status: "completed",
       conceptCount: finalConcepts.length,
       relationCount: validRelations.length,
-      chunksProcessed: chunks.length,
+      chunksProcessed: 1,
     };
   } catch (error) {
     return {
