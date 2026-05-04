@@ -1,7 +1,7 @@
 /**
  * Prompt templates for edge LLM inference.
  *
- * Ported verbatim from the Python backend:
+ * Adapted from the Python backend (intentional divergences: no summary field in filter prompt):
  * - slm_extractor.py (extraction)
  * - concept_meta.py (meta-classification)
  * - concept_insight_service.py (insight generation)
