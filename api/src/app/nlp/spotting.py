@@ -9,7 +9,7 @@ from app.nlp.types import BlockTextInput, ExtractedEntity, ExtractedEntityMentio
 
 _TITLE_CASE_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b")
 _ACRONYM_PATTERN = re.compile(r"\b[A-Z]{2,10}\b")
-_LOWERCASE_TOKEN_PATTERN = re.compile(r"[a-z][a-z0-9]+")
+_LOWERCASE_TOKEN_PATTERN = re.compile(r"\b[a-z][a-z0-9]+")
 
 _DICTIONARY_CONFIDENCE = 0.93
 _SPACY_CONFIDENCE = 0.9
@@ -86,11 +86,11 @@ _LOWERCASE_VERB_TOKENS = {
     "predicts",
     "sees",
     "supports",
+    "use",
     "uses",
     "using",
     "works",
     "working",
-    "uses",
 }
 
 _CODE_KEYWORDS = frozenset({

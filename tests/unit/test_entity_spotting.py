@@ -150,6 +150,27 @@ def test_fallback_preserves_real_title_case_entities() -> None:
     assert "the" not in entity_keys
 
 
+def test_spotter_does_not_produce_mid_word_fragments() -> None:
+    # "Machine" starts with uppercase — the lowercase token pattern must not match
+    # the interior "achine" and pair it with "learning" to form "achine learning".
+    entities, _mentions = extract_entities_with_mentions(
+        blocks=[
+            BlockTextInput(
+                block_index=0,
+                content_text="Machine learning is a subset of artificial intelligence. Neural networks use backpropagation.",
+            )
+        ],
+        dictionary_terms=[],
+        enable_regex_fallback=True,
+    )
+    entity_texts = {entity.text for entity in entities}
+    assert "achine learning" not in entity_texts
+    assert "eural networks" not in entity_texts
+    assert "networks use" not in entity_texts
+    assert "use backpropagation" not in entity_texts
+    assert "artificial intelligence" in entity_texts
+
+
 def test_spotter_ignores_repeated_noise_tokens() -> None:
     entities, _mentions = extract_entities_with_mentions(
         blocks=[

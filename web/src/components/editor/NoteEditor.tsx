@@ -371,6 +371,9 @@ export function NoteEditor({
         setDocumentJson(nextDoc);
         setPlainText(nextText);
         setUpdatedAt(note.updated_at);
+        if (note.content_hash) {
+          lastContentHashRef.current = note.content_hash;
+        }
         persistedMetadataRef.current = {
           noteTitle: nextTitle,
           subjectId: nextSubject,
