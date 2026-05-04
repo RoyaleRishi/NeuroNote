@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.nlp.spotting import extract_entities_with_mentions
 from app.nlp.spotting import extract_entities_with_mentions_and_metrics
 from app.nlp.types import BlockTextInput
@@ -286,16 +288,21 @@ def test_quality_gate_keeps_valid_concepts() -> None:
     assert _passes_quality_gate("SQL") is True
 
 
-def test_spotter_does_not_emit_camel_case_entities() -> None:
-    # Even if a camelCase token appears in text, the quality gate must reject it.
+def test_spotter_quality_gate_filters_code_variable_from_block() -> None:
+    # Feed text containing camelCase code variable names through the full
+    # extraction pipeline and assert they are filtered out by the quality gate.
     entities, _ = extract_entities_with_mentions(
         blocks=[
             BlockTextInput(
                 block_index=0,
-                content_text="Use gradient descent for backpropagation.",
+                content_text="The useEffect hook triggers setState on render in React components.",
             )
         ],
     )
     texts = {e.text for e in entities}
+    assert "useEffect" not in texts
+    assert "useState" not in texts
+    assert "setState" not in texts
+    # Verify no camelCase slipped through at all
     for text in texts:
-        assert not _re.match(r"^[a-z]+[A-Z]", text), f"camelCase leaked: {text}"
+        assert not re.match(r"^[a-z]+[A-Z]", text), f"camelCase leaked: {text}"
