@@ -11,10 +11,12 @@ from app.nlp.config import NlpSettings, get_nlp_settings
 from app.nlp.embeddings import build_embedding
 from app.nlp.keyphrases import extract_keyphrases
 from app.nlp.metrics import StageTiming, format_stage_timings
+from app.nlp.preprocessor import preprocess_content
 from app.nlp.relations import extract_relations
 from app.nlp.semantic_embeddings import build_semantic_embedding
 from app.nlp.slm_extractor import SLMExtractor
 from app.nlp.spotting import extract_entities_with_mentions_and_metrics
+from app.nlp.spotting import _STOPWORDS as _PIPELINE_STOPWORDS  # noqa: PLC2701
 from app.nlp.types import BlockTextInput, ExtractedEntity, ExtractedRelation, NoteExtractionResult
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -26,6 +28,11 @@ _LOGGER = logging.getLogger(__name__)
 # entries become unreachable and are evicted naturally without explicit invalidation.
 _EXTRACTION_CACHE: OrderedDict[str, NoteExtractionResult] = OrderedDict()
 _EXTRACTION_CACHE_MAX = 512
+
+
+def clear_extraction_cache() -> None:
+    """Evict all in-memory NLP extraction results (call before force re-extraction)."""
+    _EXTRACTION_CACHE.clear()
 
 
 class NoteNlpPipeline:
@@ -148,9 +155,23 @@ class NoteNlpPipeline:
         # ── LLM-enhanced path ──────────────────────────────────────────────────
         if self._settings.extraction_profile == "llm-enhanced" and self._slm_extractor is not None:
             slm_started = time.perf_counter()
+            # Preprocess note text and run rule-only spotting to generate candidates.
+            # The LLM then filters by index — never free-generates concept text.
+            preprocessed = preprocess_content(content_text)
+            extraction_blocks_llm = list(blocks or [BlockTextInput(block_index=0, content_text=content_text)])
+            rule_entities, _, _ = extract_entities_with_mentions_and_metrics(
+                blocks=extraction_blocks_llm,
+                dictionary_terms=dictionary_terms or [],
+                extraction_profile="rule-only",
+                model_handle=None,
+                seed_terms=list(self._settings.entity_seed_terms),
+                enable_regex_fallback=self._settings.enable_regex_fallback,
+            )
+            candidates = [e.text for e in rule_entities]
             slm_result = self._slm_extractor.extract(
                 title=title,
-                content=content_text,
+                preprocessed_content=preprocessed,
+                candidates=candidates,
                 known_concepts=list(dictionary_terms or []),
             )
             stage_timings.append(
@@ -169,6 +190,7 @@ class NoteNlpPipeline:
                         confidence=c.confidence,
                     )
                     for c in slm_result.concepts
+                    if c.text.strip().lower() not in _PIPELINE_STOPWORDS
                 ]
                 relations: list[ExtractedRelation] = [
                     ExtractedRelation(

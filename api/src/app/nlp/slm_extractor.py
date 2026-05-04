@@ -1,9 +1,8 @@
-"""LLM-based concept and relation extractor.
+"""LLM-based concept and relation extractor (index-filter mode).
 
-Single structured JSON call that extracts:
-- concepts: key ideas in normalised canonical form
-- relations: typed semantic relations between concepts
-- summary: one-sentence note summary
+Accepts pre-generated rule-based candidates and asks the LLM to filter
+by index — never free-generates concept text. This makes output bounded,
+fast, and far more deterministic than free-generation.
 
 Returns None on any failure so the pipeline falls back to rule-based extraction.
 """
@@ -21,24 +20,27 @@ _RELATION_TYPES = frozenset(
     {"IS_A", "PART_OF", "CAUSES", "CONTRASTS_WITH", "USES", "PRODUCES", "RELATED_TO"}
 )
 
-_SYSTEM_PROMPT = """You are a knowledge graph extraction engine. Extract from the given note:
-1. concepts — the key ideas, entities, and topics, each in canonical lowercase form
-   (expand acronyms: "ML" → "machine learning"; prefer singular form; reuse names from the known list)
-2. relations — typed semantic relations between concepts using ONLY these relation types:
-   IS_A, PART_OF, CAUSES, CONTRASTS_WITH, USES, PRODUCES, RELATED_TO
-3. summary — one sentence capturing the note's main idea
+_SYSTEM_PROMPT = """You are filtering candidate concept phrases extracted from a note.
 
-Return ONLY valid JSON matching this schema — no markdown fences, no extra keys:
-{{
-  "concepts": [{{"text": "<string>", "confidence": <0.0-1.0>}}],
-  "relations": [{{"source": "<string>", "type": "<RELATION_TYPE>", "target": "<string>", "confidence": <0.0-1.0>}}],
-  "summary": "<string>"
-}}
+You will receive:
+- The note text (title + content)
+- A numbered list of CANDIDATES (rule-extracted phrases, may include false positives)
+- A list of KNOWN concepts already in the user's knowledge base
 
-Known concepts already in the knowledge base (reuse these exact forms where applicable):
-{known_concepts_csv}"""
+Your job:
+1. Pick which candidates are real, meaningful concepts. Output their indices in "keep".
+2. List any clear semantic relations between kept candidates as [srcIdx, type, tgtIdx] triples.
+   Use ONLY these relation types: IS_A, PART_OF, CAUSES, CONTRASTS_WITH, USES, PRODUCES, RELATED_TO.
+3. Write a one-sentence summary of the note in "summary".
+4. Be conservative — prefer fewer, high-quality picks over many noisy ones.
+5. Skip relations where sourceIdx equals targetIdx.
 
-_USER_TEMPLATE = "Title: {title}\nContent: {content}"
+Return ONLY valid JSON in this shape, no markdown fences:
+{{"keep": [<int>, ...], "relations": [[<int>, "<TYPE>", <int>], ...], "summary": "<string>"}}
+
+Known concepts (reuse where a candidate is a synonym): {known_concepts_csv}"""
+
+_USER_TEMPLATE = "Title: {title}\nContent: {content}\n\nCANDIDATES:\n{numbered}"
 
 
 @dataclass(slots=True)
@@ -62,7 +64,12 @@ class SLMExtractionResult:
     summary: str
 
 
-def _parse_result(raw: str) -> SLMExtractionResult | None:
+def _parse_index_result(raw: str, candidates: list[str]) -> SLMExtractionResult | None:
+    """Parse the LLM's index-based JSON response into a typed result.
+
+    Returns None if JSON is invalid or top-level structure is not a dict.
+    Out-of-bounds indices and unknown relation types are silently dropped.
+    """
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -72,47 +79,48 @@ def _parse_result(raw: str) -> SLMExtractionResult | None:
     if not isinstance(data, dict):
         return None
 
-    concepts: list[SLMConcept] = []
-    for item in data.get("concepts") or []:
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text", "")).strip().lower()
-        if not text:
-            continue
-        try:
-            confidence = float(item.get("confidence", 0.8))
-        except (TypeError, ValueError):
-            confidence = 0.8
-        concepts.append(SLMConcept(text=text, confidence=min(max(confidence, 0.0), 1.0)))
+    max_idx = len(candidates)
+    keep_raw = data.get("keep") or []
+    if not isinstance(keep_raw, list):
+        return None
+
+    keep_indices = [
+        i for i in keep_raw
+        if isinstance(i, int) and 0 <= i < max_idx
+    ]
+
+    concepts = [
+        SLMConcept(text=candidates[i].lower(), confidence=0.9)
+        for i in keep_indices
+    ]
 
     relations: list[SLMRelation] = []
     for item in data.get("relations") or []:
-        if not isinstance(item, dict):
+        if not isinstance(item, list) or len(item) != 3:
             continue
-        source = str(item.get("source", "")).strip().lower()
-        target = str(item.get("target", "")).strip().lower()
-        rel_type = str(item.get("type", "")).strip().upper()
-        if not source or not target or rel_type not in _RELATION_TYPES:
+        src_raw, type_raw, tgt_raw = item
+        if not isinstance(src_raw, int) or not isinstance(tgt_raw, int):
             continue
-        try:
-            confidence = float(item.get("confidence", 0.7))
-        except (TypeError, ValueError):
-            confidence = 0.7
-        relations.append(
-            SLMRelation(
-                source=source,
-                type=rel_type,
-                target=target,
-                confidence=min(max(confidence, 0.0), 1.0),
-            )
-        )
+        if src_raw < 0 or src_raw >= max_idx or tgt_raw < 0 or tgt_raw >= max_idx:
+            continue
+        if src_raw == tgt_raw:
+            continue
+        rel_type = str(type_raw).strip().upper()
+        if rel_type not in _RELATION_TYPES:
+            continue
+        relations.append(SLMRelation(
+            source=candidates[src_raw].lower(),
+            type=rel_type,
+            target=candidates[tgt_raw].lower(),
+            confidence=0.85,
+        ))
 
     summary = str(data.get("summary", "")).strip()
     return SLMExtractionResult(concepts=concepts, relations=relations, summary=summary)
 
 
 class SLMExtractor:
-    """Extracts concepts and relations from a note using a configurable LLM."""
+    """Filters rule-generated concept candidates using an LLM."""
 
     def __init__(
         self,
@@ -131,23 +139,32 @@ class SLMExtractor:
         self,
         *,
         title: str,
-        content: str,
+        preprocessed_content: str,
+        candidates: list[str],
         known_concepts: list[str],
     ) -> SLMExtractionResult | None:
-        """Call the LLM and parse the result.
+        """Filter candidates by index using the LLM.
 
         Returns None on any error so the caller can fall back to rule-based extraction.
         """
+        if not candidates:
+            return SLMExtractionResult(concepts=[], relations=[], summary="")
+
         known_csv = ", ".join(known_concepts[:200]) if known_concepts else "none yet"
         system = _SYSTEM_PROMPT.format(known_concepts_csv=known_csv)
-        user = _USER_TEMPLATE.format(title=title or "(untitled)", content=content[:4000])
+        numbered = "\n".join(f"{i}: {c}" for i, c in enumerate(candidates))
+        user = _USER_TEMPLATE.format(
+            title=title or "(untitled)",
+            content=preprocessed_content[:4000],
+            numbered=numbered,
+        )
 
         raw = LLMClient(
             api_key=self._api_key,
             model=self._model,
             base_url=self._base_url,
             timeout_s=self._timeout_s,
-        ).complete(system=system, user=user, max_tokens=2048)
+        ).complete(system=system, user=user, max_tokens=512)
 
         if not raw:
             _LOGGER.warning("LLM returned empty response; falling back to rule-based")
@@ -162,7 +179,7 @@ class SLMExtractor:
                 raw = raw[4:]
             raw = raw.strip()
 
-        return _parse_result(raw)
+        return _parse_index_result(raw, candidates)
 
 
-__all__ = ["SLMConcept", "SLMRelation", "SLMExtractionResult", "SLMExtractor"]
+__all__ = ["SLMConcept", "SLMRelation", "SLMExtractionResult", "SLMExtractor", "_parse_index_result"]

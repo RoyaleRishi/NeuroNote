@@ -1,72 +1,67 @@
-"""Unit tests for SLMExtractor and the llm-enhanced pipeline branch."""
+"""Unit tests for SLMExtractor (index-filter mode) and the llm-enhanced pipeline branch."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.nlp.slm_extractor import SLMExtractor, SLMExtractionResult, _parse_result
+from app.nlp.slm_extractor import SLMExtractor, SLMExtractionResult, SLMConcept, _parse_index_result
 
 
-# ── _parse_result ────────────────────────────────────────────────────────────
+_CANDIDATES = ["machine learning", "gradient descent", "backpropagation", "can"]
 
-def test_parse_result_happy_path() -> None:
-    raw = """{
-        "concepts": [
-            {"text": "Machine Learning", "confidence": 0.95},
-            {"text": "backpropagation", "confidence": 0.88}
-        ],
-        "relations": [
-            {"source": "backpropagation", "type": "USES", "target": "machine learning", "confidence": 0.85}
-        ],
-        "summary": "Notes on ML training via backpropagation."
-    }"""
-    result = _parse_result(raw)
+
+# ── _parse_index_result ──────────────────────────────────────────────────────
+
+def test_parse_index_result_happy_path() -> None:
+    raw = '{"keep": [0, 2], "relations": [[2, "USES", 0]], "summary": "ML uses backprop."}'
+    result = _parse_index_result(raw, _CANDIDATES)
     assert result is not None
     assert len(result.concepts) == 2
-    # concepts are normalised to lowercase
     assert result.concepts[0].text == "machine learning"
     assert result.concepts[1].text == "backpropagation"
-    assert result.concepts[0].confidence == pytest.approx(0.95)
     assert len(result.relations) == 1
-    assert result.relations[0].type == "USES"
     assert result.relations[0].source == "backpropagation"
-    assert result.summary == "Notes on ML training via backpropagation."
+    assert result.relations[0].type == "USES"
+    assert result.relations[0].target == "machine learning"
+    assert result.summary == "ML uses backprop."
 
 
-def test_parse_result_invalid_relation_type_dropped() -> None:
-    raw = """{
-        "concepts": [{"text": "neural network", "confidence": 0.9}],
-        "relations": [
-            {"source": "neural network", "type": "INVENTED_BY", "target": "turing", "confidence": 0.7}
-        ],
-        "summary": "A note."
-    }"""
-    result = _parse_result(raw)
+def test_parse_index_result_out_of_bounds_index_skipped() -> None:
+    raw = '{"keep": [0, 99], "relations": [], "summary": ""}'
+    result = _parse_index_result(raw, _CANDIDATES)
+    assert result is not None
+    assert len(result.concepts) == 1
+    assert result.concepts[0].text == "machine learning"
+
+
+def test_parse_index_result_invalid_relation_type_dropped() -> None:
+    raw = '{"keep": [0, 1], "relations": [[0, "INVENTED_BY", 1]], "summary": ""}'
+    result = _parse_index_result(raw, _CANDIDATES)
     assert result is not None
     assert result.relations == []
 
 
-def test_parse_result_invalid_json_returns_none() -> None:
-    assert _parse_result("not json at all") is None
+def test_parse_index_result_self_relation_dropped() -> None:
+    raw = '{"keep": [0, 1], "relations": [[0, "IS_A", 0]], "summary": ""}'
+    result = _parse_index_result(raw, _CANDIDATES)
+    assert result is not None
+    assert result.relations == []
 
 
-def test_parse_result_non_dict_returns_none() -> None:
-    assert _parse_result("[1, 2, 3]") is None
+def test_parse_index_result_invalid_json_returns_none() -> None:
+    assert _parse_index_result("not json", _CANDIDATES) is None
 
 
-def test_parse_result_empty_concept_text_skipped() -> None:
-    raw = '{"concepts": [{"text": "", "confidence": 0.9}], "relations": [], "summary": ""}'
-    result = _parse_result(raw)
+def test_parse_index_result_non_dict_returns_none() -> None:
+    assert _parse_index_result("[1, 2]", _CANDIDATES) is None
+
+
+def test_parse_index_result_empty_candidates_returns_empty() -> None:
+    raw = '{"keep": [], "relations": [], "summary": ""}'
+    result = _parse_index_result(raw, [])
     assert result is not None
     assert result.concepts == []
-
-
-def test_parse_result_confidence_clamped() -> None:
-    raw = '{"concepts": [{"text": "test", "confidence": 9.9}], "relations": [], "summary": ""}'
-    result = _parse_result(raw)
-    assert result is not None
-    assert result.concepts[0].confidence == pytest.approx(1.0)
 
 
 # ── SLMExtractor ─────────────────────────────────────────────────────────────
@@ -75,24 +70,22 @@ _BASE_URL = "https://api.anthropic.com/v1/"
 
 
 def test_slm_extractor_returns_result_on_success() -> None:
-    good_json = """{
-        "concepts": [{"text": "transformer", "confidence": 0.92}],
-        "relations": [],
-        "summary": "Transformers use self-attention."
-    }"""
+    good_json = '{"keep": [0, 2], "relations": [[2, "USES", 0]], "summary": "ML uses backprop."}'
     extractor = SLMExtractor(model="claude-haiku-4-5-20251001", api_key="test-key", base_url=_BASE_URL)
 
     with patch("app.nlp.slm_extractor.LLMClient") as mock_cls:
         mock_cls.return_value.complete.return_value = good_json
         result = extractor.extract(
-            title="Transformers",
-            content="Transformers use self-attention for sequence modelling.",
-            known_concepts=["neural network", "attention mechanism"],
+            title="ML Training",
+            preprocessed_content="Machine learning uses backpropagation.",
+            candidates=_CANDIDATES,
+            known_concepts=["neural network"],
         )
 
     assert result is not None
-    assert result.concepts[0].text == "transformer"
-    assert result.summary == "Transformers use self-attention."
+    assert len(result.concepts) == 2
+    assert result.concepts[0].text == "machine learning"
+    assert result.summary == "ML uses backprop."
 
 
 def test_slm_extractor_returns_none_on_api_error() -> None:
@@ -100,35 +93,55 @@ def test_slm_extractor_returns_none_on_api_error() -> None:
 
     with patch("app.nlp.slm_extractor.LLMClient") as mock_cls:
         mock_cls.return_value.complete.return_value = None
-        result = extractor.extract(title="Any", content="Any content", known_concepts=[])
+        result = extractor.extract(
+            title="Any",
+            preprocessed_content="Some content.",
+            candidates=["machine learning"],
+            known_concepts=[],
+        )
 
     assert result is None
 
 
+def test_slm_extractor_returns_empty_when_no_candidates() -> None:
+    extractor = SLMExtractor(model="claude-haiku-4-5-20251001", api_key="test-key", base_url=_BASE_URL)
+    result = extractor.extract(
+        title="Any",
+        preprocessed_content="Content.",
+        candidates=[],
+        known_concepts=[],
+    )
+    assert result is not None
+    assert result.concepts == []
+    assert result.relations == []
+
+
 def test_slm_extractor_strips_markdown_fences() -> None:
-    json_body = '{"concepts": [{"text": "attention", "confidence": 0.9}], "relations": [], "summary": "Attention is key."}'
+    json_body = '{"keep": [0], "relations": [], "summary": "Attention is key."}'
     fenced = f"```json\n{json_body}\n```"
     extractor = SLMExtractor(model="claude-haiku-4-5-20251001", api_key="test-key", base_url=_BASE_URL)
 
     with patch("app.nlp.slm_extractor.LLMClient") as mock_cls:
         mock_cls.return_value.complete.return_value = fenced
-        result = extractor.extract(title="Attention", content="Attention is key.", known_concepts=[])
+        result = extractor.extract(
+            title="Attention",
+            preprocessed_content="Attention is key.",
+            candidates=["attention mechanism"],
+            known_concepts=[],
+        )
 
     assert result is not None
-    assert result.concepts[0].text == "attention"
+    assert result.concepts[0].text == "attention mechanism"
 
 
 # ── llm-enhanced pipeline branch ─────────────────────────────────────────────
 
 def test_pipeline_llm_enhanced_uses_slm_result() -> None:
+    from unittest.mock import ANY
     from app.nlp.config import NlpSettings
     from app.nlp.pipeline import NoteNlpPipeline
 
-    slm_result = SLMExtractionResult(
-        concepts=[],
-        relations=[],
-        summary="A test summary.",
-    )
+    slm_result = SLMExtractionResult(concepts=[], relations=[], summary="A test summary.")
     mock_extractor = MagicMock()
     mock_extractor.extract.return_value = slm_result
 
@@ -152,7 +165,12 @@ def test_pipeline_llm_enhanced_uses_slm_result() -> None:
         content_hash="hash-llm-1",
     )
 
-    mock_extractor.extract.assert_called_once()
+    mock_extractor.extract.assert_called_once_with(
+        title="Test Note",
+        preprocessed_content=ANY,
+        candidates=ANY,
+        known_concepts=[],
+    )
     assert result.summary == "A test summary."
     assert result.note_id == "note-llm-1"
 
@@ -162,7 +180,7 @@ def test_pipeline_llm_enhanced_falls_back_to_rule_based_on_slm_none() -> None:
     from app.nlp.pipeline import NoteNlpPipeline
 
     mock_extractor = MagicMock()
-    mock_extractor.extract.return_value = None  # SLM failed
+    mock_extractor.extract.return_value = None
 
     settings = NlpSettings(
         model_name="rule-based-small",
@@ -177,7 +195,6 @@ def test_pipeline_llm_enhanced_falls_back_to_rule_based_on_slm_none() -> None:
     pipeline = NoteNlpPipeline(settings=settings)
     pipeline._slm_extractor = mock_extractor
 
-    # Should not raise; falls through to rule-based path
     result = pipeline.extract(
         note_id="note-fallback-1",
         title="Fallback Note",
@@ -186,13 +203,12 @@ def test_pipeline_llm_enhanced_falls_back_to_rule_based_on_slm_none() -> None:
     )
 
     assert result.note_id == "note-fallback-1"
-    assert result.summary == ""  # rule-based produces no summary
+    assert result.summary == ""
 
 
 def test_pipeline_llm_enhanced_concepts_are_lowercase() -> None:
     from app.nlp.config import NlpSettings
     from app.nlp.pipeline import NoteNlpPipeline
-    from app.nlp.slm_extractor import SLMConcept
 
     slm_result = SLMExtractionResult(
         concepts=[
@@ -226,4 +242,4 @@ def test_pipeline_llm_enhanced_concepts_are_lowercase() -> None:
     )
 
     entity_texts = [e.text for e in result.entities]
-    assert all(t == t.lower() for t in entity_texts), f"Non-lowercase concepts: {entity_texts}"
+    assert all(t == t.lower() for t in entity_texts), f"Non-lowercase: {entity_texts}"
