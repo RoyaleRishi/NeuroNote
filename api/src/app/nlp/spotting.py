@@ -93,6 +93,36 @@ _LOWERCASE_VERB_TOKENS = {
     "uses",
 }
 
+_CODE_KEYWORDS = frozenset({
+    "var", "let", "const", "return", "import", "from", "export",
+    "function", "class", "async", "await", "null", "true", "false",
+    "undefined", "type", "interface", "enum",
+})
+
+_CAMEL_CASE_RE = re.compile(r"^[a-z]+[A-Z]")
+_CODE_TOKEN_RE = re.compile(r"[_$]")
+_DIGIT_ONLY_RE = re.compile(r"^\d+$")
+
+
+def _passes_quality_gate(text: str) -> bool:
+    """Return True if the candidate is a valid concept (not a code token or noise)."""
+    n = len(text)
+    if n < 2:
+        return False
+    if n > 80:
+        return False
+    if n == 2 and not text.isupper():
+        return False
+    if _DIGIT_ONLY_RE.match(text):
+        return False
+    if _CAMEL_CASE_RE.match(text):
+        return False
+    if _CODE_TOKEN_RE.search(text):
+        return False
+    if text.lower() in _CODE_KEYWORDS:
+        return False
+    return True
+
 
 @dataclass(frozen=True, slots=True)
 class _SpanCandidate:
@@ -299,6 +329,8 @@ def _lowercase_ngram_candidates(block_text: str) -> list[_SpanCandidate]:
 def _fallback_candidates(block_text: str) -> list[_SpanCandidate]:
     candidates: list[_SpanCandidate] = []
     for match in _TITLE_CASE_PATTERN.finditer(block_text):
+        if match.group(0).lower() in _STOPWORDS:
+            continue
         candidates.append(
             _SpanCandidate(
                 text=match.group(0),
@@ -475,7 +507,7 @@ def _extract_entities_with_mentions(
     spacy_hits = 0
     regex_hits = 0
     extractors: list[EntityCandidateExtractor] = [_DictionaryExtractor()]
-    if extraction_profile == "hybrid-spacy":
+    if extraction_profile in {"hybrid-spacy", "llm-enhanced"}:
         extractors.append(_SpacyExtractor())
     if enable_regex_fallback:
         extractors.append(_RegexFallbackExtractor())
@@ -536,6 +568,10 @@ def _extract_entities_with_mentions(
             if not normalized_text:
                 continue
             key = normalized_text.lower()
+            if key in _STOPWORDS:
+                continue
+            if not _passes_quality_gate(normalized_text):
+                continue
             entity_id = f"entity-{_slugify(normalized_text)}"
             existing_entity = entity_index.get(key)
             if existing_entity is None or candidate.confidence > existing_entity.confidence:

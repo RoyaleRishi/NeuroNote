@@ -110,6 +110,44 @@ def test_spotter_captures_repeated_lowercase_single_token_across_blocks() -> Non
     assert {(item.block_index, item.start_offset) for item in eren_mentions} == {(0, 0), (1, 16)}
 
 
+def test_fallback_does_not_extract_sentence_starting_stopwords() -> None:
+    # Sentence-starting stopwords like "For", "The", "In" match _TITLE_CASE_PATTERN
+    # because they are capitalized. They must be rejected.
+    entities, _mentions = extract_entities_with_mentions(
+        blocks=[
+            BlockTextInput(
+                block_index=0,
+                content_text="For the purpose of learning. The model trains on data. In this case the system works.",
+            )
+        ],
+        dictionary_terms=[],
+        enable_regex_fallback=True,
+    )
+    entity_keys = {entity.text.lower() for entity in entities}
+    assert "for" not in entity_keys
+    assert "the" not in entity_keys
+    assert "in" not in entity_keys
+
+
+def test_fallback_preserves_real_title_case_entities() -> None:
+    # Non-stopword title-case names should still be extracted.
+    entities, _mentions = extract_entities_with_mentions(
+        blocks=[
+            BlockTextInput(
+                block_index=0,
+                content_text="For the purpose of understanding Neural Networks, the Transformer Architecture is key.",
+            )
+        ],
+        dictionary_terms=[],
+        enable_regex_fallback=True,
+    )
+    entity_keys = {entity.text.lower() for entity in entities}
+    assert "neural networks" in entity_keys
+    assert "transformer architecture" in entity_keys
+    assert "for" not in entity_keys
+    assert "the" not in entity_keys
+
+
 def test_spotter_ignores_repeated_noise_tokens() -> None:
     entities, _mentions = extract_entities_with_mentions(
         blocks=[
@@ -191,3 +229,73 @@ def test_spotter_hybrid_mode_extracts_lowercase_entities_and_dedupes_overlap() -
     assert metrics.dictionary_hits == 2
     assert metrics.spacy_hits == 2
     assert metrics.merged_mentions == 2
+
+
+# ── Quality gate tests ────────────────────────────────────────────────────────
+
+from app.nlp.spotting import _passes_quality_gate
+import re as _re
+
+
+def test_quality_gate_rejects_single_char() -> None:
+    assert _passes_quality_gate("a") is False
+
+
+def test_quality_gate_rejects_two_char_lowercase() -> None:
+    assert _passes_quality_gate("is") is False
+    assert _passes_quality_gate("in") is False
+    assert _passes_quality_gate("to") is False
+
+
+def test_quality_gate_keeps_two_char_acronym() -> None:
+    assert _passes_quality_gate("ML") is True
+    assert _passes_quality_gate("AI") is True
+
+
+def test_quality_gate_rejects_pure_digits() -> None:
+    assert _passes_quality_gate("123") is False
+    assert _passes_quality_gate("42") is False
+
+
+def test_quality_gate_rejects_camel_case() -> None:
+    assert _passes_quality_gate("myVar") is False
+    assert _passes_quality_gate("setState") is False
+    assert _passes_quality_gate("useEffect") is False
+
+
+def test_quality_gate_rejects_snake_case() -> None:
+    assert _passes_quality_gate("my_var") is False
+    assert _passes_quality_gate("_private") is False
+
+
+def test_quality_gate_rejects_dollar_sign() -> None:
+    assert _passes_quality_gate("$event") is False
+
+
+def test_quality_gate_rejects_code_keywords() -> None:
+    assert _passes_quality_gate("const") is False
+    assert _passes_quality_gate("async") is False
+    assert _passes_quality_gate("null") is False
+    assert _passes_quality_gate("undefined") is False
+
+
+def test_quality_gate_keeps_valid_concepts() -> None:
+    assert _passes_quality_gate("machine learning") is True
+    assert _passes_quality_gate("gradient descent") is True
+    assert _passes_quality_gate("neural network") is True
+    assert _passes_quality_gate("SQL") is True
+
+
+def test_spotter_does_not_emit_camel_case_entities() -> None:
+    # Even if a camelCase token appears in text, the quality gate must reject it.
+    entities, _ = extract_entities_with_mentions(
+        blocks=[
+            BlockTextInput(
+                block_index=0,
+                content_text="Use gradient descent for backpropagation.",
+            )
+        ],
+    )
+    texts = {e.text for e in entities}
+    for text in texts:
+        assert not _re.match(r"^[a-z]+[A-Z]", text), f"camelCase leaked: {text}"
