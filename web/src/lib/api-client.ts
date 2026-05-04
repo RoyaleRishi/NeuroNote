@@ -411,6 +411,10 @@ import type {
   InsightContextResponse,
   KnownConceptsResponse,
 } from "../../../shared/contracts/ts/v1/extraction";
+import type {
+  ExtractCandidatesRequest,
+  ExtractCandidatesResponse,
+} from "../../../shared/contracts/ts/v1/extractionCandidates";
 
 export type {
   SubmitExtractionResultsRequest,
@@ -474,6 +478,20 @@ export async function fetchKnownConcepts(
 ): Promise<KnownConceptsResponse> {
   const response = await apiFetch(`${baseUrl}/v1/concepts/known`);
   return parseJsonResponse<KnownConceptsResponse>(response);
+}
+
+/** Fetch server-generated concept candidates for a note (edge mode). */
+export async function fetchCandidates(
+  baseUrl: string,
+  payload: ExtractCandidatesRequest,
+): Promise<ExtractCandidatesResponse> {
+  const response = await apiFetch(`${baseUrl}/v1/extract-candidates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    timeoutMs: 30_000,
+  });
+  return parseJsonResponse<ExtractCandidatesResponse>(response);
 }
 
 // ── Preferences ─────────────────────────────────────────────────────────────
