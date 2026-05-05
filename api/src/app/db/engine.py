@@ -106,12 +106,12 @@ def _build_engine(database_url: str, *, db_echo: bool) -> Engine:
             # 2. ContextVar fallback (background tasks).
             if not tenant:
                 tenant = _tenant_schema.get()
-            # Always include ag_catalog so AGE operators stay accessible
-            # across interleaved normal + Cypher queries on the same
-            # connection.
+            # Tenant schema must come first so unqualified table names
+            # (e.g. user_preferences, notes) resolve to the tenant schema,
+            # not ag_catalog. ag_catalog stays in path for AGE operators.
             target = (
-                f'ag_catalog, "{tenant}", public' if tenant
-                else 'ag_catalog, "$user", public'
+                f'"{tenant}", ag_catalog, public' if tenant
+                else '"$user", ag_catalog, public'
             )
             cursor.execute(f"SET search_path TO {target}")  # type: ignore[attr-defined]
 
