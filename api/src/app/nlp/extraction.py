@@ -74,8 +74,8 @@ class ConceptSpan:
     source: Literal["transformer", "statistical", "both"]
 
 
-def _inspec_pipeline(text: str) -> list[dict]:
-    """Lazy-load the kbir-inspec HF pipeline on first call, then run inference."""
+def _load_inspec_pipeline() -> Any:
+    """Load the kbir-inspec HF pipeline singleton without running inference."""
     global _pipeline_instance
     if _pipeline_instance is None:
         _pipeline_instance = hf_pipeline(
@@ -83,7 +83,17 @@ def _inspec_pipeline(text: str) -> list[dict]:
             model=_INSPEC_MODEL,
             aggregation_strategy="simple",
         )
-    return _pipeline_instance(text)
+    return _pipeline_instance
+
+
+def _inspec_pipeline(text: str) -> list[dict]:
+    return _load_inspec_pipeline()(text)
+
+
+def prewarm() -> None:
+    """Load the transformer + YAKE singletons. Call at app startup."""
+    _load_inspec_pipeline()
+    _yake_extractor()
 
 
 def _yake_extractor() -> yake.KeywordExtractor:

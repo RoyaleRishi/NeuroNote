@@ -80,6 +80,11 @@ def _startup_database() -> None:
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _startup_database()
     mark_stale_jobs_as_failed()
+    try:
+        from app.nlp import extraction as _extraction
+        _extraction.prewarm()
+    except Exception as exc:
+        _LOG.warning("extraction.prewarm() failed: %s", exc)
     backfill_service: StartupBackfillService | None = None
     settings = get_database_settings()
     if settings.database_url.startswith("postgresql"):
