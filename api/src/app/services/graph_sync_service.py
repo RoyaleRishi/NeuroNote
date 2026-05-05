@@ -349,6 +349,34 @@ class GraphSyncService:
             if canonical_id not in note_entity_max_conf or conf > note_entity_max_conf[canonical_id]:
                 note_entity_max_conf[canonical_id] = conf
 
+        # LLM-enhanced path: entities extracted without block-level positions.
+        # Upsert Entity nodes with full properties first so MERGE in upsert_typed_edge
+        # never creates skeleton nodes with empty name/kind.
+        if not note_entity_max_conf and payload.entities:
+            entity_node_props: list[dict[str, object]] = []
+            for entity in payload.entities:
+                resolved = payload.resolved_entities.get(entity.entity_id)
+                canonical_id = (
+                    resolved.canonical_entity_id if resolved is not None else entity.entity_id
+                )
+                canonical_name = resolved.canonical_name if resolved is not None else entity.text
+                entity_node_props.append({
+                    "id": canonical_id,
+                    "name": canonical_name,
+                    "kind": entity.label,
+                    "updated_at": now_iso,
+                })
+                conf = float(entity.confidence)
+                if resolved is not None:
+                    conf = max(conf, float(resolved.confidence))
+                if canonical_id not in note_entity_max_conf or conf > note_entity_max_conf[canonical_id]:
+                    note_entity_max_conf[canonical_id] = conf
+            self._repository.upsert_nodes_batch(
+                label="Entity",
+                nodes=entity_node_props,
+                graph_name=self._graph_name,
+            )
+
         for canonical_id, best_conf in note_entity_max_conf.items():
             self._repository.upsert_typed_edge(
                 source_label="Note",

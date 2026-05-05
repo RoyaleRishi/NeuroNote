@@ -39,7 +39,7 @@ export function useGlobalGraph(
     try {
       const response = await fetchGlobalGraph(baseUrl, {
         min_confidence: confidenceThreshold,
-        include_types: ["note", "entity"],
+        include_types: ["note", "entity", "relation"],
         subject_id: filters.subject_id,
         tag: filters.tag,
       });

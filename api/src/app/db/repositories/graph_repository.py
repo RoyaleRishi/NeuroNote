@@ -48,6 +48,14 @@ class GraphRepository:
         # LOAD 'age' + SET search_path + graph-existence check only fire once.
         self._age_ready_graphs: set[str] = set()
 
+    def _is_postgresql(self) -> bool:
+        """Return True when the session is backed by PostgreSQL (AGE is available)."""
+        try:
+            from app.db.engine import get_engine
+            return get_engine().dialect.name == "postgresql"
+        except Exception:
+            return False
+
     def _validate_graph_name(self, graph_name: str) -> None:
         if not _GRAPH_NAME_PATTERN.fullmatch(graph_name):
             raise ValueError(f"Invalid AGE graph name: {graph_name!r}")
@@ -329,6 +337,8 @@ class GraphRepository:
         graph_name: str = "neuronote",
     ) -> dict[str, str]:
         """Return {block_uid: content_hash} for all Block nodes of a note in AGE."""
+        if not self._is_postgresql():
+            return {}
         self.ensure_graph_exists(graph_name=graph_name)
         note_id_json = json.dumps(note_id)
         query = (
@@ -358,7 +368,7 @@ class GraphRepository:
           1. Note→Entity MENTIONS (note-level aggregate edges)
           2. Concept→Concept typed edges whose source_note_id is in note_ids
         """
-        if not note_ids:
+        if not note_ids or not self._is_postgresql():
             return GraphFetchResult()
 
         self.ensure_graph_exists(graph_name=graph_name)

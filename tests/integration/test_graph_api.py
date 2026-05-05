@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -124,6 +125,9 @@ def test_local_graph_returns_404_for_unknown_note(client: TestClient) -> None:
 def test_local_graph_excludes_note_titles_and_link_targets_from_entities(
     client: TestClient,
 ) -> None:
+    from app.db.engine import get_engine
+    if get_engine().dialect.name != "postgresql":
+        pytest.skip("AGE entity data requires PostgreSQL")
     client.put(
         "/v1/notes/local-noise-root",
         json=_payload(
