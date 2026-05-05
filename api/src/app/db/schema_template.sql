@@ -150,15 +150,18 @@ CREATE INDEX ix_{schema}_processing_jobs_status
     ON {schema}.processing_jobs (status);
 
 -- ============================================================
--- concept_registry  (0010 + 0012 meta_classified_at)
+-- concept_registry  (0010 + 0012 meta_classified_at + 0017 embedding)
 -- ============================================================
 CREATE TABLE {schema}.concept_registry (
     concept_text       TEXT                     NOT NULL,
     entity_id          TEXT                     NOT NULL,
     meta_classified_at TIMESTAMP WITH TIME ZONE,
     created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    embedding          vector(384),
     PRIMARY KEY (concept_text)
 );
+CREATE INDEX IF NOT EXISTS concept_registry_embedding_hnsw_idx
+    ON {schema}.concept_registry USING hnsw (embedding vector_cosine_ops);
 
 -- ============================================================
 -- concept_insight_cache  (0011)
