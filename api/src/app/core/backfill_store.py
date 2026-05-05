@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import os
+from dataclasses import asdict, dataclass
 from threading import Lock
+
+# Written to /tmp so all Uvicorn worker processes in the same container see
+# the same state. A threading lock guards within-process concurrent writes;
+# the file itself is our cross-process channel.
+_STATUS_FILE = "/tmp/neuronote_backfill_status.json"
+_LOCK = Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,33 +20,38 @@ class BackfillStatusSnapshot:
     in_progress: bool
 
 
-_STATUS = BackfillStatusSnapshot(
-    total_notes=0,
-    processed_notes=0,
-    failed_notes=0,
-    in_progress=False,
-)
-_LOCK = Lock()
 
 
 def reset_backfill_status() -> None:
-    global _STATUS
-    with _LOCK:
-        _STATUS = BackfillStatusSnapshot(
+    set_backfill_status(
+        BackfillStatusSnapshot(
             total_notes=0,
             processed_notes=0,
             failed_notes=0,
             in_progress=False,
         )
+    )
 
 
 def get_backfill_status() -> BackfillStatusSnapshot:
     with _LOCK:
-        return _STATUS
+        try:
+            with open(_STATUS_FILE) as f:
+                data = json.load(f)
+            return BackfillStatusSnapshot(**data)
+        except Exception:
+            return BackfillStatusSnapshot(
+                total_notes=0,
+                processed_notes=0,
+                failed_notes=0,
+                in_progress=False,
+            )
 
 
 def set_backfill_status(snapshot: BackfillStatusSnapshot) -> None:
-    global _STATUS
     with _LOCK:
-        _STATUS = snapshot
-
+        try:
+            with open(_STATUS_FILE, "w") as f:
+                json.dump(asdict(snapshot), f)
+        except Exception:
+            pass

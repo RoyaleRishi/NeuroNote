@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.core.backfill_store import get_backfill_status
 from app.core.rate_limiter import limiter
@@ -26,7 +26,10 @@ def backfill_status() -> BackfillStatusResponse:
 
 @router.post("/reprocess-all", response_model=BackfillStatusResponse, status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("3/hour")
-def reprocess_all(request: Request) -> BackfillStatusResponse:
+def reprocess_all(
+    request: Request,
+    force: bool = Query(False, description="Skip stale check and clear extraction caches — re-extracts every note from scratch."),
+) -> BackfillStatusResponse:
     """Trigger a full re-processing of every note with the current NLP settings.
 
     Returns 409 if a reprocess is already running.
@@ -40,7 +43,7 @@ def reprocess_all(request: Request) -> BackfillStatusResponse:
         )
 
     service = StartupBackfillService()
-    _REPROCESS_EXECUTOR.submit(service.run_note_reprocessing_backfill)
+    _REPROCESS_EXECUTOR.submit(service.run_note_reprocessing_backfill, force=force)
 
     return BackfillStatusResponse(
         total_notes=0,
