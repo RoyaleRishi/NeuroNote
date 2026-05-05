@@ -7,6 +7,7 @@ runs identically in cloud and edge modes.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -19,6 +20,51 @@ _YAKE_INVERTED_THRESHOLD = 0.85  # YAKE returns lower-is-better; we keep (1-s) >
 
 _pipeline_instance: Any = None
 _yake_instance: yake.KeywordExtractor | None = None
+
+_LEADING_DETERMINERS = ("the ", "a ", "an ", "this ", "that ", "these ", "those ")
+_TRAILING_PUNCT_RE = re.compile(r"[.,;:!?\)\]\}'\"\s]+$")
+_CODE_TOKEN_RE = re.compile(r"[_$]")
+_CAMEL_CASE_RE = re.compile(r"^[a-z]+[A-Z]")
+_DIGIT_ONLY_RE = re.compile(r"^\d+$")
+# Closed-class English words used to reject phrases that are entirely function words.
+_STOPWORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "been", "being", "but", "by",
+    "can", "could", "did", "do", "does", "for", "from", "had", "has", "have",
+    "he", "her", "him", "his", "i", "if", "in", "is", "it", "its", "may",
+    "me", "might", "must", "my", "no", "not", "of", "on", "or", "our",
+    "shall", "she", "should", "so", "such", "than", "that", "the", "their",
+    "them", "they", "these", "this", "those", "to", "us", "was", "we",
+    "were", "what", "when", "where", "which", "who", "whom", "why", "will",
+    "with", "would", "you", "your", "etc",
+})
+
+
+def _clean(raw: str) -> str | None:
+    text = raw.strip()
+    if not text:
+        return None
+    text = _TRAILING_PUNCT_RE.sub("", text).strip()
+    if not text:
+        return None
+    # Strip leading determiners (case-insensitive on the determiner only).
+    lower = text.lower()
+    for det in _LEADING_DETERMINERS:
+        if lower.startswith(det):
+            text = text[len(det):]
+            lower = text.lower()
+            break
+    if len(text) < 2 or len(text) > 60:
+        return None
+    if _DIGIT_ONLY_RE.match(text):
+        return None
+    if _CAMEL_CASE_RE.match(text):
+        return None
+    if _CODE_TOKEN_RE.search(text):
+        return None
+    tokens = lower.split()
+    if not tokens or all(t in _STOPWORDS for t in tokens):
+        return None
+    return text
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,14 +127,15 @@ def _run_yake(text: str) -> list[ConceptSpan]:
 def _merge(a: list[ConceptSpan], b: list[ConceptSpan]) -> list[ConceptSpan]:
     by_key: dict[str, ConceptSpan] = {}
     for s in (*a, *b):
-        key = s.text.lower()
-        if not key:
+        cleaned = _clean(s.text)
+        if cleaned is None:
             continue
+        key = cleaned.lower()
         existing = by_key.get(key)
         if existing is None:
-            by_key[key] = s
+            by_key[key] = ConceptSpan(text=cleaned, confidence=s.confidence, source=s.source)
         elif s.confidence > existing.confidence:
-            by_key[key] = ConceptSpan(text=s.text, confidence=s.confidence, source="both")
+            by_key[key] = ConceptSpan(text=cleaned, confidence=s.confidence, source="both")
         else:
             by_key[key] = ConceptSpan(text=existing.text, confidence=existing.confidence, source="both")
     return list(by_key.values())

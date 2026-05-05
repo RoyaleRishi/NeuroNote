@@ -1,6 +1,7 @@
+import pytest
 from unittest.mock import MagicMock, patch
 
-from app.nlp.extraction import ConceptSpan, extract_concepts
+from app.nlp.extraction import ConceptSpan, _clean, extract_concepts
 
 
 @patch("app.nlp.extraction._inspec_pipeline")
@@ -18,3 +19,22 @@ def test_extract_concepts_uses_inspec(mock_pipeline):
     assert "data types" in texts
     assert "variables" in texts
     assert "noise" not in texts  # below 0.85 threshold
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("data types", "data types"),
+    ("the data types", "data types"),
+    ("a variable", "variable"),
+    ("THE Quick", "Quick"),
+    ("etc.", None),
+    ("of the", None),
+    ("123", None),
+    ("a", None),
+    ("variable_name", None),       # underscore — code token
+    ("camelCase", None),           # camelCase
+    ("variables...", "variables"), # trailing punctuation strip
+    ("", None),
+    ("x" * 70, None),              # too long
+])
+def test_clean_filters(raw: str, expected: str | None) -> None:
+    assert _clean(raw) == expected
