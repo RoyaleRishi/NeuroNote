@@ -21,7 +21,7 @@
 
 ## What this project is
 
-NeuroNote is a local-first AI-powered knowledge base. Users write notes in a rich TipTap editor; the system automatically extracts concepts and relations with an NLP pipeline (rule-based, spaCy, or Claude-enhanced), stores them in an Apache AGE property graph, and lets users explore the knowledge graph interactively. Clicking any concept node opens an AI-generated insight panel grounded in the user's own notes.
+NeuroNote is a local-first AI-powered knowledge base. Users write notes in a rich TipTap editor; the system automatically extracts concepts with a deterministic pipeline (kbir-inspec transformer + YAKE, embedding-based cross-note normalisation, structural relation derivation), stores them in an Apache AGE property graph, and lets users explore the knowledge graph interactively. Clicking any concept node opens an AI-generated insight panel grounded in the user's own notes.
 
 ## Monorepo layout
 
@@ -84,15 +84,15 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 
 #### Cache tables (migration 0011)
 - `concept_insight_cache` — caches Claude-generated concept insights keyed by `(concept_label, content_digest)`. The digest is a SHA-256 of sorted `note_id:content_hash` pairs, so the cache auto-invalidates when any relevant note changes.
-- `nlp_extraction_cache` — caches NLP/SLM extraction results keyed by `(content_hash, extraction_profile)`. Eliminates redundant LLM calls after container restarts for unchanged notes.
+- `nlp_extraction_cache` — caches extraction results keyed by `content_hash`. Auto-shared across notes with identical text.
 
 ### NLP pipeline (`api/src/app/nlp/`)
-- `NoteNlpPipeline` in `pipeline.py` — entry point; reads `NLP_EXTRACTION_PROFILE` env var
-- Three profiles: `rule-only` (default), `hybrid-spacy`, `llm-enhanced`
-- LRU extraction cache keyed by `content_hash` — notes with identical text share one result; backed by `nlp_extraction_cache` DB table for cross-restart persistence
-- `SLMExtractor` (`slm_extractor.py`) wraps the LLM API for `llm-enhanced` profile — uses sync `LLMClient`
-- `ConceptMetaClassifier` (`concept_meta.py`) — called after each note's graph sync; uses the LLM to identify `SYNONYM_OF` pairs (e.g. "ML" ↔ "machine learning") and `SUBTOPIC_OF` pairs (e.g. "backpropagation" → "neural networks") among newly extracted concepts; writes edges to AGE; uses sync `LLMClient`. Guards against re-classification via `concept_registry.meta_classified_at` — already-classified concepts are always skipped.
-- `ConceptInsightService` (`services/concept_insight_service.py`) calls the LLM for on-demand insight generation — uses async `AsyncLLMClient`; cached in `concept_insight_cache`
+The pipeline is fully deterministic — the LLM is no longer in the extraction critical path. `NoteNlpPipeline` (`pipeline.py`) runs three stages on every note:
+1. **`extract_concepts`** (`extraction.py`) — ensemble of the `ml6team/keyphrase-extraction-kbir-inspec` transformer (high precision on dense prose) and YAKE (statistical recall on lists/informal text). Outputs a deduped list of `ConceptSpan`s passed through a cleanup filter (no leading determiners, no purely-stopword phrases, length 2–60, no code tokens).
+2. **`normalise_concepts`** (`normalisation.py`) — embeds each span and runs cosine nearest-neighbour against `concept_registry.embedding` (HNSW index). A match at threshold ≥0.88 reuses the existing canonical concept; otherwise a new registry row is inserted. This is how cross-note concept identity is established.
+3. **`derive_relations`** (`structure_relations.py`) — emits five structural edge types from block structure alone: `MENTIONED_TOGETHER`, `SUBTOPIC_OF`, `SIBLING_OF`, `REFERENCES`, `DEFINED_BY`. No model call required.
+
+Cross-restart caching is provided by `nlp_extraction_cache` (keyed by `content_hash`). The LLM is now used only for (a) optional per-note summaries and (b) the on-demand concept insight panel via `ConceptInsightService` (`services/concept_insight_service.py`, async `AsyncLLMClient`, cached in `concept_insight_cache`).
 
 ### Graph sync (`api/src/app/services/graph_sync_service.py`)
 - Delete-and-replace semantics: on each note save, all AGE nodes/edges sourced from that note are deleted then re-created
@@ -201,9 +201,6 @@ Frontend tests: `web/src/**/*.test.tsx`
 | Variable | Where set | Purpose |
 |---|---|---|
 | `DATABASE_URL` | `api/.env` | PostgreSQL connection string |
-| `NLP_EXTRACTION_PROFILE` | `api/.env` or compose | `rule-only` / `hybrid-spacy` / `llm-enhanced` |
-| `NLP_MODEL_NAME` | `api/.env` or compose | spaCy model (e.g. `spacy:en_core_web_sm`) |
-| `NLP_ENTITY_SEED_TERMS` | `api/.env` or compose | Comma-separated terms for deterministic seeding |
 | `LLM_API_KEY` | `api/.env` or compose | API key for the LLM provider. Falls back to `ANTHROPIC_API_KEY` if not set. |
 | `LLM_BASE_URL` | `api/.env` or compose | Base URL for any OpenAI-compatible endpoint. Default: `https://api.anthropic.com/v1/`. Examples: `https://api.openai.com/v1`, `https://api.groq.com/openai/v1`, `http://localhost:11434/v1` |
 | `ANTHROPIC_API_KEY` | `api/.env` or compose | Legacy fallback for `LLM_API_KEY` when using Anthropic. |
