@@ -50,6 +50,51 @@ def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
         # Registry is best-effort; never fail NLP processing
 
 
+def register_concepts_with_embeddings(
+    session: Session, items: list[tuple[str, str, list[float]]]
+) -> None:
+    """Upsert (concept_text, entity_id, embedding) pairs into concept_registry.
+
+    Rows that already exist are updated so the entity_id and embedding always
+    reflect the most recent canonical form (first-write-wins only for text
+    identity; new embeddings improve NN search quality).
+    """
+    if not items:
+        return
+    normalised = [
+        (t.strip().lower(), entity_id, embedding)
+        for t, entity_id, embedding in items
+        if t.strip() and t.strip().lower() not in _CONCEPT_STOPWORDS
+    ]
+    if not normalised:
+        return
+
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        for concept_text, entity_id, embedding in normalised:
+            vector_literal = "[" + ",".join(f"{v:.8f}" for v in embedding) + "]"
+            session.execute(
+                text(
+                    """
+                    INSERT INTO concept_registry (concept_text, entity_id, embedding)
+                    VALUES (:concept_text, :entity_id, CAST(:embedding AS vector(384)))
+                    ON CONFLICT (concept_text) DO UPDATE
+                      SET entity_id = EXCLUDED.entity_id,
+                          embedding = EXCLUDED.embedding
+                    """
+                ),
+                {
+                    "concept_text": concept_text,
+                    "entity_id": entity_id,
+                    "embedding": vector_literal,
+                },
+            )
+    except Exception as exc:
+        _log.warning("register_concepts_with_embeddings failed: %s", exc, exc_info=True)
+        # Registry is best-effort; never fail NLP processing
+
+
 def get_known_concepts(session: Session) -> list[str]:
     """Return all registered concept texts, sorted for deterministic prompts."""
     try:
@@ -72,4 +117,9 @@ def registry_size(session: Session) -> int:
         return 0
 
 
-__all__ = ["register_concepts", "get_known_concepts", "registry_size"]
+__all__ = [
+    "register_concepts",
+    "register_concepts_with_embeddings",
+    "get_known_concepts",
+    "registry_size",
+]

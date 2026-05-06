@@ -4,6 +4,8 @@ import hashlib
 import math
 import re
 
+from app.nlp.semantic_embeddings import build_semantic_embedding
+
 _TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
 
 
@@ -25,3 +27,15 @@ def build_embedding(text: str, *, dimensions: int = 384) -> list[float]:
     if norm == 0.0:
         return vector
     return [value / norm for value in vector]
+
+
+def embed_for_normalisation(text: str) -> list[float]:
+    """Embed a short text (concept) for normalisation. Returns 384-dim vector.
+
+    Prefers the semantic (sentence-transformer) model; falls back to the
+    deterministic hash embedder when the model is unavailable.
+    """
+    vec = build_semantic_embedding(text)
+    if vec is None:
+        return build_embedding(text)
+    return vec
