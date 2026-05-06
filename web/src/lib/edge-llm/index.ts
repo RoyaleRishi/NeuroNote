@@ -14,17 +14,6 @@ export {
   type ModelProgress,
 } from "./model-manager";
 
-export {
-  filterCandidates,
-  generateSummary,
-  classifyMeta,
-  generateInsight,
-} from "./inference-client";
+export { generateSummary, generateInsight } from "./inference-client";
 
-export type {
-  ChunkExtractionResult,
-  MetaClassificationRequest,
-  MetaClassificationResult,
-  InsightRequest,
-  InsightResult,
-} from "./types";
+export type { InsightRequest, InsightResult } from "./types";
