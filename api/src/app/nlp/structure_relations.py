@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterator, Literal
 
+EdgeRelation = Literal["MENTIONED_TOGETHER", "SUBTOPIC_OF", "SIBLING_OF", "REFERENCES", "DEFINED_BY"]
+
 BlockKind = Literal[
     "heading", "paragraph", "listItem", "bulletList", "orderedList",
     "codeBlock", "blockquote", "blockRef", "other",
@@ -70,3 +72,54 @@ def _walk_blocks(doc: dict, parent_id: str | None = None, depth: int = 0) -> Ite
         # Recurse into list items so nested content is captured.
         if kind == "listItem":
             yield from _walk_blocks(node, parent_id=block_id, depth=depth + 1)
+
+
+@dataclass(frozen=True, slots=True)
+class StructureEdge:
+    source: str
+    target: str
+    relation: EdgeRelation
+
+
+def _concepts_in_text(text: str, concepts: list[str]) -> set[str]:
+    """Return the subset of `concepts` that appear (case-insensitive substring) in `text`."""
+    hay = text.lower()
+    return {c for c in concepts if c.lower() in hay}
+
+
+def derive_relations(
+    document_json: dict,
+    *,
+    concepts: list[str],
+) -> list[StructureEdge]:
+    """Walk TipTap blocks and emit MENTIONED_TOGETHER and SUBTOPIC_OF edges.
+
+    MENTIONED_TOGETHER: emitted for every pair of concepts in the same block
+    (both directions for query symmetry).
+
+    SUBTOPIC_OF: emitted when a concept appears in a non-heading block that
+    immediately follows a heading block mentioning a different concept.
+    """
+    if not concepts:
+        return []
+    blocks = list(_walk_blocks(document_json))
+    edges: set[StructureEdge] = set()
+
+    current_heading_concepts: set[str] = set()
+    for block in blocks:
+        present = _concepts_in_text(block.text, concepts)
+        # Emit MENTIONED_TOGETHER for every pair in this block (both directions).
+        listed = list(present)
+        for i, a in enumerate(listed):
+            for b in listed[i + 1:]:
+                edges.add(StructureEdge(a, b, "MENTIONED_TOGETHER"))
+                edges.add(StructureEdge(b, a, "MENTIONED_TOGETHER"))
+        if block.kind == "heading":
+            current_heading_concepts = present
+        else:
+            for child in present:
+                for parent in current_heading_concepts:
+                    if child != parent:
+                        edges.add(StructureEdge(child, parent, "SUBTOPIC_OF"))
+
+    return sorted(edges, key=lambda e: (e.relation, e.source, e.target))
