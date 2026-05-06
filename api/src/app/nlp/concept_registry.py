@@ -14,8 +14,6 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.nlp.spotting import _STOPWORDS as _CONCEPT_STOPWORDS  # noqa: PLC2701
-
 
 def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
     """Register (concept_text, concept_entity_id) pairs.
@@ -26,7 +24,7 @@ def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
     normalised = [
         (t.strip().lower(), entity_id)
         for t, entity_id in items
-        if t.strip() and t.strip().lower() not in _CONCEPT_STOPWORDS
+        if t.strip()
     ]
     if not normalised:
         return
@@ -64,7 +62,7 @@ def register_concepts_with_embeddings(
     normalised = [
         (t.strip().lower(), entity_id, embedding)
         for t, entity_id, embedding in items
-        if t.strip() and t.strip().lower() not in _CONCEPT_STOPWORDS
+        if t.strip()
     ]
     if not normalised:
         return
