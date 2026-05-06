@@ -13,12 +13,12 @@ from app.db.tenant_session import get_tenant_session
 from app.nlp.concept_registry import get_known_concepts
 from app.nlp.config import NlpSettings, get_nlp_settings
 from app.services.concept_insight_service import ConceptInsightService
-from shared.contracts.python.v1.extraction import (
+from shared.contracts.python.v1.graph import (
+    ConceptInsightResponse,
     InsightContextNote,
     InsightContextResponse,
     KnownConceptsResponse,
 )
-from shared.contracts.python.v1.graph import ConceptInsightResponse
 
 router = APIRouter()
 _LOG = logging.getLogger(__name__)

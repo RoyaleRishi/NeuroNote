@@ -79,3 +79,24 @@ class ConceptInsightResponse(BaseModel):
     insight: str | None = None
     learning_links: list[ConceptLearningLink] = Field(default_factory=list)
     generated_at: str
+
+
+# ── Concept context endpoints (used by /concepts/insight-context and /concepts/known) ──
+
+class InsightContextNote(BaseModel):
+    """A note excerpt returned for browser-side insight generation."""
+    note_id: str
+    title: str
+    excerpt: str
+
+
+class InsightContextResponse(BaseModel):
+    """Note context for the browser to generate insights locally."""
+    concept_label: str
+    notes: list[InsightContextNote] = Field(default_factory=list)
+    total_notes: int = Field(ge=0)
+
+
+class KnownConceptsResponse(BaseModel):
+    """List of concepts registered in the user's knowledge base."""
+    concepts: list[str] = Field(default_factory=list)
