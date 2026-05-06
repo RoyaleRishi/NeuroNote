@@ -68,7 +68,6 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
     base = get_nlp_settings()
     return _dataclass_replace(
         base,
-        extraction_profile="llm-enhanced",
         llm_api_key=api_key,
         llm_base_url=prefs.get("llm_base_url", base.llm_base_url),
         llm_model=prefs.get("llm_model", base.llm_model),
@@ -103,9 +102,6 @@ def _run_processing_job(
             return
 
         summary_dict: dict[str, object] = summary.model_dump() if summary else {}
-        summary_dict["extraction_profile_used"] = (
-            user_settings.extraction_profile if user_settings else "rule-only"
-        )
         mark_job_completed(job_id, extraction_summary=summary_dict)
     finally:
         set_tenant_schema(None)

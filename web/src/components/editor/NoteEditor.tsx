@@ -35,7 +35,6 @@ import type { ProcessStatus, SaveStatus } from "../../lib/state/note-store";
 import type { BlockRefSuggestion, WikiLinkSuggestion } from "./TipTapEditor";
 import { makeNewNoteId } from "../../lib/utils/note-id";
 import type { ExtractionSummary } from "../../../../shared/contracts/ts/v1/process";
-import { useToast } from "../../lib/toast";
 
 interface NoteEditorProps {
   noteId: string;
@@ -269,7 +268,6 @@ export function NoteEditor({
   confidenceThreshold = 0.9,
   onShowBacklinks,
 }: NoteEditorProps) {
-  const { showToast } = useToast();
   const [documentJson, setDocumentJson] = useState<EditorDoc>(createEmptyEditorDoc());
   const [noteTitle, setNoteTitle] = useState("Untitled");
   const [subjectId, setSubjectId] = useState("inbox");
@@ -592,13 +590,6 @@ export function NoteEditor({
           setProcessStatus(response.status);
           if (response.status === "completed" && response.extraction_summary) {
             setExtractionSummary(response.extraction_summary);
-            if (response.extraction_summary.extraction_profile_used === "rule-only") {
-              showToast(
-                "Cloud mode unavailable — processed with rule-based extraction. Check your API key in Settings.",
-                "warning",
-                8000,
-              );
-            }
           }
         },
       });

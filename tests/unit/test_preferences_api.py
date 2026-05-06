@@ -138,7 +138,6 @@ def test_load_user_llm_config_returns_settings_for_cloud(client: TestClient) -> 
     )
     result = _load_user_llm_config("user_test0001")
     assert result is not None
-    assert result.extraction_profile == "llm-enhanced"
     assert result.llm_api_key == "sk-cloud-key-abc"
     assert result.llm_base_url == "https://api.example.com/v1"
     assert result.llm_model == "my-model"

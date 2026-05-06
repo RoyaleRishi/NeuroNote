@@ -181,7 +181,6 @@ CREATE TABLE {schema}.concept_insight_cache (
 -- ============================================================
 CREATE TABLE {schema}.nlp_extraction_cache (
     content_hash       VARCHAR(64)              NOT NULL,
-    extraction_profile VARCHAR(32)              NOT NULL,
     result_json        TEXT                     NOT NULL,
     created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     PRIMARY KEY (content_hash)

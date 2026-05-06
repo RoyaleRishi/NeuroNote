@@ -49,7 +49,6 @@ def _resolve_llm_settings(session: Session) -> NlpSettings | None:
     base = get_nlp_settings()
     return _dataclass_replace(
         base,
-        extraction_profile="llm-enhanced",
         llm_api_key=api_key,
         llm_base_url=prefs.get("llm_base_url", base.llm_base_url),
         llm_model=prefs.get("llm_model", base.llm_model),
