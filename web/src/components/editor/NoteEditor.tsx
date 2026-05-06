@@ -30,7 +30,6 @@ import {
 import { extractPlainText } from "../../lib/editor/text-extract";
 import { createNoteLifecycleController } from "../../lib/orchestration/note-lifecycle";
 import { createProcessPollingController } from "../../lib/orchestration/process-polling";
-import { runEdgeProcessing } from "../../lib/orchestration/edge-processing";
 import type { ProcessStatus, SaveStatus } from "../../lib/state/note-store";
 import type { BlockRefSuggestion, WikiLinkSuggestion } from "./TipTapEditor";
 import { makeNewNoteId } from "../../lib/utils/note-id";
@@ -45,26 +44,6 @@ interface NoteEditorProps {
   availableSubjects?: string[];
   availableTags?: string[];
   onOpenNote?: (noteId: string) => void;
-  /**
-   * The user's LLM mode preference. When `"edge"`, processing runs in the
-   * browser via WebLLM and results are POSTed back to the API. When
-   * `"cloud"` (or unset, the safe default), the existing server-side flow
-   * is used.
-   */
-  llmMode?: "edge" | "cloud";
-  /**
-   * For edge mode, signals whether the WebLLM engine is fully loaded and
-   * ready for inference. When false, edge processing will still attempt
-   * to run but may fail; the UI surface displays this via the status
-   * indicator.
-   */
-  edgeReady?: boolean;
-  /**
-   * Optional callback to mark the edge engine as stable (clears the
-   * crash-recovery flag) — invoked after the first successful edge
-   * processing completes.
-   */
-  edgeMarkStableInference?: () => void;
   /** Minimum confidence threshold applied when fetching the local graph. Defaults to 0.9. */
   confidenceThreshold?: number;
   /** Opens the linked mentions (backlinks) modal for the current note. */
@@ -262,9 +241,6 @@ export function NoteEditor({
   availableSubjects = [],
   availableTags = [],
   onOpenNote,
-  llmMode,
-  edgeReady = false,
-  edgeMarkStableInference,
   confidenceThreshold = 0.9,
   onShowBacklinks,
 }: NoteEditorProps) {
@@ -278,11 +254,6 @@ export function NoteEditor({
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [processStatus, setProcessStatus] = useState<ProcessStatus>("idle");
-  const [processProgress, setProcessProgress] = useState<{
-    done: number;
-    total: number;
-  } | null>(null);
-  const [liveConcepts, setLiveConcepts] = useState<string[]>([]);
   const [extractionSummary, setExtractionSummary] = useState<ExtractionSummary | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -312,19 +283,6 @@ export function NoteEditor({
    * locally computed hash if the server response did not include one.
    */
   const lastContentHashRef = useRef<string | null>(null);
-  /**
-   * Track the current LLM mode in a ref so the debounced startProcessing
-   * callback always reads the freshest value without re-creating the
-   * lifecycle controller on every preference change.
-   */
-  const llmModeRef = useRef<"edge" | "cloud" | undefined>(llmMode);
-  const edgeReadyRef = useRef<boolean>(edgeReady);
-  useEffect(() => {
-    llmModeRef.current = llmMode;
-  }, [llmMode]);
-  useEffect(() => {
-    edgeReadyRef.current = edgeReady;
-  }, [edgeReady]);
   const persistedMetadataRef = useRef<PersistedMetadataSnapshot>({
     noteTitle: "Untitled",
     subjectId: "inbox",
@@ -493,75 +451,6 @@ export function NoteEditor({
     const combinedText = `${snapshot.noteTitle.trim()}\n\n${snapshot.plainText}`.trim();
     const localHash = makeHash(combinedText);
 
-    // Edge mode: run extraction in the browser via WebLLM, then POST results
-    // back to the server. Skip if the engine isn't ready yet — the next edit
-    // cycle will retry once `edgeReady` flips to true.
-    if (llmModeRef.current === "edge") {
-      if (!edgeReadyRef.current) {
-        // Surface as queued so the user knows processing is pending the
-        // model download, but don't actually fire inference yet.
-        setProcessStatus("queued");
-        return;
-      }
-      try {
-        setProcessStatus("running");
-        // Prefer the server-computed hash (consistent with the cloud path's
-        // cache key); fall back to the local hash on first save before the
-        // server response arrives.
-        const contentHash = lastContentHashRef.current ?? localHash;
-        setProcessProgress(null);
-        setLiveConcepts([]);
-        const result = await runEdgeProcessing({
-          baseUrl,
-          noteId,
-          noteTitle: snapshot.noteTitle.trim() || "Untitled",
-          contentText: snapshot.plainText,
-          contentHash,
-          onProgress: (done, total) => {
-            console.info(`[edge-llm] chunk ${done}/${total}`);
-            setProcessProgress({ done, total });
-          },
-          onChunkResult: (concepts) => {
-            setLiveConcepts((prev) => {
-              const seen = new Set(prev.map((c) => c.toLowerCase()));
-              const merged = [...prev];
-              for (const c of concepts) {
-                const key = c.toLowerCase();
-                if (!seen.has(key)) {
-                  merged.push(c);
-                  seen.add(key);
-                }
-              }
-              // Cap at 50 — popover unhelpful beyond that.
-              return merged.length > 50 ? merged.slice(-50) : merged;
-            });
-          },
-        });
-        if (result.status === "completed") {
-          setProcessStatus("completed");
-          setExtractionSummary({
-            entity_count: result.conceptCount ?? 0,
-            relation_count: result.relationCount ?? 0,
-            keyphrase_count: 0,
-            top_entities: [],
-          });
-          edgeMarkStableInference?.();
-        } else {
-          setProcessStatus("failed");
-          if (result.error) {
-            console.error("[NeuroNote] Edge processing failed:", result.error);
-          }
-        }
-        setProcessProgress(null);
-      } catch (err) {
-        console.error("[NeuroNote] Edge processing error:", err);
-        setProcessProgress(null);
-        setProcessStatus("failed");
-      }
-      return;
-    }
-
-    // Cloud mode (default): existing server-side flow.
     try {
       setProcessStatus("queued");
       const queued = await queueNoteProcessing(baseUrl, {
@@ -806,8 +695,6 @@ export function NoteEditor({
           dirty={dirty}
           saveStatus={saveStatus}
           processStatus={processStatus}
-          processProgress={processProgress}
-          liveConcepts={liveConcepts}
         />
         <ExtractionSummaryBadge summary={extractionSummary} />
         <div className="note-view-tabs" role="tablist" aria-label="Note view">

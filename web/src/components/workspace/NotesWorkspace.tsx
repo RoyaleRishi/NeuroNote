@@ -1366,10 +1366,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
               setSelectedNoteId(nextNoteId);
               setHighlightedNoteId(nextNoteId);
             }}
-            llmMode={prefs?.llm_mode}
             confidenceThreshold={prefs?.confidence_threshold ?? 0.9}
-            edgeReady={edge.isReady}
-            edgeMarkStableInference={edge.markStableInference}
             onShowBacklinks={selectedNoteId ? () => backlinks.open(selectedNoteId) : undefined}
           />
         ) : (
