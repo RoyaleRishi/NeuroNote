@@ -404,10 +404,6 @@ export async function logoutUser(): Promise<void> {
 // ── Edge-mode extraction ────────────────────────────────────────────────────
 
 import type {
-  SubmitExtractionResultsRequest,
-  SubmitExtractionResultsResponse,
-  SubmitMetaClassificationRequest,
-  SubmitMetaClassificationResponse,
   InsightContextResponse,
   KnownConceptsResponse,
 } from "../../../shared/contracts/ts/v1/extraction";
@@ -417,45 +413,9 @@ import type {
 } from "../../../shared/contracts/ts/v1/extractionCandidates";
 
 export type {
-  SubmitExtractionResultsRequest,
-  SubmitExtractionResultsResponse,
-  SubmitMetaClassificationRequest,
-  SubmitMetaClassificationResponse,
   InsightContextResponse,
   KnownConceptsResponse,
 };
-
-/** Submit browser-computed extraction results for graph sync.
- *
- * Long timeout (5 min): graph sync writes many AGE edges and generates
- * embeddings server-side, both of which can be slow for large notes.
- */
-export async function submitExtractionResults(
-  baseUrl: string,
-  payload: SubmitExtractionResultsRequest,
-): Promise<SubmitExtractionResultsResponse> {
-  const response = await apiFetch(`${baseUrl}/v1/extraction-results`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    timeoutMs: 300_000,
-  });
-  return parseJsonResponse<SubmitExtractionResultsResponse>(response);
-}
-
-/** Submit browser-computed meta-classification (synonym/subtopic) results. */
-export async function submitMetaClassification(
-  baseUrl: string,
-  payload: SubmitMetaClassificationRequest,
-): Promise<SubmitMetaClassificationResponse> {
-  const response = await apiFetch(`${baseUrl}/v1/meta-classification-results`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    timeoutMs: 120_000,
-  });
-  return parseJsonResponse<SubmitMetaClassificationResponse>(response);
-}
 
 /** Fetch note context for browser-side insight generation. */
 export async function fetchInsightContext(
