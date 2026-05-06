@@ -401,59 +401,6 @@ export async function logoutUser(): Promise<void> {
   await apiFetch(`${base}/v1/auth/logout`, { method: "POST" });
 }
 
-// ── Edge-mode extraction ────────────────────────────────────────────────────
-
-import type {
-  InsightContextResponse,
-  KnownConceptsResponse,
-} from "../../../shared/contracts/ts/v1/extraction";
-import type {
-  ExtractCandidatesRequest,
-  ExtractCandidatesResponse,
-} from "../../../shared/contracts/ts/v1/extractionCandidates";
-
-export type {
-  InsightContextResponse,
-  KnownConceptsResponse,
-};
-
-/** Fetch note context for browser-side insight generation. */
-export async function fetchInsightContext(
-  baseUrl: string,
-  label: string,
-  limitNotes = 10,
-): Promise<InsightContextResponse> {
-  const params = new URLSearchParams();
-  params.set("label", label);
-  params.set("limit_notes", String(limitNotes));
-  const response = await apiFetch(
-    `${baseUrl}/v1/concepts/insight-context?${params.toString()}`,
-  );
-  return parseJsonResponse<InsightContextResponse>(response);
-}
-
-/** Fetch the user's known concept list for extraction prompt seeding. */
-export async function fetchKnownConcepts(
-  baseUrl: string,
-): Promise<KnownConceptsResponse> {
-  const response = await apiFetch(`${baseUrl}/v1/concepts/known`);
-  return parseJsonResponse<KnownConceptsResponse>(response);
-}
-
-/** Fetch server-generated concept candidates for a note (edge mode). */
-export async function fetchCandidates(
-  baseUrl: string,
-  payload: ExtractCandidatesRequest,
-): Promise<ExtractCandidatesResponse> {
-  const response = await apiFetch(`${baseUrl}/v1/extract-candidates`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    timeoutMs: 30_000,
-  });
-  return parseJsonResponse<ExtractCandidatesResponse>(response);
-}
-
 // ── Preferences ─────────────────────────────────────────────────────────────
 
 import type {
