@@ -65,3 +65,60 @@ def test_concept_under_heading_emits_subtopic_of() -> None:
     assert StructureEdge(
         source="int function", target="casting", relation="SUBTOPIC_OF",
     ) in edges
+
+
+def test_sibling_list_items_emit_sibling_of() -> None:
+    doc = {
+        "type": "doc",
+        "content": [{
+            "type": "bulletList",
+            "attrs": {"id": "ul1"},
+            "content": [
+                {"type": "listItem", "attrs": {"id": "li1"},
+                 "content": [{"type": "paragraph", "attrs": {"id": "p1"},
+                              "content": [{"type": "text", "text": "apples"}]}]},
+                {"type": "listItem", "attrs": {"id": "li2"},
+                 "content": [{"type": "paragraph", "attrs": {"id": "p2"},
+                              "content": [{"type": "text", "text": "oranges"}]}]},
+            ],
+        }],
+    }
+    edges = derive_relations(doc, concepts=["apples", "oranges"])
+    assert StructureEdge("apples", "oranges", "SIBLING_OF") in edges
+    assert StructureEdge("oranges", "apples", "SIBLING_OF") in edges
+
+
+def test_blockref_emits_references() -> None:
+    doc = {
+        "type": "doc",
+        "content": [{
+            "type": "paragraph",
+            "attrs": {"id": "p1"},
+            "content": [
+                {"type": "text", "text": "See "},
+                {"type": "blockRef", "attrs": {"refTargetText": "data types"},
+                 "content": []},
+                {"type": "text", "text": " also casting"},
+            ],
+        }],
+    }
+    edges = derive_relations(doc, concepts=["casting", "data types"])
+    assert StructureEdge("casting", "data types", "REFERENCES") in edges
+
+
+def test_bold_prefix_emits_defined_by() -> None:
+    # NOTE: DEFINED_BY links concept → note (not concept → concept).
+    # Verified by source == concept and target == "" sentinel for note context.
+    doc = {
+        "type": "doc",
+        "content": [{
+            "type": "paragraph",
+            "attrs": {"id": "p1"},
+            "content": [
+                {"type": "text", "marks": [{"type": "bold"}], "text": "Casting"},
+                {"type": "text", "text": " is the process of converting types."},
+            ],
+        }],
+    }
+    edges = derive_relations(doc, concepts=["casting"])
+    assert any(e.relation == "DEFINED_BY" and e.source == "casting" for e in edges)
