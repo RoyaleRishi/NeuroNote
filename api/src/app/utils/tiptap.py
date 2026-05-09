@@ -8,6 +8,9 @@ persistence; anything that consumes one (NLP pipeline, exporters) reads
 """
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+from typing import Iterator, Literal
 from uuid import uuid4
 
 
@@ -92,3 +95,91 @@ def extract_plain_text(node: object) -> str:
     if isinstance(node, list):
         return "".join(extract_plain_text(item) for item in node)
     return ""
+
+
+STRUCTURAL_BLOCK_TYPES: frozenset[str] = frozenset({
+    "paragraph", "heading", "blockquote", "codeBlock", "horizontalRule",
+    "bulletList", "orderedList", "listItem",
+    "taskList", "taskItem", "mathBlock", "image", "blockRef",
+})
+
+BlockKind = Literal[
+    "heading", "paragraph", "listItem", "bulletList", "orderedList",
+    "codeBlock", "blockquote", "blockRef", "taskList", "taskItem",
+    "mathBlock", "image", "horizontalRule", "other",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class BlockInfo:
+    block_uid: str
+    kind: BlockKind
+    text: str
+    parent_uid: str | None
+    depth: int
+
+
+def _kind_of(node: dict[str, object]) -> BlockKind:
+    t = str(node.get("type") or "")
+    if t in STRUCTURAL_BLOCK_TYPES:
+        return t  # type: ignore[return-value]
+    return "other"
+
+
+def walk_structural_blocks(doc: dict[str, object]) -> Iterator[BlockInfo]:
+    """Yield one ``BlockInfo`` per structural TipTap block.
+
+    Walks the entire tree exactly once. ``parent_uid`` is the
+    ``blockUid`` of the nearest enclosing structural ancestor (None at
+    the document root). Leaves like ``text`` and ``hardBreak`` are not
+    yielded.
+    """
+
+    def walk(
+        nodes: list[object], parent_uid: str | None, depth: int
+    ) -> Iterator[BlockInfo]:
+        for raw in nodes:
+            if not isinstance(raw, dict):
+                continue
+            kind = _kind_of(raw)
+            block_uid = ""
+            if kind != "other":
+                attrs = _as_object(raw.get("attrs")) or {}
+                value = attrs.get("blockUid")
+                if isinstance(value, str):
+                    block_uid = value
+                yield BlockInfo(
+                    block_uid=block_uid,
+                    kind=kind,
+                    text=extract_plain_text(raw).strip(),
+                    parent_uid=parent_uid,
+                    depth=depth,
+                )
+            children = raw.get("content")
+            if isinstance(children, list):
+                next_parent = block_uid if kind != "other" and block_uid else parent_uid
+                yield from walk(children, next_parent, depth + 1 if kind != "other" else depth)
+
+    root = doc.get("content")
+    if isinstance(root, list):
+        yield from walk(root, None, 0)
+
+
+def find_concept_mentions(text: str, concepts: list[str]) -> set[str]:
+    """Return the subset of ``concepts`` that appear in ``text`` as whole words.
+
+    Case-insensitive. Uses ``(?<![\\w])`` / ``(?![\\w])`` lookarounds instead of
+    bare ``\\b`` so that concepts ending in non-word characters (e.g. ``C++``)
+    are matched correctly — ``\\b`` only anchors at word/non-word transitions,
+    so it would fail to bound a ``+`` character.
+    """
+    if not text or not concepts:
+        return set()
+    out: set[str] = set()
+    for c in concepts:
+        if not c:
+            continue
+        pattern = rf"(?<!\w){re.escape(c)}(?!\w)"
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            out.add(c)
+    return out
