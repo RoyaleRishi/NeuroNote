@@ -1,30 +1,16 @@
-from app.nlp.structure_relations import _walk_blocks, BlockInfo, StructureEdge, derive_relations
+"""Unit tests for derive_relations.
+
+Fixtures use ``attrs.blockUid`` to match the storage contract — the
+attribute the production stamper writes and the consumer now reads.
+"""
+from __future__ import annotations
+
+from app.nlp.structure_relations import derive_relations
+from app.nlp.types import RelationDerivation, StructureEdge
 
 
-def test_walk_blocks_extracts_block_ids_and_text() -> None:
-    doc = {
-        "type": "doc",
-        "content": [
-            {
-                "type": "heading",
-                "attrs": {"level": 1, "id": "h1"},
-                "content": [{"type": "text", "text": "Variables"}],
-            },
-            {
-                "type": "paragraph",
-                "attrs": {"id": "p1"},
-                "content": [
-                    {"type": "text", "text": "Variables hold "},
-                    {"type": "text", "text": "data values."},
-                ],
-            },
-        ],
-    }
-    blocks = list(_walk_blocks(doc))
-    assert blocks == [
-        BlockInfo(block_id="h1", kind="heading", text="Variables", parent_id=None, depth=0),
-        BlockInfo(block_id="p1", kind="paragraph", text="Variables hold data values.", parent_id=None, depth=0),
-    ]
+def _edges(result: RelationDerivation) -> list[StructureEdge]:
+    return result.edges
 
 
 def test_concepts_in_same_paragraph_emit_mentioned_together() -> None:
@@ -32,17 +18,13 @@ def test_concepts_in_same_paragraph_emit_mentioned_together() -> None:
         "type": "doc",
         "content": [{
             "type": "paragraph",
-            "attrs": {"id": "p1"},
+            "attrs": {"blockUid": "p1"},
             "content": [{"type": "text", "text": "Variables hold data values."}],
         }],
     }
-    edges = derive_relations(doc, concepts=["variables", "data values"])
-    assert StructureEdge(
-        source="variables", target="data values", relation="MENTIONED_TOGETHER",
-    ) in edges
-    assert StructureEdge(
-        source="data values", target="variables", relation="MENTIONED_TOGETHER",
-    ) in edges
+    result = derive_relations(doc, concepts=["variables", "data values"])
+    assert StructureEdge("variables", "data values", "MENTIONED_TOGETHER") in _edges(result)
+    assert StructureEdge("data values", "variables", "MENTIONED_TOGETHER") in _edges(result)
 
 
 def test_concept_under_heading_emits_subtopic_of() -> None:
@@ -51,20 +33,18 @@ def test_concept_under_heading_emits_subtopic_of() -> None:
         "content": [
             {
                 "type": "heading",
-                "attrs": {"id": "h1", "level": 2},
+                "attrs": {"blockUid": "h1", "level": 2},
                 "content": [{"type": "text", "text": "Casting"}],
             },
             {
                 "type": "paragraph",
-                "attrs": {"id": "p1"},
+                "attrs": {"blockUid": "p1"},
                 "content": [{"type": "text", "text": "Use the int function."}],
             },
         ],
     }
-    edges = derive_relations(doc, concepts=["casting", "int function"])
-    assert StructureEdge(
-        source="int function", target="casting", relation="SUBTOPIC_OF",
-    ) in edges
+    result = derive_relations(doc, concepts=["casting", "int function"])
+    assert StructureEdge("int function", "casting", "SUBTOPIC_OF") in _edges(result)
 
 
 def test_sibling_list_items_emit_sibling_of() -> None:
@@ -72,20 +52,20 @@ def test_sibling_list_items_emit_sibling_of() -> None:
         "type": "doc",
         "content": [{
             "type": "bulletList",
-            "attrs": {"id": "ul1"},
+            "attrs": {"blockUid": "ul1"},
             "content": [
-                {"type": "listItem", "attrs": {"id": "li1"},
-                 "content": [{"type": "paragraph", "attrs": {"id": "p1"},
+                {"type": "listItem", "attrs": {"blockUid": "li1"},
+                 "content": [{"type": "paragraph", "attrs": {"blockUid": "p1"},
                               "content": [{"type": "text", "text": "apples"}]}]},
-                {"type": "listItem", "attrs": {"id": "li2"},
-                 "content": [{"type": "paragraph", "attrs": {"id": "p2"},
+                {"type": "listItem", "attrs": {"blockUid": "li2"},
+                 "content": [{"type": "paragraph", "attrs": {"blockUid": "p2"},
                               "content": [{"type": "text", "text": "oranges"}]}]},
             ],
         }],
     }
-    edges = derive_relations(doc, concepts=["apples", "oranges"])
-    assert StructureEdge("apples", "oranges", "SIBLING_OF") in edges
-    assert StructureEdge("oranges", "apples", "SIBLING_OF") in edges
+    result = derive_relations(doc, concepts=["apples", "oranges"])
+    assert StructureEdge("apples", "oranges", "SIBLING_OF") in _edges(result)
+    assert StructureEdge("oranges", "apples", "SIBLING_OF") in _edges(result)
 
 
 def test_blockref_emits_references() -> None:
@@ -93,32 +73,60 @@ def test_blockref_emits_references() -> None:
         "type": "doc",
         "content": [{
             "type": "paragraph",
-            "attrs": {"id": "p1"},
+            "attrs": {"blockUid": "p1"},
             "content": [
                 {"type": "text", "text": "See "},
-                {"type": "blockRef", "attrs": {"refTargetText": "data types"},
+                {"type": "blockRef", "attrs": {"blockUid": "br1", "refTargetText": "data types"},
                  "content": []},
                 {"type": "text", "text": " also casting"},
             ],
         }],
     }
-    edges = derive_relations(doc, concepts=["casting", "data types"])
-    assert StructureEdge("casting", "data types", "REFERENCES") in edges
+    result = derive_relations(doc, concepts=["casting", "data types"])
+    assert StructureEdge("casting", "data types", "REFERENCES") in _edges(result)
 
 
 def test_bold_prefix_emits_defined_by() -> None:
-    # NOTE: DEFINED_BY links concept → note (not concept → concept).
-    # Verified by source == concept and target == "" sentinel for note context.
     doc = {
         "type": "doc",
         "content": [{
             "type": "paragraph",
-            "attrs": {"id": "p1"},
+            "attrs": {"blockUid": "p1"},
             "content": [
                 {"type": "text", "marks": [{"type": "bold"}], "text": "Casting"},
                 {"type": "text", "text": " is the process of converting types."},
             ],
         }],
     }
-    edges = derive_relations(doc, concepts=["casting"])
-    assert any(e.relation == "DEFINED_BY" and e.source == "casting" for e in edges)
+    result = derive_relations(doc, concepts=["casting"])
+    assert any(e.relation == "DEFINED_BY" and e.source == "casting" for e in _edges(result))
+
+
+def test_substring_match_does_not_produce_false_positives() -> None:
+    """Pre-fix this would emit MENTIONED_TOGETHER from substring matches."""
+    doc = {
+        "type": "doc",
+        "content": [{
+            "type": "paragraph",
+            "attrs": {"blockUid": "p1"},
+            "content": [{"type": "text", "text": "Again I tried adjustments"}],
+        }],
+    }
+    result = derive_relations(doc, concepts=["AI", "JS"])
+    assert _edges(result) == []
+
+
+def test_distinct_blocks_with_concepts_counts_unique_blocks() -> None:
+    doc = {
+        "type": "doc",
+        "content": [
+            {"type": "paragraph", "attrs": {"blockUid": "p1"},
+             "content": [{"type": "text", "text": "casting and variables"}]},
+            {"type": "paragraph", "attrs": {"blockUid": "p2"},
+             "content": [{"type": "text", "text": "more on variables"}]},
+            {"type": "paragraph", "attrs": {"blockUid": "p3"},
+             "content": [{"type": "text", "text": "no concept here"}]},
+        ],
+    }
+    result = derive_relations(doc, concepts=["casting", "variables"])
+    assert result.distinct_blocks_with_concepts == 2

@@ -91,9 +91,9 @@ class NoteNlpPipeline:
             for c in norm.concepts
         ]
 
-        struct_edges = derive_relations(document_json, concepts=canonicals)
+        derivation = derive_relations(document_json, concepts=canonicals)
         relations: list[ExtractedRelation] = []
-        for edge in struct_edges:
+        for edge in derivation.edges:
             if edge.relation == "DEFINED_BY":
                 # DEFINED_BY links concept → note; graph sync handles it separately.
                 continue

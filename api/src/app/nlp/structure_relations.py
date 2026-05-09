@@ -1,148 +1,114 @@
 """Derive typed relations from TipTap document structure.
 
-Reads the TipTap JSON tree and emits typed edges between concept pairs
-based on structural co-location:
-  - MENTIONED_TOGETHER: same block
-  - SUBTOPIC_OF: concept under a heading mentioning a parent concept
-  - SIBLING_OF: adjacent list items
-  - REFERENCES: blockRef target
-  - DEFINED_BY: bold-prefixed paragraph (definition pattern)
+Reads ``attrs.blockUid`` (guaranteed present after
+``app.utils.tiptap.ensure_block_uids`` has run on the document at the
+storage boundary). Walks the tree exactly once via
+``walk_structural_blocks``. Matches concepts with word-boundary regex
+via ``find_concept_mentions``.
 
-No LLM. No statistical inference. Pure tree walking + string matching.
+Relation types:
+  - MENTIONED_TOGETHER: both concepts present in the same block
+  - SUBTOPIC_OF: concept in a non-heading block following a heading
+    that names another concept
+  - SIBLING_OF: concepts in adjacent list items under the same parent
+  - REFERENCES: concept in a block that contains a blockRef pointing at
+    another concept
+  - DEFINED_BY: concept appears as a bold span at the start of a
+    paragraph (target="" sentinel — concept→note, not concept→concept)
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterator, Literal
+from typing import Iterator
 
-EdgeRelation = Literal["MENTIONED_TOGETHER", "SUBTOPIC_OF", "SIBLING_OF", "REFERENCES", "DEFINED_BY"]
-
-BlockKind = Literal[
-    "heading", "paragraph", "listItem", "bulletList", "orderedList",
-    "codeBlock", "blockquote", "blockRef", "other",
-]
-
-
-@dataclass(frozen=True, slots=True)
-class BlockInfo:
-    block_id: str
-    kind: BlockKind
-    text: str
-    parent_id: str | None
-    depth: int
+from app.nlp.types import RelationDerivation, StructureEdge
+from app.utils.tiptap import (
+    BlockInfo,
+    extract_plain_text,
+    find_concept_mentions,
+    walk_structural_blocks,
+)
 
 
-def _kind_of(node: dict) -> BlockKind:
-    t = node.get("type", "")
-    if t in {"heading", "paragraph", "listItem", "bulletList", "orderedList",
-             "codeBlock", "blockquote", "blockRef"}:
-        return t  # type: ignore[return-value]
-    return "other"
-
-
-def _text_of(node: dict) -> str:
-    if node.get("type") == "text":
-        return node.get("text", "")
-    parts: list[str] = []
-    for child in node.get("content", []) or []:
-        parts.append(_text_of(child))
-    return "".join(parts)
-
-
-def _walk_blocks(doc: dict, parent_id: str | None = None, depth: int = 0) -> Iterator[BlockInfo]:
-    for node in doc.get("content", []) or []:
-        kind = _kind_of(node)
-        if kind == "other":
+def _list_item_groups(
+    doc: dict[str, object], parent_uid: str | None = None
+) -> Iterator[list[BlockInfo]]:
+    """Yield groups of sibling listItem BlockInfo objects."""
+    content = doc.get("content")
+    if not isinstance(content, list):
+        return
+    for node in content:
+        if not isinstance(node, dict):
             continue
-        block_id = (node.get("attrs") or {}).get("id") or ""
-        if not block_id:
-            continue
-        # Container blocks (lists) yield their children but not themselves.
-        if kind in {"bulletList", "orderedList"}:
-            yield from _walk_blocks(node, parent_id=block_id, depth=depth + 1)
-            continue
-        text = _text_of(node).strip()
-        yield BlockInfo(
-            block_id=block_id,
-            kind=kind,
-            text=text,
-            parent_id=parent_id,
-            depth=depth,
-        )
-        # Recurse into list items so nested content is captured.
-        if kind == "listItem":
-            yield from _walk_blocks(node, parent_id=block_id, depth=depth + 1)
-
-
-@dataclass(frozen=True, slots=True)
-class StructureEdge:
-    source: str
-    target: str
-    relation: EdgeRelation
-
-
-def _concepts_in_text(text: str, concepts: list[str]) -> set[str]:
-    """Return the subset of `concepts` that appear (case-insensitive substring) in `text`."""
-    hay = text.lower()
-    return {c for c in concepts if c.lower() in hay}
-
-
-def _list_item_groups(doc: dict) -> Iterator[list[BlockInfo]]:
-    """Yield groups of sibling list items (children of the same list)."""
-    for node in doc.get("content", []) or []:
-        if node.get("type") in {"bulletList", "orderedList"}:
+        if node.get("type") in {"bulletList", "orderedList", "taskList"}:
             group: list[BlockInfo] = []
-            for li in node.get("content", []) or []:
-                li_id = (li.get("attrs") or {}).get("id") or ""
-                if not li_id:
+            list_attrs = node.get("attrs") if isinstance(node.get("attrs"), dict) else {}
+            list_uid = (list_attrs or {}).get("blockUid") if isinstance(list_attrs, dict) else None
+            for item in node.get("content", []) or []:
+                if not isinstance(item, dict):
                     continue
+                item_attrs = item.get("attrs") if isinstance(item.get("attrs"), dict) else {}
+                item_uid = (item_attrs or {}).get("blockUid") if isinstance(item_attrs, dict) else ""
+                if not isinstance(item_uid, str):
+                    item_uid = ""
                 group.append(BlockInfo(
-                    block_id=li_id,
+                    block_uid=item_uid,
                     kind="listItem",
-                    text=_text_of(li).strip(),
-                    parent_id=(node.get("attrs") or {}).get("id"),
+                    text=extract_plain_text(item).strip(),
+                    parent_uid=list_uid if isinstance(list_uid, str) else None,
                     depth=1,
                 ))
             if group:
                 yield group
-        # Recurse into other containers to find nested lists.
-        for child in node.get("content", []) or []:
-            if isinstance(child, dict) and child.get("content"):
-                yield from _list_item_groups(child)
+        sub = node.get("content")
+        if isinstance(sub, list):
+            yield from _list_item_groups(node)
 
 
-def _blockref_targets(doc: dict) -> Iterator[tuple[str, str]]:
-    """Yield (source_block_text, refTargetText) for every blockRef in the doc."""
-    for node in doc.get("content", []) or []:
-        node_text = _text_of(node)
-        for sub in (node.get("content", []) or []):
+def _blockref_targets(doc: dict[str, object]) -> Iterator[tuple[str, str]]:
+    """Yield (source_block_text, refTargetText) for every blockRef."""
+    content = doc.get("content")
+    if not isinstance(content, list):
+        return
+    for node in content:
+        if not isinstance(node, dict):
+            continue
+        node_text = extract_plain_text(node)
+        for sub in node.get("content", []) or []:
             if isinstance(sub, dict) and sub.get("type") == "blockRef":
-                target = (sub.get("attrs") or {}).get("refTargetText", "")
-                if target:
+                attrs = sub.get("attrs") if isinstance(sub.get("attrs"), dict) else {}
+                target = (attrs or {}).get("refTargetText", "")
+                if isinstance(target, str) and target:
                     yield (node_text, target)
-        # Recurse
         if node.get("content"):
             yield from _blockref_targets(node)
 
 
-def _bold_prefix_concepts(doc: dict, concepts: list[str]) -> set[str]:
+def _bold_prefix_concepts(
+    doc: dict[str, object], concepts: list[str]
+) -> set[str]:
     """Concepts that appear as a bold span at the start of a paragraph."""
     out: set[str] = set()
-    for node in doc.get("content", []) or []:
+    content = doc.get("content")
+    if not isinstance(content, list):
+        return out
+    for node in content:
+        if not isinstance(node, dict):
+            continue
         if node.get("type") != "paragraph":
-            if node.get("content"):
+            sub = node.get("content")
+            if isinstance(sub, list):
                 out |= _bold_prefix_concepts(node, concepts)
             continue
-        children = node.get("content", []) or []
+        children = node.get("content") or []
         if not children:
             continue
         first = children[0]
-        if first.get("type") != "text":
+        if not isinstance(first, dict) or first.get("type") != "text":
             continue
         marks = first.get("marks") or []
-        if not any(m.get("type") == "bold" for m in marks):
+        if not any(isinstance(m, dict) and m.get("type") == "bold" for m in marks):
             continue
-        bold_text = first.get("text", "").strip().lower()
+        bold_text = str(first.get("text", "")).strip().lower()
         for c in concepts:
             if c.lower() == bold_text:
                 out.add(c)
@@ -150,32 +116,32 @@ def _bold_prefix_concepts(doc: dict, concepts: list[str]) -> set[str]:
 
 
 def derive_relations(
-    document_json: dict,
-    *,
-    concepts: list[str],
-) -> list[StructureEdge]:
+    document_json: dict[str, object], *, concepts: list[str]
+) -> RelationDerivation:
     """Walk TipTap blocks and emit typed structure edges between concepts.
 
-    MENTIONED_TOGETHER: every pair of concepts in the same block (both directions).
-    SUBTOPIC_OF: concept in a non-heading block following a heading that names another concept.
-    SIBLING_OF: concepts in adjacent list items under the same parent list (both directions).
-    REFERENCES: concept in a block containing a blockRef, pointing to refTargetText concepts.
-    DEFINED_BY: concept appearing as a bold span at paragraph start; target="" sentinel.
+    Returns a ``RelationDerivation`` carrying the edges plus the count
+    of distinct structural blocks where ≥1 concept was matched
+    (used by the health metric).
     """
     if not concepts:
-        return []
-    blocks = list(_walk_blocks(document_json))
-    edges: set[StructureEdge] = set()
+        return RelationDerivation(edges=[], distinct_blocks_with_concepts=0)
 
+    edges: set[StructureEdge] = set()
+    distinct_blocks_with_concepts = 0
     current_heading_concepts: set[str] = set()
-    for block in blocks:
-        present = _concepts_in_text(block.text, concepts)
-        # Emit MENTIONED_TOGETHER for every pair in this block (both directions).
-        listed = list(present)
+
+    for block in walk_structural_blocks(document_json):
+        present = find_concept_mentions(block.text, concepts)
+        if present:
+            distinct_blocks_with_concepts += 1
+
+        listed = sorted(present)
         for i, a in enumerate(listed):
             for b in listed[i + 1:]:
                 edges.add(StructureEdge(a, b, "MENTIONED_TOGETHER"))
                 edges.add(StructureEdge(b, a, "MENTIONED_TOGETHER"))
+
         if block.kind == "heading":
             current_heading_concepts = present
         else:
@@ -187,27 +153,30 @@ def derive_relations(
     # SIBLING_OF: concepts in adjacent list items under the same list.
     for group in _list_item_groups(document_json):
         for i, a_block in enumerate(group):
-            a_concepts = _concepts_in_text(a_block.text, concepts)
+            a_concepts = find_concept_mentions(a_block.text, concepts)
             for b_block in group[i + 1:]:
-                b_concepts = _concepts_in_text(b_block.text, concepts)
+                b_concepts = find_concept_mentions(b_block.text, concepts)
                 for a in a_concepts:
                     for b in b_concepts:
                         if a != b:
                             edges.add(StructureEdge(a, b, "SIBLING_OF"))
                             edges.add(StructureEdge(b, a, "SIBLING_OF"))
 
-    # REFERENCES: concept appearing in a block that contains a blockRef.
+    # REFERENCES: concept in a block that contains a blockRef.
     for source_text, target_text in _blockref_targets(document_json):
-        source_concepts = _concepts_in_text(source_text, concepts)
-        target_concepts = _concepts_in_text(target_text, concepts)
+        source_concepts = find_concept_mentions(source_text, concepts)
+        target_concepts = find_concept_mentions(target_text, concepts)
         for s in source_concepts:
             for t in target_concepts:
                 if s != t:
                     edges.add(StructureEdge(s, t, "REFERENCES"))
 
     # DEFINED_BY: concept appears as a bold span at start of a paragraph.
-    # source = concept, target = "" sentinel (note-level context, not concept→concept).
     for c in _bold_prefix_concepts(document_json, concepts):
         edges.add(StructureEdge(c, "", "DEFINED_BY"))
 
-    return sorted(edges, key=lambda e: (e.relation, e.source, e.target))
+    sorted_edges = sorted(edges, key=lambda e: (e.relation, e.source, e.target))
+    return RelationDerivation(
+        edges=sorted_edges,
+        distinct_blocks_with_concepts=distinct_blocks_with_concepts,
+    )
