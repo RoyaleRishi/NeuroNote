@@ -11,7 +11,7 @@ from app.db.tenant import validate_schema_name
 from app.db.models.block import Block
 from app.db.repositories.note_repository import NoteRepository
 from app.nlp.pipeline import NoteNlpPipeline
-from app.nlp.types import BlockTextInput
+from app.nlp.types import BlockTextInput, NoteExtractionResult
 from app.services.graph_sync_service import (
     GraphSyncPayload,
     GraphSyncService,
@@ -20,6 +20,26 @@ from shared.contracts.python.v1.process import ExtractionSummary, ProcessNoteReq
 
 _DEFAULT_GRAPH_NAME = "neuronote"
 _LOGGER = logging.getLogger(__name__)
+
+
+def _maybe_log_zero_relations_warning(result: NoteExtractionResult) -> None:
+    """Emit a warning when relation extraction looks suspiciously empty.
+
+    Heuristic: warn when the note has ≥3 concepts spread across ≥3
+    distinct structural blocks (so the algorithm had something to chew
+    on) yet emitted zero concept→concept relations. Catches regressions
+    of the same shape as the deterministic-refactor blockUid contract
+    drift.
+    """
+    relation_count = len(result.relations)
+    entity_count = len(result.entities)
+    blocks = result.distinct_blocks_with_concepts
+    if relation_count == 0 and entity_count >= 3 and blocks >= 3:
+        _LOGGER.warning(
+            "Suspicious extraction: note_id=%s relation_count=0 entity_count=%d "
+            "distinct_blocks_with_concepts=%d",
+            result.note_id, entity_count, blocks,
+        )
 
 
 class NoteNotFoundError(RuntimeError):
@@ -111,6 +131,8 @@ class NoteProcessingService:
                     document_json=snapshot.document_json,
                     content_hash=snapshot.content_hash,
                 )
+
+                _maybe_log_zero_relations_warning(result)
 
                 # Persist newly-canonical concepts (with embeddings) so future
                 # notes find them via NN — closing the normalisation loop.
