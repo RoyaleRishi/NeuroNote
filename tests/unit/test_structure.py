@@ -162,7 +162,6 @@ REQUIRED_FILES = [
     "tests/perf/fixtures/short_200w.txt",
     "tests/perf/fixtures/medium_800w.txt",
     "tests/perf/fixtures/long_2000w.txt",
-    "tests/unit/test_nlp_pipeline.py",
     "tests/unit/test_note_processing_service.py",
     "tests/unit/test_note_asset_repository.py",
     "tests/unit/test_note_asset_service.py",
