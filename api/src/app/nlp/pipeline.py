@@ -131,6 +131,7 @@ class NoteNlpPipeline:
             embedding=embedding,
             entity_mentions=[],
             summary="",
+            distinct_blocks_with_concepts=derivation.distinct_blocks_with_concepts,
         )
 
         _EXTRACTION_CACHE[content_hash] = result
