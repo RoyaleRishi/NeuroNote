@@ -29,6 +29,23 @@ class ExtractedRelation:
     confidence: float
 
 
+@dataclass(frozen=True, slots=True)
+class StructureEdge:
+    """A single structural edge between two concept slugs derived from block layout."""
+
+    source: str
+    target: str
+    relation: str  # one of MENTIONED_TOGETHER | SUBTOPIC_OF | SIBLING_OF | REFERENCES | DEFINED_BY
+
+
+@dataclass(frozen=True, slots=True)
+class RelationDerivation:
+    """Output of the structural relation derivation stage."""
+
+    edges: list[StructureEdge]
+    distinct_blocks_with_concepts: int
+
+
 @dataclass(slots=True)
 class ExtractedEntityMention:
     entity_id: str
@@ -55,6 +72,7 @@ class NoteExtractionResult:
     embedding: list[float] | None
     entity_mentions: list[ExtractedEntityMention] = field(default_factory=list)
     summary: str = ""
+    distinct_blocks_with_concepts: int = 0  # populated by structure_relations stage; default keeps existing callers intact
 
     def with_note_id(self, note_id: str) -> "NoteExtractionResult":
         """Return a copy of this result with a different note_id (for cache hits)."""
