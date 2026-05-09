@@ -30,6 +30,19 @@ class ExtractedRelation:
 
 
 @dataclass(frozen=True, slots=True)
+class ConceptSurface:
+    """A concept with both its in-document surface form and its canonical identity.
+
+    The matcher uses ``surface`` against the document text (guaranteed
+    to appear because kbir/YAKE extracted it from there). Edges are
+    emitted keyed by ``canonical`` so cross-note normalisation holds.
+    """
+
+    surface: str
+    canonical: str
+
+
+@dataclass(frozen=True, slots=True)
 class StructureEdge:
     """A single structural edge between two concept slugs derived from block layout."""
 

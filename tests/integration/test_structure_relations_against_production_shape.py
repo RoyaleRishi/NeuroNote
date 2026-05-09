@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from app.nlp.structure_relations import derive_relations
+from app.nlp.types import ConceptSurface
 from app.utils.tiptap import walk_structural_blocks
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "notes"
@@ -23,15 +24,19 @@ def _load(name: str) -> dict:
         return json.load(f)
 
 
-def _all_concepts(doc: dict) -> list[str]:
-    """Collect every distinct text token (>=4 chars) appearing in the doc."""
+def _all_concepts(doc: dict) -> list[ConceptSurface]:
+    """Collect every distinct text token (>=4 chars) appearing in the doc.
+
+    In these fixtures surface == canonical (no cross-note normalisation
+    has been applied), so we use identity ConceptSurfaces.
+    """
     seen: set[str] = set()
     for block in walk_structural_blocks(doc):
         for token in block.text.split():
             token = token.strip(",.;:()[]{}!?")
             if len(token) >= 4:
                 seen.add(token)
-    return sorted(seen)
+    return [ConceptSurface(surface=s, canonical=s) for s in sorted(seen)]
 
 
 @pytest.mark.parametrize("fixture", [

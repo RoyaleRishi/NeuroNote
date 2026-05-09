@@ -20,6 +20,7 @@ from app.nlp.preprocessor import preprocess_content
 from app.nlp.semantic_embeddings import build_semantic_embedding
 from app.nlp.structure_relations import derive_relations
 from app.nlp.types import (
+    ConceptSurface,
     ExtractedEntity,
     ExtractedRelation,
     NoteExtractionResult,
@@ -79,7 +80,12 @@ class NoteNlpPipeline:
         preprocessed = preprocess_content(composed)
         spans = extract_concepts(preprocessed)
         norm = normalise_concepts(session, spans, embed=embedder)
-        canonicals = [c.canonical_text for c in norm.concepts]
+        # Build ConceptSurface list: match on surface (verbatim in-document
+        # span from kbir/YAKE), but key edges by canonical (cross-note identity).
+        concept_surfaces = [
+            ConceptSurface(surface=c.raw_text, canonical=c.canonical_text)
+            for c in norm.concepts
+        ]
 
         entities: list[ExtractedEntity] = [
             ExtractedEntity(
@@ -91,7 +97,7 @@ class NoteNlpPipeline:
             for c in norm.concepts
         ]
 
-        derivation = derive_relations(document_json, concepts=canonicals)
+        derivation = derive_relations(document_json, concepts=concept_surfaces)
         relations: list[ExtractedRelation] = []
         for edge in derivation.edges:
             if edge.relation == "DEFINED_BY":

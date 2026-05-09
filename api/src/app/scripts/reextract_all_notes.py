@@ -63,7 +63,8 @@ def reextract_all(schema_name: str) -> tuple[int, int]:
     total = len(notes)
     _LOGGER.info("Re-extracting %d notes in schema %s", total, schema_name)
 
-    service = NoteProcessingService(schema_name=schema_name)
+    graph_name = f"nn_{schema_name}"
+    service = NoteProcessingService(schema_name=schema_name, graph_name=graph_name)
     processed = 0
     failed = 0
     for index, (note_id, content_text, content_hash, updated_at) in enumerate(notes, start=1):

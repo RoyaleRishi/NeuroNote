@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from app.nlp.types import RelationDerivation, StructureEdge
+from app.nlp.types import ConceptSurface, RelationDerivation, StructureEdge
 from app.utils.tiptap import (
     BlockInfo,
     extract_plain_text,
@@ -84,9 +84,10 @@ def _blockref_targets(doc: dict[str, object]) -> Iterator[tuple[str, str]]:
 
 
 def _bold_prefix_concepts(
-    doc: dict[str, object], concepts: list[str]
+    doc: dict[str, object], concepts: list[ConceptSurface]
 ) -> set[str]:
-    """Concepts that appear as a bold span at the start of a paragraph."""
+    """Return canonical IDs of concepts whose surface appears as a bold span
+    at the start of a paragraph."""
     out: set[str] = set()
     content = doc.get("content")
     if not isinstance(content, list):
@@ -110,15 +111,22 @@ def _bold_prefix_concepts(
             continue
         bold_text = str(first.get("text", "")).strip().lower()
         for c in concepts:
-            if c.lower() == bold_text:
-                out.add(c)
+            # Match on surface form; emit by canonical identity.
+            if c.surface.lower() == bold_text:
+                out.add(c.canonical)
     return out
 
 
 def derive_relations(
-    document_json: dict[str, object], *, concepts: list[str]
+    document_json: dict[str, object], *, concepts: list[ConceptSurface]
 ) -> RelationDerivation:
     """Walk TipTap blocks and emit typed structure edges between concepts.
+
+    Matching is done against each concept's ``surface`` (the verbatim
+    span found by kbir/YAKE in this document), while edges are keyed by
+    ``canonical`` (the cross-note normalised identity). Two surfaces
+    that share the same canonical are treated as the same logical concept
+    and will not produce a self-pair MENTIONED_TOGETHER.
 
     Returns a ``RelationDerivation`` carrying the edges plus the count
     of distinct structural blocks where ≥1 concept was matched
@@ -127,53 +135,66 @@ def derive_relations(
     if not concepts:
         return RelationDerivation(edges=[], distinct_blocks_with_concepts=0)
 
+    # surface → canonical mapping; last writer wins if two ConceptSurfaces
+    # share the same surface string (rare after upstream dedup).
+    surface_to_canonical: dict[str, str] = {c.surface: c.canonical for c in concepts}
+    surfaces: list[str] = list(surface_to_canonical.keys())
+
     edges: set[StructureEdge] = set()
     distinct_blocks_with_concepts = 0
-    current_heading_concepts: set[str] = set()
+    current_heading_canonicals: set[str] = set()
 
     for block in walk_structural_blocks(document_json):
-        present = find_concept_mentions(block.text, concepts)
-        if present:
+        present_surfaces = find_concept_mentions(block.text, surfaces)
+        # Translate to canonicals; set automatically collapses synonyms.
+        present_canonicals = {surface_to_canonical[s] for s in present_surfaces}
+
+        if present_canonicals:
             distinct_blocks_with_concepts += 1
 
-        listed = sorted(present)
+        listed = sorted(present_canonicals)
         for i, a in enumerate(listed):
             for b in listed[i + 1:]:
+                # Only distinct canonicals — same canonical → same concept.
                 edges.add(StructureEdge(a, b, "MENTIONED_TOGETHER"))
                 edges.add(StructureEdge(b, a, "MENTIONED_TOGETHER"))
 
         if block.kind == "heading":
-            current_heading_concepts = present
+            current_heading_canonicals = present_canonicals
         else:
-            for child in present:
-                for parent in current_heading_concepts:
+            for child in present_canonicals:
+                for parent in current_heading_canonicals:
                     if child != parent:
                         edges.add(StructureEdge(child, parent, "SUBTOPIC_OF"))
 
     # SIBLING_OF: concepts in adjacent list items under the same list.
     for group in _list_item_groups(document_json):
         for i, a_block in enumerate(group):
-            a_concepts = find_concept_mentions(a_block.text, concepts)
+            a_surfaces = find_concept_mentions(a_block.text, surfaces)
+            a_canonicals = {surface_to_canonical[s] for s in a_surfaces}
             for b_block in group[i + 1:]:
-                b_concepts = find_concept_mentions(b_block.text, concepts)
-                for a in a_concepts:
-                    for b in b_concepts:
+                b_surfaces = find_concept_mentions(b_block.text, surfaces)
+                b_canonicals = {surface_to_canonical[s] for s in b_surfaces}
+                for a in a_canonicals:
+                    for b in b_canonicals:
                         if a != b:
                             edges.add(StructureEdge(a, b, "SIBLING_OF"))
                             edges.add(StructureEdge(b, a, "SIBLING_OF"))
 
     # REFERENCES: concept in a block that contains a blockRef.
     for source_text, target_text in _blockref_targets(document_json):
-        source_concepts = find_concept_mentions(source_text, concepts)
-        target_concepts = find_concept_mentions(target_text, concepts)
-        for s in source_concepts:
-            for t in target_concepts:
+        source_surfaces = find_concept_mentions(source_text, surfaces)
+        source_canonicals = {surface_to_canonical[s] for s in source_surfaces}
+        target_surfaces = find_concept_mentions(target_text, surfaces)
+        target_canonicals = {surface_to_canonical[s] for s in target_surfaces}
+        for s in source_canonicals:
+            for t in target_canonicals:
                 if s != t:
                     edges.add(StructureEdge(s, t, "REFERENCES"))
 
-    # DEFINED_BY: concept appears as a bold span at start of a paragraph.
-    for c in _bold_prefix_concepts(document_json, concepts):
-        edges.add(StructureEdge(c, "", "DEFINED_BY"))
+    # DEFINED_BY: concept surface appears as a bold span at start of a paragraph.
+    for canonical in _bold_prefix_concepts(document_json, concepts):
+        edges.add(StructureEdge(canonical, "", "DEFINED_BY"))
 
     sorted_edges = sorted(edges, key=lambda e: (e.relation, e.source, e.target))
     return RelationDerivation(
