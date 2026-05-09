@@ -49,6 +49,23 @@ def _cosine(a: Iterable[float], b: Iterable[float]) -> float:
     return dot / (na * nb)
 
 
+def _to_vector(raw: object) -> list[float]:
+    """Coerce a pgvector column value to a list[float].
+
+    Without a pgvector psycopg3 adapter registered, the column is returned
+    as the literal string ``"[0.1,0.2,...]"``. Parse that into floats.
+    Lists/tuples (already-decoded) pass through.
+    """
+    if isinstance(raw, str):
+        s = raw.strip()
+        if s.startswith("[") and s.endswith("]"):
+            s = s[1:-1]
+        if not s:
+            return []
+        return [float(part) for part in s.split(",")]
+    return [float(v) for v in raw]  # type: ignore[arg-type]
+
+
 def normalise_concepts(
     session: Session,
     spans: list[ConceptSpan],
@@ -66,7 +83,7 @@ def normalise_concepts(
             "WHERE embedding IS NOT NULL"
         )
     ).all()
-    existing: list[tuple[str, list[float]]] = [(r[0], list(r[1])) for r in rows]
+    existing: list[tuple[str, list[float]]] = [(r[0], _to_vector(r[1])) for r in rows]
 
     out_concepts: list[NormalisedConcept] = []
     out_edges: list[SynonymEdge] = []
