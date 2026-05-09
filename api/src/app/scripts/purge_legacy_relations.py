@@ -28,6 +28,17 @@ LEGACY_EDGE_TYPES: list[str] = [
 _LOG = logging.getLogger(__name__)
 
 
+def _prepare_age_session(session) -> None:
+    """Load AGE and set the search_path so cypher() resolves.
+
+    Must run inside every session before any ag_catalog.cypher call —
+    LOAD is per-connection state and ``cypher`` is unqualified inside
+    the $$...$$ block, so the search_path must include ag_catalog.
+    """
+    session.execute(text("LOAD 'age'"))
+    session.execute(text('SET search_path = ag_catalog, "$user", public'))
+
+
 def _purge_for_tenant(schema_name: str) -> dict[str, int]:
     """Run the purge against one tenant graph; return {edge_type: deleted_count}."""
     graph_name = f"nn_{schema_name}"
@@ -38,6 +49,7 @@ def _purge_for_tenant(schema_name: str) -> dict[str, int]:
     # First: pre-purge tally (per type) for the comparison check.
     with factory() as session:
         bind_session_to_tenant(session, schema_name)
+        _prepare_age_session(session)
         for edge_type in LEGACY_EDGE_TYPES:
             sql = (
                 "SELECT * FROM ag_catalog.cypher("
@@ -54,6 +66,7 @@ def _purge_for_tenant(schema_name: str) -> dict[str, int]:
     # Then: delete.
     with factory() as session:
         bind_session_to_tenant(session, schema_name)
+        _prepare_age_session(session)
         sql = (
             "SELECT * FROM ag_catalog.cypher("
             f"'{graph_name}', "
@@ -66,6 +79,7 @@ def _purge_for_tenant(schema_name: str) -> dict[str, int]:
     # Verify post-purge: every type should report 0.
     with factory() as session:
         bind_session_to_tenant(session, schema_name)
+        _prepare_age_session(session)
         for edge_type in LEGACY_EDGE_TYPES:
             sql = (
                 "SELECT * FROM ag_catalog.cypher("
