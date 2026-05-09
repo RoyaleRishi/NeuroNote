@@ -93,6 +93,11 @@ class GraphRepository:
             f"$${query}$$"
             ") AS (value ag_catalog.agtype)"
         )
+        # psycopg3 still scans the SQL for %-style placeholders even with
+        # parameters=None, so a literal "%" inside user content (e.g. "25%
+        # tuition") trips "incomplete placeholder". Escape to "%%" so the
+        # driver passes a single "%" through to PostgreSQL untouched.
+        sql = sql.replace("%", "%%")
         conn = self._session.connection()
         return conn.exec_driver_sql(sql, None).all()
 
