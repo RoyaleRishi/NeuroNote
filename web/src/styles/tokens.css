@@ -116,6 +116,9 @@
   --graph-label-default:         #6c6f75;
   --graph-label-highlight:       #7a3d0a;
 
+  /* Overlay scrim used for modal/dialog backgrounds. */
+  --overlay-scrim: rgba(15, 23, 42, 0.45);
+
   /* Tag chip colors (deterministic per-tag palette). */
   --tag-blue-bg:   #dbeafe; --tag-blue-text:   #1e40af;
   --tag-green-bg:  #dcfce7; --tag-green-text:  #15803d;

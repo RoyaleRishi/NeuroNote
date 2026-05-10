@@ -37,8 +37,8 @@ export function WebGPUCheck({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgb(15 23 42 / 45%)",
-        zIndex: 1000,
+        background: "var(--overlay-scrim)",
+        zIndex: "var(--z-modal)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -66,7 +66,7 @@ export function WebGPUCheck({
           id="webgpu-check-title"
           style={{
             margin: 0,
-            fontSize: "1.1rem",
+            fontSize: "var(--text-lg)",
             color: "var(--text-strong)",
           }}
         >
