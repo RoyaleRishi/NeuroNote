@@ -178,24 +178,11 @@ export function UserMenu({ user }: UserMenuProps) {
       {isOpen && (
         <div className="user-menu-dropdown">
           {/* User identity */}
-          <div
-            className="user-menu-section"
-            style={{ display: "flex", alignItems: "center", gap: "10px" }}
-          >
+          <div className="user-menu-section user-menu-identity">
             <AvatarCircle avatarUrl={user.avatar_url} label={label} initials={initials} size={32} />
             <div>
-              <div
-                style={{
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  color: "var(--text-strong)",
-                }}
-              >
-                {label}
-              </div>
-              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-                {user.email}
-              </div>
+              <div className="user-menu-identity-name">{label}</div>
+              <div className="user-menu-identity-email">{user.email}</div>
             </div>
           </div>
 
@@ -222,13 +209,7 @@ export function UserMenu({ user }: UserMenuProps) {
             </div>
 
             {llmMode === "edge" && (
-              <p
-                style={{
-                  margin: "6px 0 0",
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-muted)",
-                }}
-              >
+              <p className="user-menu-mode-hint">
                 Runs locally in your browser · no API key needed
               </p>
             )}
@@ -237,36 +218,33 @@ export function UserMenu({ user }: UserMenuProps) {
               <div className="user-menu-cloud-fields">
                 <input
                   type="password"
-                  className="notes-filter-input"
+                  className="notes-filter-input user-menu-cloud-input"
                   placeholder="API Key (leave blank to keep current)"
                   value={cloudDraft.llm_api_key}
                   onChange={(e) =>
                     setCloudDraft((d) => ({ ...d, llm_api_key: e.target.value }))
                   }
-                  style={{ fontSize: "var(--text-xs)" }}
                   aria-label="API Key"
                 />
                 <input
                   type="text"
-                  className="notes-filter-input"
+                  className="notes-filter-input user-menu-cloud-input"
                   placeholder="Base URL"
                   value={cloudDraft.llm_base_url}
                   onChange={(e) =>
                     setCloudDraft((d) => ({ ...d, llm_base_url: e.target.value }))
                   }
-                  style={{ fontSize: "var(--text-xs)" }}
                   aria-label="Base URL"
                 />
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div className="user-menu-cloud-input-row">
                   <input
                     type="text"
-                    className="notes-filter-input"
+                    className="notes-filter-input user-menu-cloud-input"
                     placeholder="Model"
                     value={cloudDraft.llm_model}
                     onChange={(e) =>
                       setCloudDraft((d) => ({ ...d, llm_model: e.target.value }))
                     }
-                    style={{ flex: 1, fontSize: "var(--text-xs)" }}
                     aria-label="Model"
                   />
                   <button
@@ -281,11 +259,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 {testStatus && (
                   <p
                     role={testStatus.ok ? "status" : "alert"}
-                    style={{
-                      margin: "4px 0 0",
-                      fontSize: "var(--text-xs)",
-                      color: testStatus.ok ? "var(--text-muted)" : "var(--danger)",
-                    }}
+                    className={`user-menu-test-status${testStatus.ok ? "" : " error"}`}
                   >
                     {testStatus.message}
                   </p>
@@ -296,46 +270,23 @@ export function UserMenu({ user }: UserMenuProps) {
 
           {/* Confidence threshold */}
           <div className="user-menu-section">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: "6px",
-              }}
-            >
-              <span className="user-menu-label" style={{ marginBottom: 0 }}>
-                Confidence Threshold
-              </span>
-              <span
-                style={{
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  color: "var(--accent)",
-                }}
-              >
+            <div className="user-menu-confidence-row">
+              <span className="user-menu-label">Confidence Threshold</span>
+              <span className="user-menu-confidence-value">
                 {Math.round(confidenceThreshold * 100)}%
               </span>
             </div>
             <input
               type="range"
+              className="user-menu-confidence-slider"
               min={0.5}
               max={1}
               step={0.05}
               value={confidenceThreshold}
-              style={{ width: "100%", accentColor: "var(--accent)" }}
               onChange={(e) => handleConfidenceChange(Number(e.target.value))}
               aria-label="Confidence threshold"
             />
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-muted)",
-                marginTop: "2px",
-              }}
-            >
+            <div className="user-menu-confidence-bounds">
               <span>50%</span>
               <span>100%</span>
             </div>
