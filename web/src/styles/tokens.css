@@ -110,4 +110,9 @@
   --graph-node-highlight:   #e07b1a;
   --graph-edge-dim:         rgba(139, 162, 150, 0.15);
   --graph-node-dim-opacity: 0.2;
+  --graph-node-stroke-default:   #ffffff;
+  --graph-node-stroke-root:      #0f4e39;
+  --graph-node-stroke-highlight: #b85e10;
+  --graph-label-default:         #6c6f75;
+  --graph-label-highlight:       #7a3d0a;
 }

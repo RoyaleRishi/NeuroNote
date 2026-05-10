@@ -112,6 +112,11 @@ export function D3GraphCanvas({
     const highlightColor = getCssVar(GRAPH_CSS_VARS.nodeHighlight, "#e07b1a");
     const edgeDimColor = getCssVar(GRAPH_CSS_VARS.edgeDim, "rgba(139,162,150,0.15)");
     const nodeDimOpacity = parseFloat(getCssVar(GRAPH_CSS_VARS.nodeDimOpacity, "0.2")) || 0.2;
+    const strokeDefault = getCssVar(GRAPH_CSS_VARS.nodeStrokeDefault, "#ffffff");
+    const strokeRoot = getCssVar(GRAPH_CSS_VARS.nodeStrokeRoot, "#0f4e39");
+    const strokeHighlight = getCssVar(GRAPH_CSS_VARS.nodeStrokeHighlight, "#b85e10");
+    const labelDefault = getCssVar(GRAPH_CSS_VARS.labelDefault, "#6c6f75");
+    const labelHighlight = getCssVar(GRAPH_CSS_VARS.labelHighlight, "#7a3d0a");
 
     // Build adjacency map for hover interaction
     const adjacency = new Map<string, Set<string>>();
@@ -161,7 +166,7 @@ export function D3GraphCanvas({
         .append("circle")
         .attr("r", radius)
         .attr("fill", fillColor)
-        .attr("stroke", isHighlight ? "#b85e10" : isRoot ? "#0f4e39" : "#fff")
+        .attr("stroke", isHighlight ? strokeHighlight : isRoot ? strokeRoot : strokeDefault)
         .attr("stroke-width", isHighlight ? 3 : isRoot ? 2 : 1);
 
       d3.select(this)
@@ -170,7 +175,7 @@ export function D3GraphCanvas({
         .attr("x", radius + 4)
         .attr("font-size", isHighlight ? "11" : "10")
         .attr("font-weight", isHighlight ? "600" : "normal")
-        .attr("fill", isHighlight ? "#7a3d0a" : "#6c6f75")
+        .attr("fill", isHighlight ? labelHighlight : labelDefault)
         .attr("pointer-events", "none")
         .text(
           d.label.length > GRAPH_SIZES.labelMaxChars
