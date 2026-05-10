@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { fetchConceptInsight } from "../../lib/api-client";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 import type {
   ConceptInsightResponse,
   ConceptLearningLink,
@@ -39,25 +40,7 @@ export function ConceptInsightPanel({
       .finally(() => setLoading(false));
   }, [baseUrl, node.label]);
 
-  // Close on Escape
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
-  // Close on click outside
-  useEffect(() => {
-    function handleOutside(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [onClose]);
+  useDismissable(panelRef, true, onClose);
 
   return (
     <div className="concept-insight-overlay" role="dialog" aria-modal="true" aria-label={`Insight: ${node.label}`}>

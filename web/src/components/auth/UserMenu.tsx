@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logoutUser, testLlmConnection, updatePreferences } from "../../lib/api-client";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 import { usePreferences } from "../../lib/hooks/usePreferences";
 import type { UserProfile } from "../../../../shared/contracts/ts/v1/auth";
 
@@ -100,27 +101,7 @@ export function UserMenu({ user }: UserMenuProps) {
     }
   }, [isOpen, prefs]);
 
-  /* Close on outside click */
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleMouseDown = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [isOpen]);
-
-  /* Close on Escape */
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+  useDismissable(wrapperRef, isOpen, () => setIsOpen(false));
 
   const handleModeChange = useCallback(
     async (mode: "edge" | "cloud") => {
