@@ -467,7 +467,7 @@ export function NoteEditor({
         fetchStatus: async () => {
           const jobId = activeJobIdRef.current;
           if (!jobId) {
-            return { job_id: "", status: "failed" as const, created_at: "", updated_at: "" };
+            return { job_id: "", status: "failed" as const, created_at: "", updated_at: "", error: null, extraction_summary: null };
           }
           const result = await fetchProcessingStatus(baseUrl, jobId);
           if (result.status === "failed" && result.error) {

@@ -158,6 +158,7 @@ describe("NotesWorkspace", () => {
       note_id: "note-new",
       saved_at: "2026-03-12T20:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -174,8 +175,8 @@ describe("NotesWorkspace", () => {
   });
 
   it("guards against duplicate note creation on rapid repeated clicks", async () => {
-    let resolveSave!: (value: { note_id: string; saved_at: string; version: number }) => void;
-    const pendingSave = new Promise<{ note_id: string; saved_at: string; version: number }>(
+    let resolveSave!: (value: { note_id: string; saved_at: string; version: number; content_hash: string }) => void;
+    const pendingSave = new Promise<{ note_id: string; saved_at: string; version: number; content_hash: string }>(
       (resolve) => {
         resolveSave = resolve;
       },
@@ -205,6 +206,7 @@ describe("NotesWorkspace", () => {
       note_id: "note-new",
       saved_at: "2026-03-12T20:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
 
     await waitFor(() => {
@@ -306,11 +308,13 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-a",
       saved_at: "2026-03-12T20:01:00Z",
       version: 2,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -353,6 +357,7 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockRejectedValue(new ApiClientError(409));
 
@@ -509,6 +514,7 @@ describe("NotesWorkspace", () => {
       note_id: string;
       saved_at: string;
       version: number;
+      content_hash: string;
     }>((_resolve, reject) => {
       rejectSave = reject;
     });
@@ -528,6 +534,7 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockReturnValue(pendingSave);
 
@@ -644,6 +651,7 @@ describe("NotesWorkspace", () => {
       note_id: "note-new",
       saved_at: "2026-03-12T20:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -683,11 +691,13 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-a",
       saved_at: "2026-03-12T20:01:00Z",
       version: 2,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -723,11 +733,13 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-a",
       saved_at: "2026-03-12T20:01:00Z",
       version: 2,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);

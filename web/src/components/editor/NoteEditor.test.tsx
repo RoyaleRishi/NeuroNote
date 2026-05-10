@@ -96,11 +96,13 @@ describe("NoteEditor", () => {
       content_text: "Loaded text",
       updated_at: "2026-03-01T13:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-1",
       saved_at: "2026-03-01T13:00:01Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-1",
@@ -127,11 +129,13 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-2",
       saved_at: "2026-03-01T13:01:01Z",
       version: 2,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-2",
@@ -172,11 +176,13 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-title-1",
       saved_at: "2026-03-01T13:01:01Z",
       version: 2,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-title-1",
@@ -218,6 +224,7 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:02:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockRejectedValue(new Error("save failed"));
     vi.mocked(queueNoteProcessing).mockResolvedValue({
@@ -257,11 +264,13 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-tab-1",
       saved_at: "2026-03-01T13:00:01Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(fetchLocalGraph).mockResolvedValue({
       nodes: [],
@@ -302,11 +311,13 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:03:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-meta-1",
       saved_at: "2026-03-01T13:03:01Z",
       version: 2,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-meta-1",
