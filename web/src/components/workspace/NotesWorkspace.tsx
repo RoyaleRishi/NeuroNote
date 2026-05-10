@@ -6,6 +6,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { NoteEditor } from "../editor/NoteEditor";
 import { GlobalGraphPanel } from "../graph/GlobalGraphPanel";
 import { BacklinksModal } from "./BacklinksModal";
+import { NoteContextMenu } from "./NoteContextMenu";
 import { InputModal } from "../ui/InputModal";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SkeletonNoteList } from "../ui/Skeleton";
@@ -231,7 +232,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const createInFlightRef = useRef(false);
-  const contextMenuRef = useRef<HTMLUListElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const filtersInitializedRef = useRef(false);
 
   // ── Auth ──
@@ -1467,39 +1468,20 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
       ) : null}
 
       {contextMenu ? (
-        <ul
-          ref={contextMenuRef}
-          className="note-context-menu"
-          role="menu"
-          aria-label="Note actions"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <li>
-            <button type="button" role="menuitem" onClick={() => void handleRenameNote(contextMenu.noteId)}>
-              Rename note
-            </button>
-          </li>
-          <li>
-            <button type="button" role="menuitem" onClick={() => void handleTogglePinnedNote(contextMenu.noteId)}>
-              {contextNote?.is_pinned ? "Unpin note" : "Pin note"}
-            </button>
-          </li>
-          <li>
-            <button type="button" role="menuitem" onClick={() => void handleToggleArchivedNote(contextMenu.noteId)}>
-              {contextNote?.is_archived ? "Unarchive note" : "Archive note"}
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              onClick={() => handleDeleteClick(contextMenu.noteId)}
-            >
-              Delete note
-            </button>
-          </li>
-        </ul>
+        <div ref={contextMenuRef} style={{ display: "contents" }}>
+          <NoteContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            noteId={contextMenu.noteId}
+            isPinned={!!contextNote?.is_pinned}
+            isArchived={!!contextNote?.is_archived}
+            onRename={(id) => void handleRenameNote(id)}
+            onTogglePinned={(id) => void handleTogglePinnedNote(id)}
+            onToggleArchived={(id) => void handleToggleArchivedNote(id)}
+            onDelete={(id) => handleDeleteClick(id)}
+            onClose={closeContextMenu}
+          />
+        </div>
       ) : null}
 
       <InputModal
