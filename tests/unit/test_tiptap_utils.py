@@ -1,9 +1,7 @@
 """Unit tests for the shared TipTap utilities."""
 from __future__ import annotations
 
-import re
 
-import pytest
 
 from app.utils.tiptap import (
     BlockInfo,

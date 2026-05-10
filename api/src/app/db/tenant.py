@@ -55,7 +55,7 @@ def validate_schema_name(name: str) -> None:
 
 
 def _is_postgres(session: Session) -> bool:
-    url = str(session.get_bind().url)
+    url = str(session.get_bind().url)  # type: ignore[union-attr]
     return url.startswith("postgresql")
 
 
@@ -174,7 +174,7 @@ def _create_sqlite_table(
 
     # Remove FOREIGN KEY references to schema-qualified tables —
     # rewrite {schema}.X to {schema_name}__X for SQLite.
-    body = body.replace(f"{{schema}}.", f"{schema_name}__")
+    body = body.replace("{schema}.", f"{schema_name}__")
 
     # Remove unsupported Postgres types/syntax for SQLite.
     body = body.replace("TIMESTAMP WITH TIME ZONE", "TIMESTAMP")

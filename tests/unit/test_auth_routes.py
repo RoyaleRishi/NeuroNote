@@ -1,7 +1,6 @@
 """Unit tests for OAuth auth routes."""
 from __future__ import annotations
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -214,6 +213,6 @@ def test_google_login_redirect(client: TestClient) -> None:
         patch("app.routes.auth._get_oauth", return_value=mock_oauth),
         patch("app.routes.auth.get_oauth_settings", return_value=mock_settings),
     ):
-        resp = client.get("/v1/auth/google/login", follow_redirects=False)
+        client.get("/v1/auth/google/login", follow_redirects=False)
 
     mock_client.authorize_redirect.assert_called_once()

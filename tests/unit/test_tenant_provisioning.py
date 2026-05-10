@@ -6,7 +6,7 @@ provisioning are skipped. Integration tests against Postgres cover those.
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 
 from app.db.engine import get_engine, get_session_factory
 from app.db.tenant import (
@@ -79,7 +79,7 @@ def test_create_user_schema_subjects_has_columns(configured_db: None) -> None:
         inspector = inspect(get_engine())
         columns = {
             col["name"]
-            for col in inspector.get_columns(f"user_colcheck__subjects")
+            for col in inspector.get_columns("user_colcheck__subjects")
         }
         assert {"id", "name", "created_at", "updated_at"}.issubset(columns)
 

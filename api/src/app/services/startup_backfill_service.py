@@ -166,8 +166,8 @@ class StartupBackfillService:
             )
         )
 
-        for note_id, schema_name, graph_name in work_items:
-            service = NoteProcessingService(schema_name=schema_name, graph_name=graph_name)
+        for note_id, work_schema, graph_name in work_items:
+            service = NoteProcessingService(schema_name=work_schema, graph_name=graph_name)
             try:
                 service.process_note(
                     ProcessNoteRequest(

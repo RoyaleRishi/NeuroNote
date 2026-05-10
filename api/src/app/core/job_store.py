@@ -113,8 +113,8 @@ def _parse_extraction_summary(raw: object) -> ExtractionSummary | None:
     if raw is None:
         return None
     try:
-        data = _json.loads(raw) if isinstance(raw, str) else raw
-        return ExtractionSummary(**data)
+        data: dict[str, object] = _json.loads(raw) if isinstance(raw, str) else dict(raw)  # type: ignore[arg-type,call-overload]
+        return ExtractionSummary.model_validate(data)
     except Exception:  # noqa: BLE001
         return None
 
@@ -261,7 +261,7 @@ def _mem_transition_job(
             return None
         updates: dict[str, object] = {"status": status, "updated_at": _utc_now_iso(), "error": error}
         if extraction_summary is not None:
-            updates["extraction_summary"] = ExtractionSummary(**extraction_summary)
+            updates["extraction_summary"] = ExtractionSummary.model_validate(extraction_summary)
         updated = record.model_copy(update=updates)
         _JOB_STORE[job_id] = updated
         return updated

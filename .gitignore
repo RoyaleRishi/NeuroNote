@@ -57,13 +57,9 @@ web/.eslintcache
 /lib/
 
 # Docs 
-/docs/LLM.md
-/docs/initial_scoping_doc.md
-/docs/notion-ux-research.md
-/docs/obsidian-ux-research.md
-/docs/plan.md
-/docs/retrospective_learnings.md
-/docs/ui_ux_improvement_spec.md
+/docs/*
+
+# Scripts 
 
 # Misc
 *.bak

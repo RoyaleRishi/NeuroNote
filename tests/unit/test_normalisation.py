@@ -2,7 +2,7 @@
 from unittest.mock import MagicMock
 
 from app.nlp.extraction import ConceptSpan
-from app.nlp.normalisation import NormalisedConcept, SynonymEdge, normalise_concepts
+from app.nlp.normalisation import SynonymEdge, normalise_concepts
 
 
 def test_new_concept_inserted_to_registry() -> None:

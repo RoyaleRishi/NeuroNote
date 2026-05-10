@@ -54,7 +54,7 @@ def get_preferences(
     api_key = prefs.get("llm_api_key", "")
     if len(api_key) > 4:
         prefs["llm_api_key"] = "****" + api_key[-4:]
-    return UserPreferences(**prefs)
+    return UserPreferences.model_validate(prefs)
 
 
 @router.put("/preferences", response_model=UserPreferences)
@@ -91,7 +91,7 @@ def update_preferences(
     api_key = prefs.get("llm_api_key", "")
     if len(api_key) > 4:
         prefs["llm_api_key"] = "****" + api_key[-4:]
-    return UserPreferences(**prefs)
+    return UserPreferences.model_validate(prefs)
 
 
 @router.post("/preferences/test-connection", response_model=TestConnectionResponse)

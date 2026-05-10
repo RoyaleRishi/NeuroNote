@@ -63,7 +63,7 @@ def test_ts_contract_contains_required_fields() -> None:
         "status: \"queued\"",
         "interface ProcessStatusResponse",
         "created_at: string",
-        "error?: string | null",
+        "error: string | null",
     ]
 
     for token in required_tokens:

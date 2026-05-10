@@ -63,7 +63,7 @@ def _to_vector(raw: object) -> list[float]:
         if not s:
             return []
         return [float(part) for part in s.split(",")]
-    return [float(v) for v in raw]  # type: ignore[arg-type]
+    return [float(v) for v in raw]  # type: ignore[attr-defined]
 
 
 def normalise_concepts(

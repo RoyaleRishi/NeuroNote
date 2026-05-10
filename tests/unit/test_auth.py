@@ -16,7 +16,7 @@ from app.core.auth import (
     decode_token,
     get_current_user,
 )
-from app.core.oauth_config import OAuthSettings, get_oauth_settings
+from app.core.oauth_config import get_oauth_settings
 
 # ---------------------------------------------------------------------------
 # Fixtures

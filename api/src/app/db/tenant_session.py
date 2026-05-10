@@ -39,7 +39,7 @@ def get_tenant_session(request: Request) -> Iterator[Session]:
 
     session_factory = get_session_factory()
     with session_factory() as session:
-        url = str(session.get_bind().url)
+        url = str(session.get_bind().url)  # type: ignore[union-attr]
         if url.startswith("postgresql"):
             bind_session_to_tenant(session, user.schema_name)
         yield session

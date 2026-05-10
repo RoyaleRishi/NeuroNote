@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime
 
 import httpx
-from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.starlette_client import OAuth  # type: ignore[import-untyped]
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import text
@@ -139,7 +139,7 @@ def dev_login(
         session.flush()
         create_user_schema(session, schema_name)
 
-        _url = str(session.get_bind().url)
+        _url = str(session.get_bind().url)  # type: ignore[union-attr]
         if _url.startswith("postgresql"):
             session.execute(text(f"SET search_path TO {schema_name}, public"))
             session.execute(
@@ -343,7 +343,7 @@ def _upsert_user(
     create_user_schema(session, schema_name)
 
     # Create default "Inbox" subject in the new user's schema.
-    _url = str(session.get_bind().url)
+    _url = str(session.get_bind().url)  # type: ignore[union-attr]
     if _url.startswith("postgresql"):
         session.execute(text(f"SET search_path TO {schema_name}, public"))
         session.execute(

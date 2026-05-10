@@ -6,7 +6,6 @@ import pytest
 
 from app.db.engine import get_session_factory
 from app.db.repositories.note_repository import NoteRepository
-from app.nlp.types import BlockTextInput
 from app.nlp.types import ExtractedRelation
 from app.nlp.types import NoteExtractionResult
 from app.services import note_processing_service as note_processing_module

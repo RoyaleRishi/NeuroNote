@@ -7,6 +7,17 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models.block import Block
+from app.db.repositories.block_repository import BlockRepository
+from app.db.repositories.embedding_repository import EmbeddingRepository
+from app.db.repositories.graph_repository import GraphRepository
+from app.nlp.types import (
+    ExtractedEntity,
+    ExtractedEntityMention,
+    ExtractedKeyphrase,
+    ExtractedRelation,
+)
+
 _LOG = logging.getLogger(__name__)
 
 # Concept→Concept relation predicates emitted by the deterministic
@@ -18,17 +29,6 @@ _STRUCTURAL_RELATIONS: frozenset[str] = frozenset({
     "SIBLING_OF",
     "REFERENCES",
 })
-
-from app.db.models.block import Block
-from app.db.repositories.block_repository import BlockRepository
-from app.db.repositories.embedding_repository import EmbeddingRepository
-from app.db.repositories.graph_repository import GraphRepository
-from app.nlp.types import (
-    ExtractedEntity,
-    ExtractedEntityMention,
-    ExtractedKeyphrase,
-    ExtractedRelation,
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +130,7 @@ class GraphSyncService:
         if not dirty_blocks:
             return
 
-        block_node_props = []
+        block_node_props: list[dict[str, object]] = []
         for block in dirty_blocks:
             block_node_id = block_node_ids_by_uid[block.block_uid]
             block_node_props.append({

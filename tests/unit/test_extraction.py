@@ -1,7 +1,7 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from app.nlp.extraction import ConceptSpan, _clean, extract_concepts
+from app.nlp.extraction import _clean, extract_concepts
 
 
 @patch("app.nlp.extraction._inspec_pipeline")

@@ -43,7 +43,7 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
     validate_schema_name(schema_name)
     factory = get_session_factory()
     with factory() as session:
-        url = str(session.get_bind().url)
+        url = str(session.get_bind().url)  # type: ignore[union-attr]
         if url.startswith("postgresql"):
             bind_session_to_tenant(session, schema_name)
         rows = session.execute(
