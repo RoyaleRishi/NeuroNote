@@ -72,6 +72,7 @@ export interface ConceptInsightResponse {
   notes_found: number;
   note_refs: ConceptNoteRef[];
   insight: string | null;
+  insight_error: string | null;
   learning_links: ConceptLearningLink[];
   generated_at: string;
 }

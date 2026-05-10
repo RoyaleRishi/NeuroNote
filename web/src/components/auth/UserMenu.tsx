@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { logoutUser, updatePreferences } from "../../lib/api-client";
+import { logoutUser, testLlmConnection, updatePreferences } from "../../lib/api-client";
 import { usePreferences } from "../../lib/hooks/usePreferences";
 import type { UserProfile } from "../../../../shared/contracts/ts/v1/auth";
 
@@ -80,6 +80,12 @@ export function UserMenu({ user }: UserMenuProps) {
     llm_model: "gpt-4o-mini",
   });
   const [saving, setSaving] = useState(false);
+  // Result of the post-save test-connection call.  Surfaced inline so users
+  // can see why their model/key combination is rejected before they hit
+  // the concept-insight panel.
+  const [testStatus, setTestStatus] = useState<
+    { ok: boolean; message: string } | null
+  >(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const confidenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -126,6 +132,7 @@ export function UserMenu({ user }: UserMenuProps) {
 
   const handleCloudSave = useCallback(async () => {
     setSaving(true);
+    setTestStatus(null);
     try {
       await updatePreferences({
         llm_api_key: cloudDraft.llm_api_key || undefined,
@@ -133,6 +140,19 @@ export function UserMenu({ user }: UserMenuProps) {
         llm_model: cloudDraft.llm_model,
       });
       void reload();
+      // Validate the just-saved config end-to-end.  We save first because
+      // /v1/preferences/test-connection reads from the persisted prefs;
+      // if validation fails the user keeps the bad config but is told why,
+      // so they can fix the model/key/base-url.
+      try {
+        const result = await testLlmConnection();
+        setTestStatus({ ok: result.success, message: result.message });
+      } catch (exc) {
+        setTestStatus({
+          ok: false,
+          message: exc instanceof Error ? exc.message : "Could not validate connection.",
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -277,6 +297,18 @@ export function UserMenu({ user }: UserMenuProps) {
                     {saving ? "Saving…" : "Save"}
                   </button>
                 </div>
+                {testStatus && (
+                  <p
+                    role={testStatus.ok ? "status" : "alert"}
+                    style={{
+                      margin: "4px 0 0",
+                      fontSize: "var(--text-xs)",
+                      color: testStatus.ok ? "var(--text-muted)" : "var(--danger)",
+                    }}
+                  >
+                    {testStatus.message}
+                  </p>
+                )}
               </div>
             )}
           </div>

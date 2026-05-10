@@ -131,6 +131,9 @@ async def test_connection(
             max_tokens=32,
         )
     except Exception as exc:
+        # AsyncLLMClient.complete swallows exceptions and stashes them on
+        # ``last_error``, but keep this branch in case a future refactor
+        # makes it raise.
         _LOG.debug("test-connection failed: %s", exc, exc_info=True)
         return TestConnectionResponse(
             success=False,
@@ -138,10 +141,12 @@ async def test_connection(
         )
 
     if result is None:
-        return TestConnectionResponse(
-            success=False,
-            message="LLM returned no response. Check your API key, base URL, and model name.",
+        # Surface the underlying SDK error (e.g. "model: claude-3-5-haiku-latest
+        # not found") instead of a generic "no response".
+        detail = client.last_error or (
+            "LLM returned no response. Check your API key, base URL, and model name."
         )
+        return TestConnectionResponse(success=False, message=detail)
     return TestConnectionResponse(
         success=True,
         message="Connection successful.",

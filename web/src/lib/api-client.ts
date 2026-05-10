@@ -406,9 +406,10 @@ export async function logoutUser(): Promise<void> {
 import type {
   UserPreferences,
   UpdatePreferencesRequest,
+  TestConnectionResponse,
 } from "../../../shared/contracts/ts/v1/preferences";
 
-export type { UserPreferences, UpdatePreferencesRequest };
+export type { UserPreferences, UpdatePreferencesRequest, TestConnectionResponse };
 
 /** Fetch the user's preferences (with defaults for unset keys). */
 export async function fetchPreferences(): Promise<UserPreferences> {
@@ -428,4 +429,17 @@ export async function updatePreferences(
     body: JSON.stringify(payload),
   });
   return parseJsonResponse<UserPreferences>(res);
+}
+
+/**
+ * Validate the currently saved cloud LLM config by making a small completion
+ * call against the user's configured base_url + model + key.  Used by the
+ * UserMenu after Save to surface invalid credentials to the user.
+ */
+export async function testLlmConnection(): Promise<TestConnectionResponse> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/preferences/test-connection`, {
+    method: "POST",
+  });
+  return parseJsonResponse<TestConnectionResponse>(res);
 }

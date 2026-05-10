@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import UserContext, get_current_user
 from app.db.repositories.note_repository import NoteRepository
 from app.db.tenant_session import get_tenant_session
 from app.import_.markdown_parser import (
@@ -43,6 +44,7 @@ def import_note(
     payload: ImportNoteRequest,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_tenant_session),
+    user: UserContext = Depends(get_current_user),
 ) -> ImportNoteResponse:
     filename = payload.filename.strip()
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -79,9 +81,15 @@ def import_note(
 
     # Queue NLP processing in background
     from app.core.job_store import create_or_get_job, mark_job_running
+    from app.db.engine import (
+        bind_session_to_tenant,
+        get_session_factory,
+        set_tenant_schema,
+    )
     from app.services.note_processing_service import NoteProcessingService
 
     record, created = create_or_get_job(
+        session,
         note_id=note_id,
         content_hash=saved.content_hash,
     )
@@ -92,15 +100,33 @@ def import_note(
             content_hash=saved.content_hash,
             updated_at=now_iso,
         )
+        schema_name = user.schema_name
 
         def _run_processing(job_id: str, p: ProcessNoteRequest) -> None:
             from app.core.job_store import mark_job_completed, mark_job_failed
-            mark_job_running(job_id)
+            set_tenant_schema(schema_name)
             try:
-                summary = NoteProcessingService().process_note(p)
-                mark_job_completed(job_id, extraction_summary=summary.model_dump() if summary else None)
-            except Exception as exc:
-                mark_job_failed(job_id, error=str(exc))
+                factory = get_session_factory()
+                with factory() as job_session:
+                    bind_session_to_tenant(job_session, schema_name)
+                    mark_job_running(job_session, job_id)
+                try:
+                    summary = NoteProcessingService(
+                        schema_name=schema_name,
+                        graph_name=f"nn_{schema_name}",
+                    ).process_note(p)
+                    with factory() as job_session:
+                        bind_session_to_tenant(job_session, schema_name)
+                        mark_job_completed(
+                            job_session, job_id,
+                            extraction_summary=summary.model_dump() if summary else None,
+                        )
+                except Exception as exc:
+                    with factory() as job_session:
+                        bind_session_to_tenant(job_session, schema_name)
+                        mark_job_failed(job_session, job_id, error=str(exc))
+            finally:
+                set_tenant_schema(None)
 
         background_tasks.add_task(_run_processing, record.job_id, process_payload)
 

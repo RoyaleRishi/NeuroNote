@@ -77,6 +77,10 @@ class ConceptInsightResponse(BaseModel):
     notes_found: int
     note_refs: list[ConceptNoteRef]
     insight: str | None = None
+    # Short, human-readable reason the insight could not be generated, or
+    # ``None`` when generation succeeded or was not attempted.  The frontend
+    # surfaces this verbatim instead of guessing the cause.
+    insight_error: str | None = None
     learning_links: list[ConceptLearningLink] = Field(default_factory=list)
     generated_at: str
 

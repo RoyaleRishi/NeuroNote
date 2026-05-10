@@ -102,6 +102,7 @@ class ConceptInsightService:
         note_refs = [self._make_ref(note, concept_label) for note in notes]
 
         insight: str | None = None
+        insight_error: str | None = None
         links: list[ConceptLearningLink] = []
 
         if notes and self._api_key:
@@ -117,7 +118,7 @@ class ConceptInsightService:
                 ]
             else:
                 context = self._build_context(concept_label, notes)
-                raw = await self._call_llm(concept_label, context)
+                raw, insight_error = await self._call_llm(concept_label, context)
                 insight = raw.get("insight") or None
                 links = [
                     ConceptLearningLink(**lnk)
@@ -126,6 +127,7 @@ class ConceptInsightService:
                     and all(k in lnk for k in ("title", "url", "description"))
                 ]
                 if insight:
+                    insight_error = None  # success overrides any prior error
                     self._save_cached_insight(
                         concept_label, content_digest, insight, links, len(notes)
                     )
@@ -135,6 +137,7 @@ class ConceptInsightService:
             notes_found=len(notes),
             note_refs=note_refs,
             insight=insight,
+            insight_error=insight_error,
             learning_links=links,
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
@@ -316,21 +319,29 @@ class ConceptInsightService:
             parts.append(f"[Note {i}: {note.note_title!r}]\n{content}")
         return "\n\n---\n\n".join(parts)
 
-    async def _call_llm(self, label: str, context: str) -> dict:  # type: ignore[type-arg]
+    async def _call_llm(self, label: str, context: str) -> tuple[dict, str | None]:  # type: ignore[type-arg]
+        """Run the grounded-insight prompt.
+
+        Returns ``(parsed_json_or_empty_dict, error_message_or_none)``.
+        ``error_message`` is the upstream LLM exception (e.g. "model not
+        found") when the call failed, or ``"LLM returned malformed JSON"``
+        when the response could not be parsed.
+        """
         user_msg = (
             f'Concept to analyse: "{label}"\n\n'
             f"User notes mentioning this concept:\n\n{context}"
         )
-        raw = await AsyncLLMClient(
+        client = AsyncLLMClient(
             api_key=self._api_key,
             model=self._model,
             base_url=self._base_url,
             timeout_s=12.0,
-        ).complete(system=_SYSTEM_PROMPT, user=user_msg, max_tokens=1024)
+        )
+        raw = await client.complete(system=_SYSTEM_PROMPT, user=user_msg, max_tokens=1024)
         if not raw:
-            return {}
+            return {}, client.last_error or "LLM returned no response."
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.S).strip()
         try:
-            return json.loads(raw)  # type: ignore[no-any-return]
+            return json.loads(raw), None  # type: ignore[no-any-return]
         except Exception:  # noqa: BLE001
-            return {}
+            return {}, "LLM returned malformed JSON."

@@ -77,14 +77,27 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
 def _run_processing_job(
     *, job_id: str, payload: ProcessNoteRequest, schema_name: str, graph_name: str
 ) -> None:
-    # Pin the tenant schema for the entire background task so every session
-    # opened by job_store, _load_user_llm_config, and NoteProcessingService
-    # picks up the right search_path on connection checkout.
-    from app.db.engine import set_tenant_schema
+    # Two layers of tenant binding here:
+    # 1. ContextVar (`set_tenant_schema`) — keeps `NoteProcessingService`
+    #    working: it opens its own ad-hoc sessions and relies on the
+    #    pool's before_cursor_execute fallback.
+    # 2. Explicit per-session bind for every job_store call below — this
+    #    is the authoritative path; it does not depend on thread-local
+    #    state and is what guarantees `processing_jobs` writes land in
+    #    the correct tenant schema.
+    from app.db.engine import (
+        bind_session_to_tenant,
+        get_session_factory,
+        set_tenant_schema,
+    )
 
     set_tenant_schema(schema_name)
     try:
-        mark_job_running(job_id)
+        factory = get_session_factory()
+        with factory() as job_session:
+            bind_session_to_tenant(job_session, schema_name)
+            mark_job_running(job_session, job_id)
+
         try:
             user_settings = _load_user_llm_config(schema_name)
             pipeline = NoteNlpPipeline(settings=user_settings) if user_settings else None
@@ -94,15 +107,21 @@ def _run_processing_job(
                 pipeline=pipeline,
             ).process_note(payload)
         except NoteNotFoundError as exc:
-            mark_job_failed(job_id, error=str(exc))
+            with factory() as job_session:
+                bind_session_to_tenant(job_session, schema_name)
+                mark_job_failed(job_session, job_id, error=str(exc))
             return
         except Exception as exc:  # pragma: no cover - defensive runtime guard
             _LOG.exception("Processing job %s failed: %s", job_id, exc)
-            mark_job_failed(job_id, error=str(exc))
+            with factory() as job_session:
+                bind_session_to_tenant(job_session, schema_name)
+                mark_job_failed(job_session, job_id, error=str(exc))
             return
 
         summary_dict: dict[str, object] = summary.model_dump() if summary else {}
-        mark_job_completed(job_id, extraction_summary=summary_dict)
+        with factory() as job_session:
+            bind_session_to_tenant(job_session, schema_name)
+            mark_job_completed(job_session, job_id, extraction_summary=summary_dict)
     finally:
         set_tenant_schema(None)
 
@@ -130,6 +149,7 @@ def process_note(
         )
 
     record, created = create_or_get_job(
+        session,
         note_id=payload.note_id,
         content_hash=note.content_hash,
     )
@@ -146,8 +166,11 @@ def process_note(
 
 
 @router.get("/process-status/{job_id}", response_model=ProcessStatusResponse)
-def process_status(job_id: str) -> ProcessStatusResponse:
-    record = get_job(job_id)
+def process_status(
+    job_id: str,
+    session: Session = Depends(get_tenant_session),
+) -> ProcessStatusResponse:
+    record = get_job(session, job_id)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
