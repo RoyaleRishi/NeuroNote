@@ -331,6 +331,28 @@ class GraphRepository:
         )
         self._exec_cypher(graph_name, query)
 
+    def delete_concept_relation_edges(
+        self,
+        *,
+        source_note_id: str,
+        graph_name: str = "neuronote",
+    ) -> None:
+        """Delete Concept→Concept edges sourced from a note.
+
+        Used by ``sync_note_graph`` before re-emitting relations so stale
+        edges from a previous pipeline run don't accumulate. Scoped to
+        ``source_note_id`` so unrelated tenants/notes are unaffected.
+        """
+        self.ensure_graph_exists(graph_name=graph_name)
+        source_json = json.dumps(source_note_id)
+        query = (
+            f"MATCH (:Concept)-[r]->(:Concept) "
+            f"WHERE r.source_note_id = {source_json} "
+            f"DELETE r "
+            f"RETURN 1"
+        )
+        self._exec_cypher(graph_name, query)
+
     # ------------------------------------------------------------------
     # Read methods
     # ------------------------------------------------------------------

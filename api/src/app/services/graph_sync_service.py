@@ -529,8 +529,10 @@ class GraphSyncService:
             b.block_index for b in blocks if b.block_uid in dirty_uids
         }
 
-        # All-unchanged fast path: skip entity/relation/block writes, only
-        # recompute Note→Entity aggregate (cheap; note content unchanged).
+        # All-unchanged fast path: blocks didn't change, but the pipeline
+        # output (concepts, normalisation, structural relations) can still
+        # change between runs — so refresh Note→Entity aggregate and the
+        # Concept→Concept relation edges. Block nodes themselves stay put.
         if not dirty_uids and not deleted_uids:
             self._upsert_note_and_subject(payload=payload, now_iso=now_iso)
             self._repository.delete_note_mention_edges(
@@ -538,6 +540,11 @@ class GraphSyncService:
                 graph_name=self._graph_name,
             )
             self._recompute_note_entity_mentions(payload=payload, now_iso=now_iso)
+            self._repository.delete_concept_relation_edges(
+                source_note_id=payload.note_id,
+                graph_name=self._graph_name,
+            )
+            self._upsert_relations(payload=payload, now_iso=now_iso)
             if payload.embedding is not None:
                 EmbeddingRepository(self._session).upsert_embedding(
                     item_id=payload.note_id,
