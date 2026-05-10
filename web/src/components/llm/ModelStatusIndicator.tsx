@@ -41,9 +41,9 @@ function styleFor(
   if (mode === "cloud") {
     return {
       label: "Cloud AI",
-      bg: "color-mix(in srgb, #2563eb 14%, transparent)",
-      fg: "#1d4ed8",
-      border: "color-mix(in srgb, #2563eb 35%, transparent)",
+      bg: "color-mix(in srgb, var(--info) 14%, transparent)",
+      fg: "var(--info-text)",
+      border: "color-mix(in srgb, var(--info) 35%, transparent)",
     };
   }
 
@@ -68,9 +68,9 @@ function styleFor(
     case "unsupported":
       return {
         label: "Edge AI: WebGPU Required",
-        bg: "color-mix(in srgb, #d97706 14%, transparent)",
-        fg: "#b45309",
-        border: "color-mix(in srgb, #d97706 40%, transparent)",
+        bg: "color-mix(in srgb, var(--warning) 14%, transparent)",
+        fg: "var(--warning-text)",
+        border: "color-mix(in srgb, var(--warning) 40%, transparent)",
       };
     case "error":
       return {

@@ -47,7 +47,7 @@ export function EdgeCrashBanner({ isOpen, onAcknowledge }: EdgeCrashBannerProps)
           padding: "0.3rem 0.75rem",
           fontSize: "var(--text-xs)",
           fontWeight: 600,
-          color: "#fff",
+          color: "var(--text-on-accent)",
           background: "var(--accent)",
           border: "1px solid var(--accent)",
           borderRadius: "4px",

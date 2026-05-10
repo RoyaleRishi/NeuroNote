@@ -53,7 +53,7 @@ export function OAuthButtons() {
   const accentButtonStyle: React.CSSProperties = {
     ...buttonStyle,
     background: "var(--accent)",
-    color: "#fff",
+    color: "var(--text-on-accent)",
     border: "1px solid var(--accent)",
   };
 

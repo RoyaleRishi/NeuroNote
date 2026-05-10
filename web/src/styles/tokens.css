@@ -119,6 +119,9 @@
   /* Overlay scrim used for modal/dialog backgrounds. */
   --overlay-scrim: rgba(15, 23, 42, 0.45);
 
+  /* Foreground for text rendered on accent/danger/info colored fills. */
+  --text-on-accent: #ffffff;
+
   /* Tag chip colors (deterministic per-tag palette). */
   --tag-blue-bg:   #dbeafe; --tag-blue-text:   #1e40af;
   --tag-green-bg:  #dcfce7; --tag-green-text:  #15803d;
