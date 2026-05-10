@@ -2802,6 +2802,19 @@ select:focus-visible {
   opacity: 1;
 }
 
+/* Per-tag color modifiers — applied alongside .tag-chip (or .note-list-tag-chip).
+ * Override the default --info palette with the deterministic per-tag palette
+ * from tokens.css; border tracks text color at 27% alpha to match the prior
+ * inline-style border. */
+.tag-chip-blue   { background: var(--tag-blue-bg);   color: var(--tag-blue-text);   border-color: color-mix(in srgb, var(--tag-blue-text) 27%, transparent); }
+.tag-chip-green  { background: var(--tag-green-bg);  color: var(--tag-green-text);  border-color: color-mix(in srgb, var(--tag-green-text) 27%, transparent); }
+.tag-chip-amber  { background: var(--tag-amber-bg);  color: var(--tag-amber-text);  border-color: color-mix(in srgb, var(--tag-amber-text) 27%, transparent); }
+.tag-chip-pink   { background: var(--tag-pink-bg);   color: var(--tag-pink-text);   border-color: color-mix(in srgb, var(--tag-pink-text) 27%, transparent); }
+.tag-chip-purple { background: var(--tag-purple-bg); color: var(--tag-purple-text); border-color: color-mix(in srgb, var(--tag-purple-text) 27%, transparent); }
+.tag-chip-red    { background: var(--tag-red-bg);    color: var(--tag-red-text);    border-color: color-mix(in srgb, var(--tag-red-text) 27%, transparent); }
+.tag-chip-sky    { background: var(--tag-sky-bg);    color: var(--tag-sky-text);    border-color: color-mix(in srgb, var(--tag-sky-text) 27%, transparent); }
+.tag-chip-violet { background: var(--tag-violet-bg); color: var(--tag-violet-text); border-color: color-mix(in srgb, var(--tag-violet-text) 27%, transparent); }
+
 /* ── Search Highlight ──────────────────────────────────────────── */
 
 .search-highlight {

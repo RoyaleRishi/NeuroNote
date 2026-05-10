@@ -37,7 +37,7 @@ import {
 import type { WorkspaceFilters } from "../../lib/workspace/types";
 import type { QuickSwitchItem } from "../../lib/workspace/quick-switch";
 import type { NoteSummary } from "../../../../shared/contracts/ts/v1/note";
-import { getTagColor } from "../../lib/ui/tag-colors";
+import { getTagColorClass } from "../../lib/ui/tag-colors";
 import { makeNewNoteId } from "../../lib/utils/note-id";
 import { useBacklinks } from "../../lib/hooks/useBacklinks";
 import { useGlobalGraph } from "../../lib/hooks/useGlobalGraph";
@@ -1030,15 +1030,11 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           {note.subject_id && note.subject_id !== "inbox" && (
             <span className="note-list-subject-badge">{note.subject_id}</span>
           )}
-          {note.tags.slice(0, 3).map((tag) => {
-            const c = getTagColor(tag);
-            return (
-              <span key={tag} className="note-list-tag-chip"
-                style={{ backgroundColor: c.bg, color: c.text }}>
-                {tag}
-              </span>
-            );
-          })}
+          {note.tags.slice(0, 3).map((tag) => (
+            <span key={tag} className={`note-list-tag-chip ${getTagColorClass(tag)}`}>
+              {tag}
+            </span>
+          ))}
           <span className="note-list-date">{toDisplayDate(note.updated_at)}</span>
         </div>
       </button>
