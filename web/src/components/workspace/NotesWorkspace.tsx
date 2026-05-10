@@ -23,6 +23,7 @@ import { EdgeConsentDialog } from "../llm/EdgeConsentDialog";
 import { EdgeCrashBanner } from "../llm/EdgeCrashBanner";
 import { usePreferences } from "../../lib/hooks/usePreferences";
 import { useEdgeLLM } from "../../lib/hooks/useEdgeLLM";
+import { reportUserError } from "../../lib/ui/error-toast";
 import { applyTemplate, type Template } from "../../lib/templates";
 import {
   ApiClientError,
@@ -253,7 +254,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
       await updatePreferences({ llm_mode: "cloud" });
       void reloadPrefs();
     } catch (err) {
-      console.error("[NotesWorkspace] switchToCloud failed", err);
+      reportUserError("switchToCloud", err);
     }
   }, [reloadPrefs]);
 

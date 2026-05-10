@@ -10,6 +10,7 @@ import { TipTapEditor, type TipTapUpdatePayload } from "./TipTapEditor";
 import { SkeletonEditor } from "../ui/Skeleton";
 import { ErrorMessage } from "../ui/ErrorMessage";
 import { LocalGraphPanel } from "../graph/LocalGraphPanel";
+import { reportUserError } from "../../lib/ui/error-toast";
 import {
   exportNoteMarkdown,
   fetchLocalGraph,
@@ -471,7 +472,7 @@ export function NoteEditor({
           }
           const result = await fetchProcessingStatus(baseUrl, jobId);
           if (result.status === "failed" && result.error) {
-            console.error("[NeuroNote] Processing failed:", result.error);
+            reportUserError("note-processing", result.error);
           }
           return result;
         },
