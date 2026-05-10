@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+_LOG = logging.getLogger(__name__)
+
+# Concept→Concept relation predicates emitted by the deterministic
+# pipeline. Anything outside this set is logged and dropped — we do not
+# silently coerce unknown predicates to a generic edge type any more.
+_STRUCTURAL_RELATIONS: frozenset[str] = frozenset({
+    "MENTIONED_TOGETHER",
+    "SUBTOPIC_OF",
+    "SIBLING_OF",
+    "REFERENCES",
+})
 
 from app.db.models.block import Block
 from app.db.repositories.block_repository import BlockRepository
@@ -101,20 +114,6 @@ class GraphSyncService:
             label="Note",
             node_id=payload.note_id,
             properties=note_props,
-            graph_name=self._graph_name,
-        )
-        self._repository.upsert_typed_edge(
-            source_label="Note",
-            source_id=payload.note_id,
-            target_label="Subject",
-            target_id=payload.subject_id,
-            relation_type="BELONGS_TO",
-            properties={
-                "source_note_id": payload.note_id,
-                "confidence": 1.0,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            },
             graph_name=self._graph_name,
         )
 
@@ -457,10 +456,13 @@ class GraphSyncService:
                 )
 
     def _upsert_relations(self, *, payload: GraphSyncPayload, now_iso: str) -> None:
-        _TYPED_RELATIONS = frozenset(
-            {"IS_A", "PART_OF", "CAUSES", "CONTRASTS_WITH", "USES", "PRODUCES", "RELATED_TO"}
-        )
         for relation in payload.relations:
+            if relation.predicate not in _STRUCTURAL_RELATIONS:
+                _LOG.warning(
+                    "Skipping relation with unknown predicate: note_id=%s predicate=%s",
+                    payload.note_id, relation.predicate,
+                )
+                continue
             self._repository.upsert_node(
                 label="Concept",
                 node_id=relation.subject_id,
@@ -481,45 +483,16 @@ class GraphSyncService:
                 },
                 graph_name=self._graph_name,
             )
-            edge_type = relation.predicate if relation.predicate in _TYPED_RELATIONS else "RELATED_TO"
             self._repository.upsert_typed_edge(
                 source_label="Concept",
                 source_id=relation.subject_id,
                 target_label="Concept",
                 target_id=relation.object_id,
-                relation_type=edge_type,
+                relation_type=relation.predicate,
                 properties={
                     "source_note_id": payload.note_id,
                     "confidence": float(relation.confidence),
                     "predicate": relation.predicate,
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
-            self._repository.upsert_typed_edge(
-                source_label="Concept",
-                source_id=relation.subject_id,
-                target_label="Subject",
-                target_id=payload.subject_id,
-                relation_type="APPEARS_IN",
-                properties={
-                    "source_note_id": payload.note_id,
-                    "confidence": float(relation.confidence),
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
-            self._repository.upsert_typed_edge(
-                source_label="Concept",
-                source_id=relation.object_id,
-                target_label="Subject",
-                target_id=payload.subject_id,
-                relation_type="APPEARS_IN",
-                properties={
-                    "source_note_id": payload.note_id,
-                    "confidence": float(relation.confidence),
                     "created_at": now_iso,
                     "updated_at": now_iso,
                 },

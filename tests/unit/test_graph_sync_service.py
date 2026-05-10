@@ -9,10 +9,19 @@ from app.services import graph_sync_service as graph_sync_module
 from app.services.graph_sync_service import GraphSyncPayload, GraphSyncService
 
 
-def test_graph_sync_collapses_relation_edges_to_related_to(
+def test_graph_sync_drops_unknown_relation_predicates(
     configured_db: None,
     monkeypatch,
 ) -> None:
+    """Unknown predicates are dropped and logged — not silently coerced.
+
+    Pre-fix this test asserted ``captured_relation_types == ["RELATED_TO"]``
+    because the service used to fall back to ``RELATED_TO`` for any
+    predicate outside a stale legacy allowlist. After the deterministic-
+    relations contract fix, only the structural predicates are accepted
+    (MENTIONED_TOGETHER, SUBTOPIC_OF, SIBLING_OF, REFERENCES); anything
+    else is dropped with a warning.
+    """
     session_factory = get_session_factory()
     with session_factory() as session:
         with session.begin():
@@ -89,7 +98,7 @@ def test_graph_sync_collapses_relation_edges_to_related_to(
                 )
             )
 
-    assert captured_relation_types == ["RELATED_TO"]
+    assert captured_relation_types == []
 
 
 def test_graph_sync_uses_entity_mentions_evidence_for_block_edges(
