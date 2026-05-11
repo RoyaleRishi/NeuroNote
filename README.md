@@ -4,7 +4,7 @@ NeuroNote is a local-first, AI-powered knowledge base. You write notes in a rich
 
 **Key capabilities:**
 - **Rich editor** — TipTap-based with slash commands, wiki-links (`[[Note Title]]`), block references (`((uid))`), LaTeX math, images, and checklists
-- **Automatic concept extraction** — NLP pipeline (rule-based, spaCy, or Claude-powered) identifies entities and relations in every note
+- **Automatic concept extraction** — deterministic NLP pipeline (kbir-inspec keyphrase transformer + YAKE ensemble, embedding-based cross-note normalisation, structural relation derivation) identifies concepts and relations in every note. No LLM call in the critical path.
 - **Knowledge graph** — Apache AGE typed property graph; explore your notes as a D3 force-directed graph with hop depth, confidence, and node-type filters
 - **Concept Insight Panel** — click any concept or entity node in the graph to see all related notes, an AI-generated synthesis paragraph grounded solely in your notes, and curated external learning links
 - **Backlinks** — know which notes reference any note or block
@@ -46,43 +46,34 @@ Default URLs: Web `http://localhost:3000` · API `http://localhost:8000` · Post
 
 ## AI Features
 
-### NLP Extraction Profiles
+### NLP Extraction Pipeline (deterministic)
 
-Every note save triggers background entity and relation extraction. Three profiles are available:
+Every note save triggers background concept extraction via `NoteNlpPipeline`, which runs three deterministic stages — no LLM call is required:
 
-| Profile | How it works |
-|---|---|
-| `rule-only` | Dictionary matching + deterministic regex (default, no external dependencies) |
-| `hybrid-spacy` | Dictionary + spaCy NER + regex fallback |
-| `llm-enhanced` | Any OpenAI-compatible LLM — highest quality, requires `LLM_API_KEY` |
+1. **`extract_concepts`** — ensemble of the `ml6team/keyphrase-extraction-kbir-inspec` transformer (high precision on dense prose) and YAKE (statistical recall on lists/informal text). Cleanup filter drops leading determiners, purely-stopword phrases, code tokens, and anything outside 2–60 chars.
+2. **`normalise_concepts`** — embeds each span and runs cosine nearest-neighbour against `concept_registry.embedding` (HNSW). A match at threshold ≥ 0.88 reuses the existing canonical concept; otherwise a new registry row is inserted. This is how cross-note concept identity is established.
+3. **`derive_relations`** — emits five structural edge types from TipTap block structure alone: `MENTIONED_TOGETHER`, `SUBTOPIC_OF`, `SIBLING_OF`, `REFERENCES`, `DEFINED_BY`.
 
-Set via environment variable in `infra/docker-compose.yml` or on the command line:
+Results are cached by `content_hash` in `nlp_extraction_cache` and shared across notes with identical text. Re-extraction across all notes is available via the `reextract_all_notes` script in `api/src/app/scripts/`.
 
-```bash
-# Hybrid spaCy
-NLP_EXTRACTION_PROFILE=hybrid-spacy \
-NLP_MODEL_NAME=spacy:en_core_web_sm \
-make compose-up
+The LLM is now used only for (a) optional per-note summaries and (b) the on-demand Concept Insight Panel — see below.
 
-# LLM-enhanced (any OpenAI-compatible provider)
-NLP_EXTRACTION_PROFILE=llm-enhanced \
-LLM_API_KEY=sk-ant-... \
-LLM_BASE_URL=https://api.anthropic.com/v1/ \
-NLP_LLM_MODEL=claude-haiku-4-5-20251001 \
-make compose-up
-```
+### LLM Modes (Edge vs. Cloud)
 
-Seeding custom terms for deterministic recall:
-```bash
-NLP_ENTITY_SEED_TERMS="machine learning,knowledge graph,entity resolution" \
-make compose-up
-```
+Each user picks how the LLM runs via the `llm_mode` preference (default `edge`):
 
-**LLM provider configuration** (`LLM_BASE_URL` + `NLP_LLM_MODEL`):
-
-| Provider | `LLM_BASE_URL` | Example `NLP_LLM_MODEL` |
+| | Edge mode (default) | Cloud mode |
 |---|---|---|
-| Anthropic (default) | `https://api.anthropic.com/v1/` | `claude-haiku-4-5-20251001` |
+| Who runs the LLM | Browser (WebGPU via WebLLM) | API server |
+| Data leaves device | No (notes stay local) | Yes (sent to configured provider) |
+| Requires API key | No | Yes (`llm_api_key` in `/v1/preferences`) |
+| Model | `Gemma-2-2b-it` (downloaded once, ~2–4 GB) | Any OpenAI-compatible endpoint |
+
+**Cloud provider configuration** is per-user (`PUT /v1/preferences`): `llm_api_key`, `llm_base_url`, `llm_model`. The server falls back to env vars (`LLM_API_KEY` / `LLM_BASE_URL`) only if the user hasn't configured their own. API keys are Fernet-encrypted at rest when `PREF_ENCRYPTION_KEY` is set.
+
+| Provider | `llm_base_url` | Example `llm_model` |
+|---|---|---|
+| Anthropic | `https://api.anthropic.com/v1/` | `claude-haiku-4-5-20251001` |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
 | Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
 | Mistral | `https://api.mistral.ai/v1` | `mistral-small-latest` |
@@ -92,11 +83,11 @@ make compose-up
 
 When you click any non-note node (concept, entity, relation) in either graph view, a panel opens showing:
 
-1. **Related Notes** — all notes mentioning the concept, with snippets, clickable to open
-2. **AI Insight** — a synthesis paragraph drawn *only* from your notes (requires `LLM_API_KEY`)
-3. **Further Learning** — AI-suggested reputable external resources (clearly labeled; verify before visiting)
+1. **Related Notes** — all notes mentioning the concept, with snippets, clickable to open. Note discovery uses case-insensitive LIKE on title + content **and** AGE graph traversal via `MENTIONS` edges with UNION clauses for `SYNONYM_OF` (1-hop) and `SUBTOPIC_OF` (subtopic-mentioning notes).
+2. **AI Insight** — a synthesis paragraph drawn *only* from your notes. In **edge mode** the LLM call runs in the browser; in **cloud mode** it runs on the server with the user's configured API key. Cached server-side in `concept_insight_cache` keyed by `(concept_label, content_digest)`.
+3. **Further Learning** — AI-suggested reputable external resources (clearly labeled; verify before visiting).
 
-Without `LLM_API_KEY`, notes list and snippets still render — the insight section shows a config hint.
+In cloud mode without a configured API key (and no env-var fallback), the notes list still renders — the insight section shows a config hint and the configuration error surfaces via the `insight_error` field of `ConceptInsightResponse`.
 
 **API:**
 ```bash
@@ -129,28 +120,17 @@ NeuroNote uses OAuth 2.0 (Google and GitHub) for user identity. Each authenticat
 
 ---
 
-## In-Browser AI (Edge Mode)
+## Edge Mode Lifecycle
 
-NeuroNote supports fully private, server-free NLP processing via **Gemma 4 E4B** running in the browser using [WebLLM](https://webllm.mlc.ai/) + WebGPU.
+Edge mode runs an LLM fully in the browser via [WebLLM](https://webllm.mlc.ai/) + WebGPU. The server acts as a pure data layer.
 
-**Edge mode vs. cloud mode:**
+1. **Consent** — on first use of edge mode, a consent dialog is shown before any model download begins. The choice is persisted to `localStorage`.
+2. **Download** — the browser downloads the model into IndexedDB via `@mlc-ai/web-llm`. Progress is reflected in the header `ModelStatusIndicator` and the `ModelDownloadProgress` banner.
+3. **Crash recovery** — a `edge-init-pending` flag is set in `localStorage` before download and cleared after the first successful inference. If a previous tab was killed mid-load, `EdgeCrashBanner` offers retry or one-click switch to cloud.
+4. **Inference** — once ready, the browser performs extraction and posts results to `POST /v1/extraction-results` and `POST /v1/meta-classification-results`. Insight calls use `GET /v1/concepts/insight-context` for note excerpts and complete the LLM call locally.
+5. **Mode switch** — toggle via `UserMenu` (writes `llm_mode` to `/v1/preferences`). Cloud-mode keys can be validated via `POST /v1/preferences/test-connection` before saving.
 
-| | Edge mode (default) | Cloud mode |
-|---|---|---|
-| Who runs the LLM | Browser (WebGPU) | API server |
-| Data leaves device | No (notes stay local) | Yes (sent to LLM provider) |
-| Requires API key | No | Yes (`llm_api_key` in preferences) |
-| Model download | ~2–4 GB first launch | None |
-| Browser requirement | WebGPU-capable Chromium | Any |
-
-**How it works:**
-1. On first use, the browser downloads Gemma 4 E4B into IndexedDB via `@mlc-ai/web-llm`.
-2. A consent dialog is shown before any model download begins. The choice is persisted to `localStorage`.
-3. A crash-detection flag (`edge-init-pending`) is set in localStorage before download and cleared after the first successful inference. If a previous session crashed mid-download, a recovery banner offers retry or cloud switch.
-4. Once ready, extraction results are POSTed to `POST /v1/extraction-results` and `POST /v1/meta-classification-results` — the server acts as a pure data layer.
-5. Concept insight generation for the insight panel uses `GET /v1/concepts/insight-context` (server finds relevant note excerpts) and runs the LLM call in the browser.
-
-**Requirements:** Chrome 113+, Edge 113+, or any browser with `navigator.gpu` support. Safari and Firefox are currently unsupported.
+**Browser requirements:** Chrome 113+, Edge 113+, or any browser with `navigator.gpu`. Safari and Firefox are currently unsupported — `WebGPUCheck` renders a modal when missing.
 
 ---
 
@@ -468,7 +448,7 @@ unzip -l demo-note.zip
 | Symptom | Fix |
 |---|---|
 | `relation "note_assets" does not exist` | Run `make compose-migrate` |
-| Insight section shows config hint | Set `LLM_API_KEY` in compose env |
-| spaCy model not found | Install the model inside the API container or use `rule-only` profile |
+| Insight section shows config hint | Configure `llm_api_key` for the user via `PUT /v1/preferences` (or set `LLM_API_KEY` in compose env as fallback). Switch to edge mode for fully-local insight. |
+| Edge mode stuck "Loading 0%" or device OOM | `EdgeCrashBanner` will appear on next reload — choose "Switch to Cloud AI" or retry. Manually clear `edge-init-pending` in `localStorage` if banner doesn't show. |
 | AGE concurrent lock error in logs | Known AGE issue with parallel note processing — non-critical, retries succeed |
 | Port already in use | Use `WEB_PORT=3001 API_PORT=8001 make compose-up` |

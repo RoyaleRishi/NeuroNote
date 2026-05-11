@@ -53,7 +53,7 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 - **SQLAlchemy** ORM (sync sessions, not async) — the DB layer is synchronous even though route handlers are `async def`
 - **Apache AGE** (typed property graph in PostgreSQL) — Cypher queries via raw SQL with `LOAD 'age'` + `ag_catalog` search path
 - **Schema is migration-first** — `DB_AUTO_CREATE=false`; always run `make compose-migrate` after pulling new migrations
-- **Alembic** for migrations — 14 migrations in `api/alembic/versions/`
+- **Alembic** for migrations — versioned files in `api/alembic/versions/`
 - **Multi-tenancy** — schema-per-user isolation. Each user gets a PostgreSQL schema (`user_xxx`) with all data tables + an AGE graph (`nn_user_xxx`). `get_tenant_session()` sets `search_path` from JWT `schema_name`. All data queries use unqualified table names (resolved via `search_path`).
 - **OAuth authentication** — Google + GitHub via `authlib` + JWT. `httpOnly` secure cookies (`neuronote_access` 15min, `neuronote_refresh` 7d). `get_current_user()` FastAPI dependency extracts `UserContext` from JWT.
 - **pgvector** for semantic embeddings — note-level embeddings stored in `note_embeddings` (384-dim, HNSW index); per-user schema
@@ -112,7 +112,7 @@ Cross-restart caching is provided by `nlp_extraction_cache` (keyed by `content_h
 - **D3.js** for graph rendering (`D3GraphCanvas.tsx`) — force-directed simulation
 - **Autosave orchestration** (`web/src/lib/orchestration/`) — 800ms debounce for save, 3s for processing queue trigger
 - **API client** (`web/src/lib/api-client.ts`) — typed fetch wrappers using shared TS contracts
-- **Design tokens** — all colors, font sizes, z-indices, spacing use CSS custom properties from `globals.css`; never use hardcoded hex colors or bare `rem` values in new CSS
+- **Design tokens** — all colors, font sizes, z-indices, spacing use CSS custom properties from `web/src/styles/tokens.css` (single source of truth); utility classes live in `web/src/app/globals.css`. Never use hardcoded hex colors, `rgba()` literals, raw `zIndex` numbers, or bare `rem` values in new CSS — extend `tokens.css` instead.
 
 ### Password protection (`web/src/middleware.ts`)
 - Controlled by `APP_PASSWORD` env var on the `web` service. Unset (default) = no gate, app loads directly.
@@ -144,14 +144,21 @@ make compose-migrate
 Migration files go in `api/alembic/versions/` — naming convention: `YYYYMMDD_NNNN_<description>.py`
 
 ### Shared contracts
-Both sides must stay in sync. When you change `shared/contracts/python/v1/graph.py`, update `shared/contracts/ts/v1/graph.ts` in the same commit.
+Both sides must stay in sync. When you change `shared/contracts/python/v1/graph.py`, update `shared/contracts/ts/v1/graph.ts` in the same commit. Fields that the backend always returns (even as `null`) must be **required-nullable** on the TS side (`field: T | null`), not optional (`field?: T`) — see `SaveNoteResponse.content_hash` and `ProcessStatusResponse.error` / `.extraction_summary` for the canonical shape.
 
 ### CSS design tokens
-All new CSS must use tokens, not hardcoded values:
-- Colors: `var(--text-strong)`, `var(--accent)`, `var(--panel-bg)`, `var(--danger)`, etc.
-- Font sizes: `var(--text-xs)` (0.75rem), `var(--text-sm)` (0.8rem), `var(--text-base)` (0.875rem)
-- Z-indices: `var(--z-dropdown)`, `var(--z-modal)`, `var(--z-toast)`
-- Graph: `var(--graph-node-note)`, `var(--graph-node-entity)`, `var(--graph-node-highlight)`, `var(--graph-edge-dim)`, `var(--graph-node-dim-opacity)`
+All tokens are defined in `web/src/styles/tokens.css`. All new CSS must reference tokens, not hardcoded values:
+- **Colors**: `var(--text-strong)`, `var(--accent)`, `var(--accent-strong)`, `var(--accent-soft)`, `var(--panel-bg)`, `var(--panel-border)`, `var(--danger)`, `var(--info)`/`--info-text`, `var(--warning)`/`--warning-text`, `var(--success)`/`--success-text`
+- **Text on filled backgrounds**: `var(--text-on-accent)` for white-on-accent buttons/banners (do not write `#fff`)
+- **Overlay scrim**: `var(--overlay-scrim)` for modal/dialog backdrops (do not write `rgba(0,0,0,...)`)
+- **Font sizes**: `var(--text-xs)` (0.75rem) … `var(--text-4xl)` (2.25rem)
+- **Spacing**: `var(--space-1)` (4px) … `var(--space-20)` (80px)
+- **Z-indices**: `var(--z-dropdown)`, `var(--z-sticky)`, `var(--z-modal)`, `var(--z-toast)` — never write raw `1000`, `9000`, etc.
+- **Radii**: `var(--radius-sm)` … `var(--radius-xl)`, `var(--radius-full)`
+- **Graph nodes/edges**: `var(--graph-node-note)`, `var(--graph-node-entity)`, `var(--graph-node-highlight)`, `var(--graph-edge)`, `var(--graph-edge-dim)`, `var(--graph-node-dim-opacity)`
+- **Graph strokes/labels**: `var(--graph-node-stroke-default)`, `--graph-node-stroke-root`, `--graph-node-stroke-highlight`, `--graph-label-default`, `--graph-label-highlight` (read by `D3GraphCanvas.tsx` via `getCssVar` — see `graph-constants.ts → GRAPH_CSS_VARS`)
+- **Tag chips**: 8 palette pairs `--tag-{blue,green,amber,pink,purple,red,sky,violet}-{bg,text}`; component code uses the `.tag-chip-<color>` utility classes from `globals.css` (border is auto-derived via `color-mix`). Use `getTagColorClass(tag)` from `web/src/lib/ui/tag-colors.ts` — never assign tag colors inline.
+- **Tinted borders/fills**: use `color-mix(in srgb, var(--X) N%, transparent)` rather than hex with alpha.
 
 ### Shared backend utilities (`api/src/app/utils/text.py`)
 Text normalisation functions are centralised here. Do NOT duplicate these in services:
@@ -162,11 +169,21 @@ Text normalisation functions are centralised here. Do NOT duplicate these in ser
 - `normalize_include_types(values)` — validate graph include_types with defaults
 
 ### Shared frontend hooks (`web/src/lib/hooks/`)
-Complex state slices extracted from `NotesWorkspace` into composable hooks:
+Complex state slices and cross-component behaviour extracted into composable hooks:
 - `useQuickSwitch(notes, selectedNoteId)` — quick-switch modal state + keyboard nav
 - `useBacklinks(baseUrl)` — backlinks modal state + fetch logic
 - `useGlobalGraph(baseUrl)` — global graph state + filters + fetch logic
 - `useSelectionMode()` — multi-select state + bulk dialog toggles
+- `useDismissable(containerRef, enabled, onDismiss)` — single source of truth for Escape-key + outside-mousedown dismissal of dropdowns/menus/panels. Replaces hand-rolled `useEffect` pairs (`UserMenu`, `ConceptInsightPanel`). Always prefer this hook over inline event listeners.
+- `useEdgeLLM(enabled, retryToken)` — WebGPU detection + edge model lifecycle
+- `useAuth`, `usePreferences` — server state for auth/preferences
+
+### Shared frontend UI utilities (`web/src/lib/ui/`)
+- `error-toast.ts` → `reportUserError(scope, err)` — single seam for surfacing component errors. Logs as `[neuronote:<scope>] <message>` in non-prod only. Replace any `console.error(...)` in components with this.
+- `tag-colors.ts` → `getTagColorClass(tag): TagChipClass` returns one of `TAG_CHIP_CLASSES` (`.tag-chip-blue` … `.tag-chip-violet`). Deterministic per tag string. Used by `TagPicker` and any future tag-rendering component.
+
+### Reusable workspace components
+- `NoteContextMenu` (`web/src/components/workspace/NoteContextMenu.tsx`) — right-click menu extracted from `NotesWorkspace`. Self-contained keyboard a11y: auto-focuses first item, Arrow/Home/End navigation, Enter/Space activation (jsdom doesn't synthesise click from keydown — handled explicitly), Escape close. Outside-click is owned by the parent via a `display: contents` ref wrapper.
 
 ### Graph constants (`web/src/components/graph/graph-constants.ts`)
 All D3 graph rendering magic numbers (forces, sizes, animation timing) are defined here. D3GraphCanvas reads colors from CSS custom properties at render time.
@@ -215,6 +232,6 @@ Frontend tests: `web/src/**/*.test.tsx`
 - `api/src/app/main.py` — app bootstrap, logging config, lifespan hooks, router registration
 - `api/alembic/versions/` — migrations are irreversible in production; write idempotently
 - `shared/contracts/python/v1/graph.py` + `shared/contracts/ts/v1/graph.ts` — must stay in sync
-- `web/src/app/globals.css` — all design tokens live here; circular variable references will silently break styling
+- `web/src/styles/tokens.css` — single source of truth for all design tokens; circular variable references will silently break styling. `web/src/app/globals.css` holds utility classes (`.tag-chip-*`, `.user-menu-*`, `.modal-overlay`, etc.) that consume these tokens.
 - `infra/docker-compose.yml` — service definitions, port mappings, env var injection
 - `web/src/middleware.ts` — Edge runtime; must use Web Crypto API (not Node.js `crypto`); matcher covers all non-static routes
