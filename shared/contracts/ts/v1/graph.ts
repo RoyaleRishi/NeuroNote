@@ -39,6 +39,8 @@ export interface GlobalGraphFilters {
   limit_nodes: number;
   min_confidence: number;
   include_types: string[];
+  subject_id?: string;
+  tag?: string;
 }
 
 export interface GlobalGraphMeta {
@@ -70,6 +72,7 @@ export interface ConceptInsightResponse {
   notes_found: number;
   note_refs: ConceptNoteRef[];
   insight: string | null;
+  insight_error: string | null;
   learning_links: ConceptLearningLink[];
   generated_at: string;
 }

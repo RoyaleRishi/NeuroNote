@@ -8,6 +8,7 @@ from app.db.models.note_asset import NoteAsset
 from app.db.models.note_tag import NoteTag
 from app.db.models.subject import Subject
 from app.db.models.tag import Tag
+from app.db.models.user import User
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "NoteTag",
     "Subject",
     "Tag",
+    "User",
 ]

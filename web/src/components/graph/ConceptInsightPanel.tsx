@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { fetchConceptInsight } from "../../lib/api-client";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 import type {
   ConceptInsightResponse,
   ConceptLearningLink,
@@ -39,25 +40,7 @@ export function ConceptInsightPanel({
       .finally(() => setLoading(false));
   }, [baseUrl, node.label]);
 
-  // Close on Escape
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
-  // Close on click outside
-  useEffect(() => {
-    function handleOutside(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [onClose]);
+  useDismissable(panelRef, true, onClose);
 
   return (
     <div className="concept-insight-overlay" role="dialog" aria-modal="true" aria-label={`Insight: ${node.label}`}>
@@ -87,7 +70,10 @@ export function ConceptInsightPanel({
           ) : data ? (
             <>
               <RelatedNotes refs={data.note_refs} onOpenNote={onOpenNote} onClose={onClose} />
-              <InsightSection insight={data.insight} />
+              <InsightSection
+                insight={data.insight}
+                insightError={data.insight_error ?? null}
+              />
               {data.learning_links.length > 0 && (
                 <LearningLinks
                   links={data.learning_links}
@@ -149,7 +135,13 @@ function RelatedNotes({
   );
 }
 
-function InsightSection({ insight }: { insight: string | null }) {
+function InsightSection({
+  insight,
+  insightError,
+}: {
+  insight: string | null;
+  insightError: string | null;
+}) {
   return (
     <div className="concept-insight-section">
       <h3 className="concept-insight-section-title">
@@ -158,9 +150,15 @@ function InsightSection({ insight }: { insight: string | null }) {
       </h3>
       {insight ? (
         <div className="concept-insight-text">{insight}</div>
+      ) : insightError ? (
+        // The backend reported a concrete reason — surface it verbatim so
+        // the user can fix their model/key/base-url instead of guessing.
+        <p className="concept-insight-error" role="alert">
+          AI insight unavailable: {insightError}
+        </p>
       ) : (
         <p className="concept-insight-no-llm">
-          Set <code>LLM_API_KEY</code> in your environment to enable AI insights.
+          Configure a cloud AI key in your user menu to enable AI insights.
         </p>
       )}
     </div>

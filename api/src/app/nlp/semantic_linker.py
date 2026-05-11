@@ -39,7 +39,7 @@ class SemanticLinkerService:
             text(
                 """
                 SELECT embedding::text
-                FROM public.note_embeddings
+                FROM note_embeddings
                 WHERE item_id = :note_id AND item_type = 'note'
                 LIMIT 1
                 """
@@ -62,7 +62,7 @@ class SemanticLinkerService:
             text(
                 """
                 SELECT note_id, note_title
-                FROM public.notes
+                FROM notes
                 WHERE note_id = ANY(:ids)
                 """
             ),

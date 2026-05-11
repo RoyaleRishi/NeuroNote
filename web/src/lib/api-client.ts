@@ -21,6 +21,7 @@ import type {
   GlobalGraphResponse,
   ConceptInsightResponse,
 } from "../../../shared/contracts/ts/v1/graph";
+import type { UserProfile } from "../../../shared/contracts/ts/v1/auth";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -36,14 +37,43 @@ export class ApiClientError extends Error {
   }
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const apiKey =
-    typeof process !== "undefined" ? process.env.NEXT_PUBLIC_API_KEY : undefined;
-  return apiKey ? { "X-Api-Key": apiKey } : {};
+/** Resolve the API base URL from the environment. */
+export function getBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+}
+
+/** Concurrent refresh requests share a single in-flight promise. */
+let refreshPromise: Promise<boolean> | null = null;
+
+/** Hit /v1/auth/refresh to issue a new access cookie from the refresh cookie. */
+async function tryRefreshAccessToken(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+  const base = getBaseUrl();
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${base}/v1/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+/** Check if a URL is an auth endpoint where 401 should not trigger a refresh loop. */
+function isAuthUrl(url: string): boolean {
+  return url.includes("/v1/auth/");
 }
 
 /**
- * fetch wrapper that injects auth headers and enforces a request timeout.
+ * fetch wrapper that sends cookies cross-origin, enforces a request timeout,
+ * and transparently refreshes expired access tokens on 401.
+ *
  * Pass signal: null to opt out of the timeout for a specific call (e.g. long uploads).
  */
 async function apiFetch(
@@ -52,28 +82,51 @@ async function apiFetch(
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = options;
 
-  let controller: AbortController | null = null;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let effectiveSignal: AbortSignal | undefined = signal as AbortSignal | undefined;
+  const doFetch = async (): Promise<Response> => {
+    let controller: AbortController | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let effectiveSignal: AbortSignal | undefined =
+      signal as AbortSignal | undefined;
 
-  if (timeoutMs > 0) {
-    controller = new AbortController();
-    timeoutId = setTimeout(() => controller!.abort(), timeoutMs);
-    effectiveSignal = controller.signal;
+    if (timeoutMs > 0) {
+      controller = new AbortController();
+      timeoutId = setTimeout(() => controller!.abort(), timeoutMs);
+      effectiveSignal = controller.signal;
+    }
+
+    try {
+      return await fetch(url, {
+        ...rest,
+        credentials: "include",
+        signal: effectiveSignal,
+        headers: {
+          ...(rest.headers as Record<string, string> | undefined),
+        },
+      });
+    } finally {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+  };
+
+  const response = await doFetch();
+
+  // On 401, try refreshing the access token once and retry the request.
+  // Skip the auth endpoints themselves to avoid loops.
+  if (response.status === 401 && !isAuthUrl(url)) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      return doFetch();
+    }
+    // Refresh failed → user truly logged out. Bounce to login.
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      const next = encodeURIComponent(
+        window.location.pathname + window.location.search,
+      );
+      window.location.href = `/login?next=${next}`;
+    }
   }
 
-  try {
-    return await fetch(url, {
-      ...rest,
-      signal: effectiveSignal,
-      headers: {
-        ...getAuthHeaders(),
-        ...(rest.headers as Record<string, string> | undefined),
-      },
-    });
-  } finally {
-    if (timeoutId !== null) clearTimeout(timeoutId);
-  }
+  return response;
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -310,6 +363,8 @@ interface GlobalGraphQuery {
   limit_nodes?: number;
   min_confidence?: number;
   include_types?: string[];
+  subject_id?: string;
+  tag?: string;
 }
 
 export async function fetchGlobalGraph(
@@ -320,10 +375,71 @@ export async function fetchGlobalGraph(
   if (query.limit_nodes !== undefined) params.set("limit_nodes", String(query.limit_nodes));
   if (query.min_confidence !== undefined) params.set("min_confidence", String(query.min_confidence));
   if (query.include_types && query.include_types.length > 0) params.set("include_types", query.include_types.join(","));
+  if (query.subject_id) params.set("subject_id", query.subject_id);
+  if (query.tag) params.set("tag", query.tag);
   const suffix = params.toString();
   const response = await apiFetch(
     `${baseUrl}/v1/graph/global${suffix ? `?${suffix}` : ""}`,
     { timeoutMs: 60_000 },
   );
   return parseJsonResponse<GlobalGraphResponse>(response);
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+/** Fetch the currently authenticated user profile, or null if not logged in. */
+export async function fetchCurrentUser(): Promise<UserProfile | null> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/auth/me`);
+  if (res.status === 401) return null;
+  return parseJsonResponse<UserProfile>(res);
+}
+
+/** Log the current user out by clearing server-side auth cookies. */
+export async function logoutUser(): Promise<void> {
+  const base = getBaseUrl();
+  await apiFetch(`${base}/v1/auth/logout`, { method: "POST" });
+}
+
+// ── Preferences ─────────────────────────────────────────────────────────────
+
+import type {
+  UserPreferences,
+  UpdatePreferencesRequest,
+  TestConnectionResponse,
+} from "../../../shared/contracts/ts/v1/preferences";
+
+export type { UserPreferences, UpdatePreferencesRequest, TestConnectionResponse };
+
+/** Fetch the user's preferences (with defaults for unset keys). */
+export async function fetchPreferences(): Promise<UserPreferences> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/preferences`);
+  return parseJsonResponse<UserPreferences>(res);
+}
+
+/** Partial update of user preferences. */
+export async function updatePreferences(
+  payload: UpdatePreferencesRequest,
+): Promise<UserPreferences> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/preferences`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse<UserPreferences>(res);
+}
+
+/**
+ * Validate the currently saved cloud LLM config by making a small completion
+ * call against the user's configured base_url + model + key.  Used by the
+ * UserMenu after Save to surface invalid credentials to the user.
+ */
+export async function testLlmConnection(): Promise<TestConnectionResponse> {
+  const base = getBaseUrl();
+  const res = await apiFetch(`${base}/v1/preferences/test-connection`, {
+    method: "POST",
+  });
+  return parseJsonResponse<TestConnectionResponse>(res);
 }

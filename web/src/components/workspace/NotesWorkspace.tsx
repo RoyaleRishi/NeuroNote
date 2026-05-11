@@ -6,6 +6,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { NoteEditor } from "../editor/NoteEditor";
 import { GlobalGraphPanel } from "../graph/GlobalGraphPanel";
 import { BacklinksModal } from "./BacklinksModal";
+import { NoteContextMenu } from "./NoteContextMenu";
 import { InputModal } from "../ui/InputModal";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { SkeletonNoteList } from "../ui/Skeleton";
@@ -15,6 +16,14 @@ import { KeyboardShortcutsModal } from "../ui/KeyboardShortcutsModal";
 import { TemplateGallery } from "../templates/TemplateGallery";
 import { FilterCombobox } from "../ui/FilterCombobox";
 import { HelpWidget } from "../ui/HelpWidget";
+import { ModelStatusIndicator } from "../llm/ModelStatusIndicator";
+import { ModelDownloadProgress } from "../llm/ModelDownloadProgress";
+import { WebGPUCheck } from "../llm/WebGPUCheck";
+import { EdgeConsentDialog } from "../llm/EdgeConsentDialog";
+import { EdgeCrashBanner } from "../llm/EdgeCrashBanner";
+import { usePreferences } from "../../lib/hooks/usePreferences";
+import { useEdgeLLM } from "../../lib/hooks/useEdgeLLM";
+import { reportUserError } from "../../lib/ui/error-toast";
 import { applyTemplate, type Template } from "../../lib/templates";
 import {
   ApiClientError,
@@ -23,11 +32,12 @@ import {
   importNote,
   listNotes,
   saveNote,
+  updatePreferences,
 } from "../../lib/api-client";
 import type { WorkspaceFilters } from "../../lib/workspace/types";
 import type { QuickSwitchItem } from "../../lib/workspace/quick-switch";
 import type { NoteSummary } from "../../../../shared/contracts/ts/v1/note";
-import { getTagColor } from "../../lib/ui/tag-colors";
+import { getTagColorClass } from "../../lib/ui/tag-colors";
 import { makeNewNoteId } from "../../lib/utils/note-id";
 import { useBacklinks } from "../../lib/hooks/useBacklinks";
 import { useGlobalGraph } from "../../lib/hooks/useGlobalGraph";
@@ -35,6 +45,8 @@ import { useSelectionMode } from "../../lib/hooks/useSelectionMode";
 import { useQuickSwitch } from "../../lib/hooks/useQuickSwitch";
 import { QuickCaptureModal, type QuickCaptureResult } from "./QuickCaptureModal";
 import { FileDropZone } from "./FileDropZone";
+import { UserMenu } from "../auth/UserMenu";
+import { useAuth } from "../../lib/hooks/useAuth";
 
 const SELECTED_NOTE_STORAGE_KEY = "neuronote.workspace.selected";
 const RECENT_NOTES_STORAGE_KEY = "neuronote.workspace.recent";
@@ -219,14 +231,37 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const createInFlightRef = useRef(false);
-  const contextMenuRef = useRef<HTMLUListElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const filtersInitializedRef = useRef(false);
+
+  // ── Auth ──
+  const { user } = useAuth();
+
+  // ── Preferences ──
+  const { prefs, reload: reloadPrefs } = usePreferences();
+
+  // ── Edge LLM lifecycle ──
+  // Bumping `edgeRetryToken` re-runs WebGPU detection + engine init
+  // (driven by the WebGPU unsupported modal's "Try Again" button).
+  const [edgeRetryToken, setEdgeRetryToken] = useState(0);
+  const edgeMode = prefs?.llm_mode === "edge";
+  const edge = useEdgeLLM(edgeMode, edgeRetryToken);
+
+  const switchToCloud = useCallback(async () => {
+    try {
+      await updatePreferences({ llm_mode: "cloud" });
+      void reloadPrefs();
+    } catch (err) {
+      reportUserError("switchToCloud", err);
+    }
+  }, [reloadPrefs]);
 
   // ── Extracted hooks ──
   const qs = useQuickSwitch(notes, selectedNoteId);
   const backlinks = useBacklinks(baseUrl);
-  const globalGraph = useGlobalGraph(baseUrl);
+  const globalGraph = useGlobalGraph(baseUrl, prefs?.confidence_threshold ?? 0.9);
   const selection = useSelectionMode();
 
   const filters: WorkspaceFilters = useMemo(
@@ -995,15 +1030,11 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           {note.subject_id && note.subject_id !== "inbox" && (
             <span className="note-list-subject-badge">{note.subject_id}</span>
           )}
-          {note.tags.slice(0, 3).map((tag) => {
-            const c = getTagColor(tag);
-            return (
-              <span key={tag} className="note-list-tag-chip"
-                style={{ backgroundColor: c.bg, color: c.text }}>
-                {tag}
-              </span>
-            );
-          })}
+          {note.tags.slice(0, 3).map((tag) => (
+            <span key={tag} className={`note-list-tag-chip ${getTagColorClass(tag)}`}>
+              {tag}
+            </span>
+          ))}
           <span className="note-list-date">{toDisplayDate(note.updated_at)}</span>
         </div>
       </button>
@@ -1013,6 +1044,16 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
 
   return (
     <div className="app-shell">
+      <EdgeCrashBanner
+        isOpen={edgeMode && edge.status === "awaiting-recovery"}
+        onAcknowledge={(action) => {
+          edge.acknowledgeRecovery(action);
+          if (action === "switchToCloud") {
+            void switchToCloud();
+          }
+        }}
+      />
+      <ModelDownloadProgress status={edge.status} progress={edge.progress} />
       <nav className="app-nav">
         <span className="app-nav-brand">NeuroNote</span>
         <div className="app-nav-tabs" role="tablist" aria-label="App view">
@@ -1035,19 +1076,37 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             Graph
           </button>
         </div>
-        {process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && (
-          <button
-            type="button"
-            className="app-nav-logout"
-            onClick={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
-              window.location.href = "/login";
-            }}
-          >
-            Sign out
-          </button>
-        )}
+        <div className="app-nav-right">
+          <ModelStatusIndicator
+            mode={prefs?.llm_mode}
+            status={edge.status}
+            progress={edge.progress}
+            error={edge.error}
+          />
+          <UserMenu user={user} />
+        </div>
       </nav>
+
+      <EdgeConsentDialog
+        isOpen={edgeMode && edge.status === "awaiting-consent"}
+        onAccept={edge.acceptConsent}
+        onDecline={() => {
+          edge.declineConsent();
+          void switchToCloud();
+        }}
+        onDismiss={() => {
+          // Leave consent absent; the dialog re-shows on reload.
+          // No state change needed because the hook's status remains
+          // 'awaiting-consent' until the user makes a choice.
+        }}
+      />
+
+      {/* WebGPU support check — shown when edge mode is selected but unsupported */}
+      <WebGPUCheck
+        isOpen={edgeMode && edge.status === "unsupported"}
+        onOpenSettings={() => { void switchToCloud(); }}
+        onRetry={() => setEdgeRetryToken((n) => n + 1)}
+      />
 
       {appView === "graph" ? (
         <GlobalGraphPanel
@@ -1056,6 +1115,8 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           filters={globalGraph.filters}
           isLoading={globalGraph.isLoading}
           errorMessage={globalGraph.errorMessage}
+          availableSubjects={availableSubjects}
+          availableTags={availableTags}
           onRetry={() => { void globalGraph.load(); }}
           onFiltersChange={(next) => { globalGraph.setFilters(next); }}
           onOpenNote={(nextNoteId) => {
@@ -1067,10 +1128,21 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         />
       ) : (
       <FileDropZone onFileContent={(name, content) => void handleFileImport(name, content)}>
-      <section className="notes-workspace" data-testid="notes-workspace">
+      <section className={`notes-workspace${sidebarOpen ? "" : " sidebar-collapsed"}`} data-testid="notes-workspace">
       <aside className="notes-sidebar">
         <header className="notes-sidebar-header">
-          <h1>Notes</h1>
+          <div className="notes-sidebar-title-row">
+            <h1>Notes</h1>
+            <button
+              type="button"
+              className="sidebar-collapse-btn"
+              onClick={() => setSidebarOpen(false)}
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              ‹
+            </button>
+          </div>
           <div className="notes-sidebar-actions">
             <button
               type="button"
@@ -1156,6 +1228,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           </label>
         </div>
 
+        <div className="notes-sections-scroller">
         {recentNotes.length > 0 ? (
           <section className="notes-section" data-testid="notes-section-recent">
             <h2>
@@ -1261,20 +1334,21 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             onAction={() => void refreshNotes(selectedNoteId)}
           />
         ) : null}
+        </div>
       </aside>
 
       <main className="notes-editor-panel">
-        <div className="notes-editor-actions">
+        {!sidebarOpen && (
           <button
             type="button"
-            className="editor-command-button"
-            ref={backlinks.triggerRef as React.RefObject<HTMLButtonElement>}
-            onClick={() => selectedNoteId && backlinks.open(selectedNoteId)}
-            disabled={!selectedNoteId}
+            className="sidebar-expand-btn"
+            onClick={() => setSidebarOpen(true)}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
           >
-            Linked mentions
+            ›
           </button>
-        </div>
+        )}
         {selectedNoteId ? (
           <NoteEditor
             key={selectedNoteId}
@@ -1290,6 +1364,8 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
               setSelectedNoteId(nextNoteId);
               setHighlightedNoteId(nextNoteId);
             }}
+            confidenceThreshold={prefs?.confidence_threshold ?? 0.9}
+            onShowBacklinks={selectedNoteId ? () => backlinks.open(selectedNoteId) : undefined}
           />
         ) : (
           <div className="notes-empty-state">
@@ -1389,39 +1465,20 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
       ) : null}
 
       {contextMenu ? (
-        <ul
-          ref={contextMenuRef}
-          className="note-context-menu"
-          role="menu"
-          aria-label="Note actions"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <li>
-            <button type="button" role="menuitem" onClick={() => void handleRenameNote(contextMenu.noteId)}>
-              Rename note
-            </button>
-          </li>
-          <li>
-            <button type="button" role="menuitem" onClick={() => void handleTogglePinnedNote(contextMenu.noteId)}>
-              {contextNote?.is_pinned ? "Unpin note" : "Pin note"}
-            </button>
-          </li>
-          <li>
-            <button type="button" role="menuitem" onClick={() => void handleToggleArchivedNote(contextMenu.noteId)}>
-              {contextNote?.is_archived ? "Unarchive note" : "Archive note"}
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              onClick={() => handleDeleteClick(contextMenu.noteId)}
-            >
-              Delete note
-            </button>
-          </li>
-        </ul>
+        <div ref={contextMenuRef} style={{ display: "contents" }}>
+          <NoteContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            noteId={contextMenu.noteId}
+            isPinned={!!contextNote?.is_pinned}
+            isArchived={!!contextNote?.is_archived}
+            onRename={(id) => void handleRenameNote(id)}
+            onTogglePinned={(id) => void handleTogglePinnedNote(id)}
+            onToggleArchived={(id) => void handleToggleArchivedNote(id)}
+            onDelete={(id) => handleDeleteClick(id)}
+            onClose={closeContextMenu}
+          />
+        </div>
       ) : null}
 
       <InputModal

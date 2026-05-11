@@ -4,7 +4,7 @@ NeuroNote is a local-first, AI-powered knowledge base. You write notes in a rich
 
 **Key capabilities:**
 - **Rich editor** — TipTap-based with slash commands, wiki-links (`[[Note Title]]`), block references (`((uid))`), LaTeX math, images, and checklists
-- **Automatic concept extraction** — NLP pipeline (rule-based, spaCy, or Claude-powered) identifies entities and relations in every note
+- **Automatic concept extraction** — deterministic NLP pipeline (kbir-inspec transformer + YAKE, embedding-based normalisation, structural relation derivation) identifies concepts and relations in every note
 - **Knowledge graph** — Apache AGE typed property graph; explore your notes as a D3 force-directed graph with hop depth, confidence, and node-type filters
 - **Concept Insight Panel** — click any concept or entity node in the graph to see all related notes, an AI-generated synthesis paragraph grounded solely in your notes, and curated external learning links
 - **Backlinks** — know which notes reference any note or block
@@ -46,39 +46,11 @@ Default URLs: Web `http://localhost:3000` · API `http://localhost:8000` · Post
 
 ## AI Features
 
-### NLP Extraction Profiles
+### NLP Extraction
 
-Every note save triggers background entity and relation extraction. Three profiles are available:
+Every note save triggers a deterministic background pipeline: the `ml6team/keyphrase-extraction-kbir-inspec` transformer (high-precision on dense prose) and YAKE (statistical recall on lists/informal text) extract concept spans, an embedding-based nearest-neighbour pass against the per-tenant `concept_registry` normalises them onto canonical concepts (cosine threshold 0.88), and `derive_relations` emits five structural edge types (`MENTIONED_TOGETHER`, `SUBTOPIC_OF`, `SIBLING_OF`, `REFERENCES`, `DEFINED_BY`) from block structure. The LLM is no longer in the extraction critical path — it is used only for per-note summaries and the on-demand Concept Insight Panel.
 
-| Profile | How it works |
-|---|---|
-| `rule-only` | Dictionary matching + deterministic regex (default, no external dependencies) |
-| `hybrid-spacy` | Dictionary + spaCy NER + regex fallback |
-| `llm-enhanced` | Any OpenAI-compatible LLM — highest quality, requires `LLM_API_KEY` |
-
-Set via environment variable in `infra/docker-compose.yml` or on the command line:
-
-```bash
-# Hybrid spaCy
-NLP_EXTRACTION_PROFILE=hybrid-spacy \
-NLP_MODEL_NAME=spacy:en_core_web_sm \
-make compose-up
-
-# LLM-enhanced (any OpenAI-compatible provider)
-NLP_EXTRACTION_PROFILE=llm-enhanced \
-LLM_API_KEY=sk-ant-... \
-LLM_BASE_URL=https://api.anthropic.com/v1/ \
-NLP_LLM_MODEL=claude-haiku-4-5-20251001 \
-make compose-up
-```
-
-Seeding custom terms for deterministic recall:
-```bash
-NLP_ENTITY_SEED_TERMS="machine learning,knowledge graph,entity resolution" \
-make compose-up
-```
-
-**LLM provider configuration** (`LLM_BASE_URL` + `NLP_LLM_MODEL`):
+**LLM provider configuration** (`LLM_BASE_URL` + `NLP_LLM_MODEL`) — used by summaries / insight panel:
 
 | Provider | `LLM_BASE_URL` | Example `NLP_LLM_MODEL` |
 |---|---|---|
@@ -388,6 +360,5 @@ unzip -l demo-note.zip
 |---|---|
 | `relation "note_assets" does not exist` | Run `make compose-migrate` |
 | Insight section shows config hint | Set `LLM_API_KEY` in compose env |
-| spaCy model not found | Install the model inside the API container or use `rule-only` profile |
 | AGE concurrent lock error in logs | Known AGE issue with parallel note processing — non-critical, retries succeed |
 | Port already in use | Use `WEB_PORT=3001 API_PORT=8001 make compose-up` |

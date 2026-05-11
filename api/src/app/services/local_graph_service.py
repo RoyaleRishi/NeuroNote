@@ -1,20 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
-
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.graph_cache import get_cached, get_note_version, set_cached
-from app.db.models.block import Block
 from app.db.models.note import Note
-from app.db.repositories.entity_alias_repository import EntityAliasRepository
-from app.nlp.pipeline import NoteNlpPipeline
-from app.nlp.types import BlockTextInput
+from app.db.repositories.graph_repository import EntityMention, GraphRepository
 from app.utils.text import (
     extract_wiki_link_titles,
-    normalize_entity_key,
     normalize_include_types,
     normalize_title_key,
 )
@@ -40,7 +34,6 @@ class _NoteSnapshot:
     note_title: str
     content_text: str
     subject_id: str
-    blocks: list[BlockTextInput]
 
 
 class LocalGraphNoteNotFoundError(RuntimeError):
@@ -48,29 +41,28 @@ class LocalGraphNoteNotFoundError(RuntimeError):
 
 
 class LocalGraphService:
-    def __init__(self, session: Session, *, pipeline: NoteNlpPipeline | None = None) -> None:
+    def __init__(self, session: Session, *, graph_name: str = "neuronote") -> None:
         self._session = session
-        self._pipeline = pipeline or NoteNlpPipeline()
+        self._graph_name = graph_name
 
     @staticmethod
     def _normalize_title(value: str) -> str:
         return normalize_title_key(value)
 
     @staticmethod
-    def _normalize_entity_key(value: str) -> str:
-        return normalize_entity_key(value)
-
-    @staticmethod
     def _normalize_include_types(values: list[str]) -> list[str]:
         return normalize_include_types(values)
 
+    @staticmethod
+    def _extract_wiki_links(content_text: str) -> list[str]:
+        return extract_wiki_link_titles(content_text)
+
     def _fetch_reachable_notes(self, seed_id: str, max_hops: int) -> list[_NoteSnapshot]:
-        """Load only notes reachable from seed_id within max_hops via wiki-links.
+        """Load notes reachable from seed_id within max_hops via wiki-links.
 
         Outgoing links are resolved with a targeted SQL fetch by normalized title.
-        Incoming links (notes that link TO a frontier note) are found with a
-        per-hop ILIKE scan — still O(n) for incoming, but blocks are never loaded
-        for notes outside the reachable set.
+        Incoming links (notes that link TO a frontier note) are found with an
+        ILIKE scan per hop — O(n) for incoming but limited to reachable notes.
         """
         # note_id -> (note_title, content_text, subject_id)
         visited: dict[str, tuple[str, str, str]] = {}
@@ -82,14 +74,17 @@ class LocalGraphService:
         if seed_row is None:
             return []
 
-        visited[str(seed_row[0])] = (str(seed_row[1]), str(seed_row[2]), str(seed_row[3]) if seed_row[3] else "inbox")
+        visited[str(seed_row[0])] = (
+            str(seed_row[1]),
+            str(seed_row[2]),
+            str(seed_row[3]) if seed_row[3] else "inbox",
+        )
         frontier_ids: set[str] = {str(seed_row[0])}
 
         for _hop in range(max_hops):
             if not frontier_ids:
                 break
 
-            # --- outgoing: SQL fetch by wiki-link title match ---
             outgoing_titles: set[str] = set()
             for fid in frontier_ids:
                 _, content, _ = visited[fid]
@@ -108,7 +103,6 @@ class LocalGraphService:
                     visited[nid] = (str(r[1]), str(r[2]), str(r[3]) if r[3] else "inbox")
                     new_ids.add(nid)
 
-            # --- incoming: ILIKE scan for notes linking TO frontier notes ---
             frontier_titles = [self._normalize_title(visited[fid][0]) for fid in frontier_ids]
             if frontier_titles:
                 like_clauses = [
@@ -126,65 +120,15 @@ class LocalGraphService:
 
             frontier_ids = new_ids
 
-        # Load blocks only for the reachable notes
-        visited_ids = list(visited.keys())
-        block_rows = self._session.execute(
-            select(Block.note_id, Block.block_index, Block.content_text)
-            .where(Block.note_id.in_(visited_ids))
-            .order_by(Block.note_id.asc(), Block.block_index.asc())
-        ).all()
-        blocks_by_note_id: dict[str, list[BlockTextInput]] = {}
-        for r in block_rows:  # type: ignore[assignment]
-            blocks_by_note_id.setdefault(str(r[0]), []).append(
-                BlockTextInput(block_index=int(r[1]), content_text=str(r[2]))
-            )
-
         return [
             _NoteSnapshot(
                 note_id=nid,
                 note_title=title,
                 content_text=content,
                 subject_id=subject_id,
-                blocks=blocks_by_note_id.get(nid, []),
             )
             for nid, (title, content, subject_id) in visited.items()
         ]
-
-    @staticmethod
-    def _extract_wiki_links(content_text: str) -> list[str]:
-        return extract_wiki_link_titles(content_text)
-
-    def _build_dictionary_terms(self) -> list[str]:
-        alias_records = EntityAliasRepository(self._session).list_alias_index()
-        terms: list[str] = []
-        seen: set[str] = set()
-        for alias_text, record in alias_records.items():
-            for term in (alias_text, record.canonical_name):
-                normalized = " ".join(term.split()).strip()
-                if not normalized:
-                    continue
-                key = normalized.lower()
-                if key in seen:
-                    continue
-                seen.add(key)
-                terms.append(normalized)
-        return terms
-
-    def _entity_is_note_noise(
-        self,
-        *,
-        entity_label: str,
-        note: _NoteSnapshot,
-        linked_note_titles: set[str],
-    ) -> bool:
-        normalized_label = self._normalize_title(entity_label)
-        if not normalized_label:
-            return True
-        if normalized_label == self._normalize_title(note.note_title):
-            return True
-        if normalized_label in linked_note_titles:
-            return True
-        return False
 
     def get_local_graph(self, query: LocalGraphQuery) -> LocalGraphResponse:
         include_types = self._normalize_include_types(query.include_types)
@@ -201,19 +145,15 @@ class LocalGraphService:
         include_type_set = set(include_types)
 
         notes = self._fetch_reachable_notes(query.note_id, query.max_hops)
-        dictionary_terms = self._build_dictionary_terms()
         notes_by_id = {note.note_id: note for note in notes}
         if query.note_id not in notes_by_id:
             raise LocalGraphNoteNotFoundError(f"Note {query.note_id} was not found")
 
-        # Title index is built only from reachable notes; links to out-of-scope
-        # notes simply won't resolve, which is the correct behaviour.
         title_index: dict[str, str] = {
             self._normalize_title(note.note_title): note.note_id for note in notes
         }
-        visited_note_ids: set[str] = set(notes_by_id.keys())
 
-        # Build LINKS_TO edges from the reachable set
+        # LINKS_TO edges from wiki-link parsing (SQL — always available)
         edge_map: dict[tuple[str, str, str], LocalGraphEdge] = {}
         if "relation" in include_type_set:
             for note in notes:
@@ -232,91 +172,86 @@ class LocalGraphService:
                             source_note_id=note.note_id,
                         )
 
+        # Note nodes (SQL)
         node_map: dict[str, LocalGraphNode] = {}
         if "note" in include_type_set:
-            for note_id in sorted(visited_note_ids):
-                graph_note = notes_by_id.get(note_id)
-                if graph_note is None:
-                    continue
-                node_map[note_id] = LocalGraphNode(
-                    id=graph_note.note_id,
+            for note in notes:
+                node_map[note.note_id] = LocalGraphNode(
+                    id=note.note_id,
                     type="note",
-                    label=graph_note.note_title,
+                    label=note.note_title,
                     confidence=None,
-                    source_note_id=graph_note.note_id,
+                    source_note_id=note.note_id,
                     metadata={
-                        "note_id": graph_note.note_id,
-                        "subject_id": graph_note.subject_id,
-                        "content_preview": graph_note.content_text[:140],
+                        "note_id": note.note_id,
+                        "subject_id": note.subject_id,
+                        "content_preview": note.content_text[:140],
                     },
                 )
 
+        # Entity nodes + relation edges (AGE graph)
         if "entity" in include_type_set:
-            for note_id in sorted(visited_note_ids):
-                graph_note = notes_by_id.get(note_id)
-                if graph_note is None:
-                    continue
-                linked_note_titles = {
-                    linked_title
-                    for linked_title in self._extract_wiki_links(graph_note.content_text)
-                    if linked_title
-                }
-                pipeline_text = graph_note.content_text.strip()
-                extraction_blocks = graph_note.blocks or [
-                    BlockTextInput(block_index=0, content_text=graph_note.content_text)
-                ]
-                if not pipeline_text:
-                    pipeline_text = "\n\n".join(
-                        block.content_text.strip()
-                        for block in extraction_blocks
-                        if block.content_text.strip()
-                    )
-                if not pipeline_text:
-                    continue
-                content_hash = hashlib.sha256(pipeline_text.encode("utf-8")).hexdigest()
-                extraction = self._pipeline.extract(
-                    note_id=graph_note.note_id,
-                    content_text=pipeline_text,
-                    content_hash=content_hash,
-                    blocks=extraction_blocks,
-                    dictionary_terms=dictionary_terms,
+            graph_repo = GraphRepository(self._session)
+            graph_result = graph_repo.fetch_graph_for_notes(
+                note_ids=list(notes_by_id.keys()),
+                min_confidence=query.min_confidence,
+                graph_name=self._graph_name,
+            )
+
+            # Deduplicate entities by highest confidence across all source notes
+            entity_best: dict[str, tuple[float, EntityMention]] = {}
+            for mention in graph_result.mentions:
+                if (mention.entity_id not in entity_best
+                        or mention.confidence > entity_best[mention.entity_id][0]):
+                    entity_best[mention.entity_id] = (mention.confidence, mention)
+
+            for entity_id, (conf, mention) in entity_best.items():
+                node_map[entity_id] = LocalGraphNode(
+                    id=entity_id,
+                    type="entity",
+                    label=mention.entity_name,
+                    confidence=conf,
+                    source_note_id=mention.source_note_id,
+                    metadata={
+                        "entity_id": entity_id,
+                        "entity_label": mention.entity_kind,
+                    },
                 )
-                for entity in extraction.entities:
-                    if float(entity.confidence) < query.min_confidence:
+
+            if "relation" in include_type_set:
+                # MENTIONS edges (Note→Entity), one per (note, entity) pair
+                seen_mention_keys: set[tuple[str, str]] = set()
+                for mention in graph_result.mentions:
+                    if mention.entity_id not in node_map:
                         continue
-                    if self._entity_is_note_noise(
-                        entity_label=entity.text,
-                        note=graph_note,
-                        linked_note_titles=linked_note_titles,
-                    ):
+                    pair = (mention.source_note_id, mention.entity_id)
+                    if pair in seen_mention_keys:
                         continue
-                    entity_key = self._normalize_entity_key(entity.text)
-                    entity_id = f"entity:{entity_key}"
-                    if entity_id not in node_map:
-                        node_map[entity_id] = LocalGraphNode(
-                            id=entity_id,
-                            type="entity",
-                            label=entity.text,
-                            confidence=float(entity.confidence),
-                            source_note_id=graph_note.note_id,
-                            metadata={
-                                "entity_id": entity.entity_id,
-                                "entity_label": entity.label,
-                            },
-                        )
-                    if "relation" not in include_type_set:
-                        continue
-                    mention_edge_key = (graph_note.note_id, entity_id, "MENTIONS")
-                    if mention_edge_key in edge_map:
-                        continue
-                    edge_map[mention_edge_key] = LocalGraphEdge(
-                        id=f"{graph_note.note_id}->MENTIONS->{entity_id}",
-                        source=graph_note.note_id,
-                        target=entity_id,
+                    seen_mention_keys.add(pair)
+                    key = (mention.source_note_id, mention.entity_id, "MENTIONS")
+                    edge_map[key] = LocalGraphEdge(
+                        id=f"{mention.source_note_id}->MENTIONS->{mention.entity_id}",
+                        source=mention.source_note_id,
+                        target=mention.entity_id,
                         type="MENTIONS",
-                        confidence=float(entity.confidence),
-                        source_note_id=graph_note.note_id,
+                        confidence=mention.confidence,
+                        source_note_id=mention.source_note_id,
                     )
+
+                # Typed Concept→Concept relation edges
+                for rel in graph_result.relations:
+                    if rel.source_id not in node_map or rel.target_id not in node_map:
+                        continue
+                    key = (rel.source_id, rel.target_id, rel.edge_type)
+                    if key not in edge_map:
+                        edge_map[key] = LocalGraphEdge(
+                            id=f"{rel.source_id}->{rel.edge_type}->{rel.target_id}",
+                            source=rel.source_id,
+                            target=rel.target_id,
+                            type=rel.edge_type,
+                            confidence=rel.confidence,
+                            source_note_id=rel.source_note_id,
+                        )
 
         nodes = sorted(node_map.values(), key=lambda item: (item.type, item.id))
         truncated = len(nodes) > query.limit_nodes

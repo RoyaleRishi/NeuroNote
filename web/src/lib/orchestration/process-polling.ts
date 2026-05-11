@@ -53,6 +53,7 @@ export function createProcessPollingController(
         created_at: "",
         updated_at: "",
         error: "Polling failed",
+        extraction_summary: null,
       });
     }
 

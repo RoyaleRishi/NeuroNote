@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -16,6 +17,18 @@ from app.nlp.types import (
     ExtractedKeyphrase,
     ExtractedRelation,
 )
+
+_LOG = logging.getLogger(__name__)
+
+# Concept→Concept relation predicates emitted by the deterministic
+# pipeline. Anything outside this set is logged and dropped — we do not
+# silently coerce unknown predicates to a generic edge type any more.
+_STRUCTURAL_RELATIONS: frozenset[str] = frozenset({
+    "MENTIONED_TOGETHER",
+    "SUBTOPIC_OF",
+    "SIBLING_OF",
+    "REFERENCES",
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,32 +61,10 @@ def _utc_now_iso() -> str:
 class GraphSyncService:
     """Synchronises NLP extraction results into the Apache AGE property graph.
 
-    **Algorithm — delete-and-replace:**
-    On every call to :meth:`sync`, all AGE nodes and edges whose ``source_note_id``
-    matches the note being processed are deleted first.  The full set of nodes and
-    edges is then re-created from the current extraction payload.  This guarantees
-    idempotency: re-running sync for the same note (e.g. after a schema migration or
-    a content edit) always produces a consistent graph state.
-
-    **Graph schema:**
-
-    Nodes
-        - ``Note``     — one per note; id = ``note_id``
-        - ``Subject``  — one per subject/notebook
-        - ``Block``    — one per TipTap block; id = ``{note_id}:block:{block_uid}``
-        - ``Entity``   — concept or named entity; id = ``concept-{slug}``
-        - ``Keyphrase``— extracted key phrase
-        - ``Relation`` — reified relation node when a typed relation is extracted
-
-    Edges
-        - ``BELONGS_TO`` — Note → Subject
-        - ``CONTAINS``   — Note → Block
-        - ``HAS_PARENT`` — Block → Block (tree hierarchy)
-        - ``MENTIONS``   — Block → Entity; carries ``mention_text``, ``start_offset``,
-                          ``end_offset``, ``source_note_id`` for provenance
-        - ``LINKS_TO``   — Note → Note (wiki-link)
-        - ``RELATED_TO`` — Note → Entity (keyphrases, resolved entities)
-        - ``SUBJECT_OF`` / ``OBJECT_OF`` — for reified Relation nodes
+    Uses block-level delta sync: on each call to sync_note_graph, the set of
+    Block nodes currently in AGE is compared against the current block list.
+    Only dirty (new or hash-changed) and deleted blocks trigger AGE writes.
+    Unchanged blocks are left untouched, avoiding full delete-and-replace.
     """
 
     def __init__(
@@ -98,23 +89,16 @@ class GraphSyncService:
     def _block_node_id(self, *, note_id: str, block_uid: str) -> str:
         return f"{note_id}:block:{block_uid}"
 
-    def _upsert_note_and_blocks(
+    def _upsert_note_and_subject(
         self,
         *,
         payload: GraphSyncPayload,
         now_iso: str,
-    ) -> tuple[list[Block], dict[int, str], dict[str, str]]:
-        self._repository.delete_source_artifacts(
-            source_note_id=payload.note_id,
-            graph_name=self._graph_name,
-        )
+    ) -> None:
         self._repository.upsert_node(
             label="Subject",
             node_id=payload.subject_id,
-            properties={
-                "name": payload.subject_id,
-                "updated_at": now_iso,
-            },
+            properties={"name": payload.subject_id, "updated_at": now_iso},
             graph_name=self._graph_name,
         )
         note_props: dict[str, object] = {
@@ -132,29 +116,23 @@ class GraphSyncService:
             properties=note_props,
             graph_name=self._graph_name,
         )
-        self._repository.upsert_typed_edge(
-            source_label="Note",
-            source_id=payload.note_id,
-            target_label="Subject",
-            target_id=payload.subject_id,
-            relation_type="BELONGS_TO",
-            properties={
-                "source_note_id": payload.note_id,
-                "confidence": 1.0,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            },
-            graph_name=self._graph_name,
-        )
 
-        blocks = self._iter_blocks(payload.note_id)
-        block_node_ids_by_index: dict[int, str] = {}
-        block_node_ids_by_uid: dict[str, str] = {}
+    def _upsert_dirty_blocks(
+        self,
+        *,
+        blocks: list[Block],
+        block_node_ids_by_uid: dict[str, str],
+        payload: GraphSyncPayload,
+        now_iso: str,
+        dirty_uids: set[str],
+    ) -> None:
+        dirty_blocks = [b for b in blocks if b.block_uid in dirty_uids]
+        if not dirty_blocks:
+            return
+
         block_node_props: list[dict[str, object]] = []
-        for block in blocks:
-            block_node_id = self._block_node_id(note_id=payload.note_id, block_uid=block.block_uid)
-            block_node_ids_by_index[block.block_index] = block_node_id
-            block_node_ids_by_uid[block.block_uid] = block_node_id
+        for block in dirty_blocks:
+            block_node_id = block_node_ids_by_uid[block.block_uid]
             block_node_props.append({
                 "id": block_node_id,
                 "block_uid": block.block_uid,
@@ -173,7 +151,7 @@ class GraphSyncService:
             graph_name=self._graph_name,
         )
 
-        for block in blocks:
+        for block in dirty_blocks:
             block_node_id = block_node_ids_by_uid[block.block_uid]
             self._repository.upsert_typed_edge(
                 source_label="Note",
@@ -189,7 +167,6 @@ class GraphSyncService:
                 },
                 graph_name=self._graph_name,
             )
-
             if block.parent_block_uid and block.parent_block_uid in block_node_ids_by_uid:
                 parent_node_id = block_node_ids_by_uid[block.parent_block_uid]
                 self._repository.upsert_typed_edge(
@@ -207,8 +184,6 @@ class GraphSyncService:
                     graph_name=self._graph_name,
                 )
 
-        return blocks, block_node_ids_by_index, block_node_ids_by_uid
-
     def _upsert_mentions(
         self,
         *,
@@ -216,18 +191,20 @@ class GraphSyncService:
         block_node_ids_by_index: dict[int, str],
         payload: GraphSyncPayload,
         now_iso: str,
+        dirty_uids: set[str],
+        dirty_block_indices: set[int],
     ) -> None:
         entity_by_id = {entity.entity_id: entity for entity in payload.entities}
 
-        # Batch all Concept node upserts into a single AGE UNWIND query
+        # Keyphrases: upsert nodes always, but MENTIONS edges only for dirty blocks
         concept_node_props: list[dict[str, object]] = [
             {
-                "id": keyphrase.phrase_id,
-                "name": keyphrase.text,
-                "score": keyphrase.score,
+                "id": kp.phrase_id,
+                "name": kp.text,
+                "score": kp.score,
                 "updated_at": now_iso,
             }
-            for keyphrase in payload.keyphrases
+            for kp in payload.keyphrases
         ]
         self._repository.upsert_nodes_batch(
             label="Concept",
@@ -251,6 +228,8 @@ class GraphSyncService:
                 graph_name=self._graph_name,
             )
             for block in blocks:
+                if block.block_uid not in dirty_uids:
+                    continue  # skip unchanged blocks
                 if keyphrase.text.lower() not in block.content_text.lower():
                     continue
                 block_node_id = block_node_ids_by_index.get(block.block_index)
@@ -271,6 +250,7 @@ class GraphSyncService:
                     graph_name=self._graph_name,
                 )
 
+        # Entity nodes: always upsert (MERGE, idempotent)
         entity_node_props: list[dict[str, object]] = []
         for entity in payload.entities:
             resolved = payload.resolved_entities.get(entity.entity_id)
@@ -288,8 +268,11 @@ class GraphSyncService:
             graph_name=self._graph_name,
         )
 
+        # Block→Entity MENTIONS: only for dirty block indices
         seen_mentions: set[tuple[str, str, int, int]] = set()
         for mention in payload.entity_mentions:
+            if mention.block_index not in dirty_block_indices:
+                continue  # skip mentions from unchanged blocks
             mention_block_node_id = block_node_ids_by_index.get(mention.block_index)
             if mention_block_node_id is None:
                 continue
@@ -333,22 +316,65 @@ class GraphSyncService:
                 graph_name=self._graph_name,
             )
 
-        # Aggregate block-level mentions to Note→Entity edges (max confidence per entity).
-        # This stores confidence directly on Note→Entity in AGE so future graph queries
-        # can read it without re-running NLP.
+        # Note→Entity aggregate MENTIONS: always recompute (we deleted these before entering)
+        self._recompute_note_entity_mentions(payload=payload, now_iso=now_iso)
+
+    def _recompute_note_entity_mentions(
+        self,
+        *,
+        payload: GraphSyncPayload,
+        now_iso: str,
+    ) -> None:
+        """Recompute Note→Entity aggregate MENTIONS edges from all entity mentions.
+
+        Finds the highest-confidence mention per canonical entity across all
+        blocks and upserts a single Note→Entity MENTIONS edge for each. Called
+        after deleting stale Note→Entity edges so the aggregate stays fresh.
+        """
+        entity_by_id = {entity.entity_id: entity for entity in payload.entities}
         note_entity_max_conf: dict[str, float] = {}
         for mention in payload.entity_mentions:
             source_entity = entity_by_id.get(mention.entity_id)
             if source_entity is None:
                 continue
             resolved = payload.resolved_entities.get(source_entity.entity_id)
-            canonical_id = resolved.canonical_entity_id if resolved is not None else source_entity.entity_id
+            canonical_id = (
+                resolved.canonical_entity_id if resolved is not None else source_entity.entity_id
+            )
             conf = float(source_entity.confidence)
             if resolved is not None:
                 conf = max(conf, float(resolved.confidence))
             conf = max(conf, float(mention.confidence))
             if canonical_id not in note_entity_max_conf or conf > note_entity_max_conf[canonical_id]:
                 note_entity_max_conf[canonical_id] = conf
+
+        # LLM-enhanced path: entities extracted without block-level positions.
+        # Upsert Entity nodes with full properties first so MERGE in upsert_typed_edge
+        # never creates skeleton nodes with empty name/kind.
+        if not note_entity_max_conf and payload.entities:
+            entity_node_props: list[dict[str, object]] = []
+            for entity in payload.entities:
+                resolved = payload.resolved_entities.get(entity.entity_id)
+                canonical_id = (
+                    resolved.canonical_entity_id if resolved is not None else entity.entity_id
+                )
+                canonical_name = resolved.canonical_name if resolved is not None else entity.text
+                entity_node_props.append({
+                    "id": canonical_id,
+                    "name": canonical_name,
+                    "kind": entity.label,
+                    "updated_at": now_iso,
+                })
+                conf = float(entity.confidence)
+                if resolved is not None:
+                    conf = max(conf, float(resolved.confidence))
+                if canonical_id not in note_entity_max_conf or conf > note_entity_max_conf[canonical_id]:
+                    note_entity_max_conf[canonical_id] = conf
+            self._repository.upsert_nodes_batch(
+                label="Entity",
+                nodes=entity_node_props,
+                graph_name=self._graph_name,
+            )
 
         for canonical_id, best_conf in note_entity_max_conf.items():
             self._repository.upsert_typed_edge(
@@ -373,12 +399,17 @@ class GraphSyncService:
         block_node_ids_by_uid: dict[str, str],
         payload: GraphSyncPayload,
         now_iso: str,
+        dirty_uids: set[str],
     ) -> None:
+        dirty_blocks = [b for b in blocks if b.block_uid in dirty_uids]
+        if not dirty_blocks:
+            return
+
         block_repository = BlockRepository(self._session)
         ref_uids: set[str] = set()
         refs_by_source_uid: dict[str, list[str]] = {}
 
-        for block in blocks:
+        for block in dirty_blocks:
             refs = block_repository.extract_block_refs_from_rich_content(dict(block.rich_content))
             if not refs:
                 refs = block_repository.extract_block_refs(block.content_text)
@@ -395,7 +426,7 @@ class GraphSyncService:
         }
 
         emitted_pairs: set[tuple[str, str]] = set()
-        for source_block in blocks:
+        for source_block in dirty_blocks:
             source_node_id = block_node_ids_by_uid.get(source_block.block_uid)
             if source_node_id is None:
                 continue
@@ -425,10 +456,13 @@ class GraphSyncService:
                 )
 
     def _upsert_relations(self, *, payload: GraphSyncPayload, now_iso: str) -> None:
-        _TYPED_RELATIONS = frozenset(
-            {"IS_A", "PART_OF", "CAUSES", "CONTRASTS_WITH", "USES", "PRODUCES", "RELATED_TO"}
-        )
         for relation in payload.relations:
+            if relation.predicate not in _STRUCTURAL_RELATIONS:
+                _LOG.warning(
+                    "Skipping relation with unknown predicate: note_id=%s predicate=%s",
+                    payload.note_id, relation.predicate,
+                )
+                continue
             self._repository.upsert_node(
                 label="Concept",
                 node_id=relation.subject_id,
@@ -449,13 +483,12 @@ class GraphSyncService:
                 },
                 graph_name=self._graph_name,
             )
-            edge_type = relation.predicate if relation.predicate in _TYPED_RELATIONS else "RELATED_TO"
             self._repository.upsert_typed_edge(
                 source_label="Concept",
                 source_id=relation.subject_id,
                 target_label="Concept",
                 target_id=relation.object_id,
-                relation_type=edge_type,
+                relation_type=relation.predicate,
                 properties={
                     "source_note_id": payload.note_id,
                     "confidence": float(relation.confidence),
@@ -465,52 +498,100 @@ class GraphSyncService:
                 },
                 graph_name=self._graph_name,
             )
-            self._repository.upsert_typed_edge(
-                source_label="Concept",
-                source_id=relation.subject_id,
-                target_label="Subject",
-                target_id=payload.subject_id,
-                relation_type="APPEARS_IN",
-                properties={
-                    "source_note_id": payload.note_id,
-                    "confidence": float(relation.confidence),
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
-            self._repository.upsert_typed_edge(
-                source_label="Concept",
-                source_id=relation.object_id,
-                target_label="Subject",
-                target_id=payload.subject_id,
-                relation_type="APPEARS_IN",
-                properties={
-                    "source_note_id": payload.note_id,
-                    "confidence": float(relation.confidence),
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
 
     def sync_note_graph(self, payload: GraphSyncPayload) -> None:
         now_iso = _utc_now_iso()
-        blocks, block_node_ids_by_index, block_node_ids_by_uid = self._upsert_note_and_blocks(
+
+        # Fetch current blocks from relational DB
+        blocks = self._iter_blocks(payload.note_id)
+        block_node_ids_by_uid: dict[str, str] = {
+            b.block_uid: self._block_node_id(note_id=payload.note_id, block_uid=b.block_uid)
+            for b in blocks
+        }
+        block_node_ids_by_index: dict[int, str] = {
+            b.block_index: block_node_ids_by_uid[b.block_uid]
+            for b in blocks
+        }
+
+        # Delta: compare current blocks against AGE state
+        age_block_states = self._repository.fetch_block_states(
+            note_id=payload.note_id,
+            graph_name=self._graph_name,
+        )
+        current_uids = {b.block_uid for b in blocks}
+        dirty_uids: set[str] = {
+            b.block_uid
+            for b in blocks
+            if age_block_states.get(b.block_uid) != b.content_hash
+        }
+        deleted_uids: set[str] = set(age_block_states.keys()) - current_uids
+        dirty_block_indices: set[int] = {
+            b.block_index for b in blocks if b.block_uid in dirty_uids
+        }
+
+        # All-unchanged fast path: blocks didn't change, but the pipeline
+        # output (concepts, normalisation, structural relations) can still
+        # change between runs — so refresh Note→Entity aggregate and the
+        # Concept→Concept relation edges. Block nodes themselves stay put.
+        if not dirty_uids and not deleted_uids:
+            self._upsert_note_and_subject(payload=payload, now_iso=now_iso)
+            self._repository.delete_note_mention_edges(
+                note_id=payload.note_id,
+                graph_name=self._graph_name,
+            )
+            self._recompute_note_entity_mentions(payload=payload, now_iso=now_iso)
+            self._repository.delete_concept_relation_edges(
+                source_note_id=payload.note_id,
+                graph_name=self._graph_name,
+            )
+            self._upsert_relations(payload=payload, now_iso=now_iso)
+            if payload.embedding is not None:
+                EmbeddingRepository(self._session).upsert_embedding(
+                    item_id=payload.note_id,
+                    item_type="note",
+                    embedding=payload.embedding,
+                )
+            return
+
+        # Remove stale Block nodes (DETACH DELETE cascades their edges)
+        for uid in dirty_uids | deleted_uids:
+            node_id = self._block_node_id(note_id=payload.note_id, block_uid=uid)
+            self._repository.delete_block_node(
+                block_node_id=node_id,
+                graph_name=self._graph_name,
+            )
+
+        # Always upsert note-level nodes/edges (idempotent)
+        self._upsert_note_and_subject(payload=payload, now_iso=now_iso)
+
+        # Delete Note→Entity MENTIONS edges before recomputing aggregate
+        self._repository.delete_note_mention_edges(
+            note_id=payload.note_id,
+            graph_name=self._graph_name,
+        )
+
+        # Sync Block nodes + entity/mention edges for dirty blocks
+        self._upsert_dirty_blocks(
+            blocks=blocks,
+            block_node_ids_by_uid=block_node_ids_by_uid,
             payload=payload,
             now_iso=now_iso,
+            dirty_uids=dirty_uids,
         )
         self._upsert_mentions(
             blocks=blocks,
             block_node_ids_by_index=block_node_ids_by_index,
             payload=payload,
             now_iso=now_iso,
+            dirty_uids=dirty_uids,
+            dirty_block_indices=dirty_block_indices,
         )
         self._upsert_block_refs(
             blocks=blocks,
             block_node_ids_by_uid=block_node_ids_by_uid,
             payload=payload,
             now_iso=now_iso,
+            dirty_uids=dirty_uids,
         )
         self._upsert_relations(payload=payload, now_iso=now_iso)
 

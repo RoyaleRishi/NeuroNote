@@ -44,6 +44,8 @@ class GlobalGraphFilters(BaseModel):
     limit_nodes: int = Field(ge=1, le=2000)
     min_confidence: float = Field(ge=0.0, le=1.0)
     include_types: list[str] = Field(default_factory=list)
+    subject_id: str | None = None
+    tag: str | None = None
 
 
 class GlobalGraphMeta(BaseModel):
@@ -75,5 +77,30 @@ class ConceptInsightResponse(BaseModel):
     notes_found: int
     note_refs: list[ConceptNoteRef]
     insight: str | None = None
+    # Short, human-readable reason the insight could not be generated, or
+    # ``None`` when generation succeeded or was not attempted.  The frontend
+    # surfaces this verbatim instead of guessing the cause.
+    insight_error: str | None = None
     learning_links: list[ConceptLearningLink] = Field(default_factory=list)
     generated_at: str
+
+
+# ── Concept context endpoints (used by /concepts/insight-context and /concepts/known) ──
+
+class InsightContextNote(BaseModel):
+    """A note excerpt returned for browser-side insight generation."""
+    note_id: str
+    title: str
+    excerpt: str
+
+
+class InsightContextResponse(BaseModel):
+    """Note context for the browser to generate insights locally."""
+    concept_label: str
+    notes: list[InsightContextNote] = Field(default_factory=list)
+    total_notes: int = Field(ge=0)
+
+
+class KnownConceptsResponse(BaseModel):
+    """List of concepts registered in the user's knowledge base."""
+    concepts: list[str] = Field(default_factory=list)

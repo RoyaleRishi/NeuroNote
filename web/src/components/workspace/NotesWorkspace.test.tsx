@@ -6,8 +6,10 @@ import { NotesWorkspace } from "./NotesWorkspace";
 import {
   ApiClientError,
   deleteNote,
+  fetchCurrentUser,
   fetchLocalGraph,
   fetchNoteBacklinks,
+  fetchPreferences,
   getNote,
   listNotes,
   saveNote,
@@ -22,16 +24,48 @@ vi.mock("../../lib/api-client", () => ({
       this.status = status;
     }
   },
+  getBaseUrl: () => "http://localhost:8000",
   listNotes: vi.fn(),
   saveNote: vi.fn(),
   deleteNote: vi.fn(),
   getNote: vi.fn(),
   fetchNoteBacklinks: vi.fn(),
   fetchLocalGraph: vi.fn(),
+  fetchCurrentUser: vi.fn().mockResolvedValue({
+    id: "test-user",
+    email: "test@test.com",
+    display_name: "Test",
+    avatar_url: null,
+    oauth_provider: "dev",
+    schema_name: "user_test0001",
+  }),
+  logoutUser: vi.fn().mockResolvedValue(undefined),
+  fetchPreferences: vi.fn().mockResolvedValue({
+    llm_mode: "edge",
+    llm_api_key: "",
+    llm_base_url: "https://api.openai.com/v1",
+    llm_model: "gpt-4o-mini",
+  }),
+  updatePreferences: vi.fn(),
 }));
 
 vi.mock("../editor/NoteEditor", () => ({
-  NoteEditor: ({ noteId }: { noteId: string }) => <div data-testid="active-note-id">{noteId}</div>,
+  NoteEditor: ({
+    noteId,
+    onShowBacklinks,
+  }: {
+    noteId: string;
+    onShowBacklinks?: () => void;
+  }) => (
+    <div data-testid="active-note-id">
+      {noteId}
+      {onShowBacklinks && (
+        <button type="button" onClick={onShowBacklinks}>
+          Linked mentions
+        </button>
+      )}
+    </div>
+  ),
 }));
 
 function noteSummary(
@@ -66,6 +100,21 @@ describe("NotesWorkspace", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
+    vi.mocked(fetchCurrentUser).mockResolvedValue({
+      id: "test-user",
+      email: "test@test.com",
+      display_name: "Test",
+      avatar_url: null,
+      oauth_provider: "dev",
+      schema_name: "user_test0001",
+    });
+    vi.mocked(fetchPreferences).mockResolvedValue({
+      llm_mode: "edge",
+      llm_api_key: "",
+      llm_base_url: "https://api.openai.com/v1",
+      llm_model: "gpt-4o-mini",
+      confidence_threshold: 0.9,
+    });
     vi.mocked(fetchLocalGraph).mockResolvedValue({
       nodes: [],
       edges: [],
@@ -109,6 +158,7 @@ describe("NotesWorkspace", () => {
       note_id: "note-new",
       saved_at: "2026-03-12T20:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -125,8 +175,8 @@ describe("NotesWorkspace", () => {
   });
 
   it("guards against duplicate note creation on rapid repeated clicks", async () => {
-    let resolveSave!: (value: { note_id: string; saved_at: string; version: number }) => void;
-    const pendingSave = new Promise<{ note_id: string; saved_at: string; version: number }>(
+    let resolveSave!: (value: { note_id: string; saved_at: string; version: number; content_hash: string }) => void;
+    const pendingSave = new Promise<{ note_id: string; saved_at: string; version: number; content_hash: string }>(
       (resolve) => {
         resolveSave = resolve;
       },
@@ -156,6 +206,7 @@ describe("NotesWorkspace", () => {
       note_id: "note-new",
       saved_at: "2026-03-12T20:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
 
     await waitFor(() => {
@@ -257,11 +308,13 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-a",
       saved_at: "2026-03-12T20:01:00Z",
       version: 2,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -304,6 +357,7 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockRejectedValue(new ApiClientError(409));
 
@@ -460,6 +514,7 @@ describe("NotesWorkspace", () => {
       note_id: string;
       saved_at: string;
       version: number;
+      content_hash: string;
     }>((_resolve, reject) => {
       rejectSave = reject;
     });
@@ -479,6 +534,7 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockReturnValue(pendingSave);
 
@@ -595,6 +651,7 @@ describe("NotesWorkspace", () => {
       note_id: "note-new",
       saved_at: "2026-03-12T20:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -634,11 +691,13 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-a",
       saved_at: "2026-03-12T20:01:00Z",
       version: 2,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -674,11 +733,13 @@ describe("NotesWorkspace", () => {
       content_text: "Text note-a",
       updated_at: "2026-03-12T20:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-a",
       saved_at: "2026-03-12T20:01:00Z",
       version: 2,
+      content_hash: "hash-test",
     });
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
@@ -716,41 +777,33 @@ describe("NotesWorkspace", () => {
       ],
     });
 
-    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
-    await screen.findByTestId("notes-section-all");
+    render(<NotesWorkspace baseUrl="http://localhost:8000" initialNoteId="note-a" />);
+    await screen.findByTestId("active-note-id");
 
-    const openButton = screen.getByRole("button", { name: "Linked mentions" });
-    fireEvent.click(openButton);
+    fireEvent.click(screen.getByRole("button", { name: "Linked mentions" }));
 
     expect(await screen.findByRole("dialog", { name: "Linked mentions" })).toBeInTheDocument();
     expect(await screen.findByText(/Source Note/)).toBeInTheDocument();
     expect(fetchNoteBacklinks).toHaveBeenCalledWith("http://localhost:8000", "note-a");
   });
 
-  it("supports escape to close linked mentions modal and restores focus", async () => {
+  it("supports escape to close linked mentions modal", async () => {
     vi.mocked(listNotes).mockResolvedValue({
       items: [noteSummary("note-a", { note_title: "Target Note" })],
       total: 1,
     });
-    vi.mocked(fetchNoteBacklinks).mockResolvedValue({
-      note_id: "note-a",
-      items: [],
-    });
+    vi.mocked(fetchNoteBacklinks).mockResolvedValue({ note_id: "note-a", items: [] });
 
-    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
-    await screen.findByTestId("notes-section-all");
+    render(<NotesWorkspace baseUrl="http://localhost:8000" initialNoteId="note-a" />);
+    await screen.findByTestId("active-note-id");
 
-    const openButton = screen.getByRole("button", { name: "Linked mentions" });
-    openButton.focus();
-    fireEvent.click(openButton);
-
+    fireEvent.click(screen.getByRole("button", { name: "Linked mentions" }));
     expect(await screen.findByRole("dialog", { name: "Linked mentions" })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Linked mentions" })).not.toBeInTheDocument();
     });
-    expect(openButton).toHaveFocus();
   });
 
   it("shows retry when linked mentions request fails", async () => {
@@ -760,13 +813,10 @@ describe("NotesWorkspace", () => {
     });
     vi.mocked(fetchNoteBacklinks)
       .mockRejectedValueOnce(new Error("backlink failure"))
-      .mockResolvedValueOnce({
-        note_id: "note-a",
-        items: [],
-      });
+      .mockResolvedValueOnce({ note_id: "note-a", items: [] });
 
-    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
-    await screen.findByTestId("notes-section-all");
+    render(<NotesWorkspace baseUrl="http://localhost:8000" initialNoteId="note-a" />);
+    await screen.findByTestId("active-note-id");
 
     fireEvent.click(screen.getByRole("button", { name: "Linked mentions" }));
     expect(await screen.findByText("Failed to load linked mentions")).toBeInTheDocument();

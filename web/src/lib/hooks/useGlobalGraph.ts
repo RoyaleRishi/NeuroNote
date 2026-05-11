@@ -3,14 +3,11 @@ import { fetchGlobalGraph } from "../api-client";
 import type { GlobalGraphResponse } from "../../../../shared/contracts/ts/v1/graph";
 
 export interface GlobalGraphFilters {
-  min_confidence: number;
-  include_types: string[];
+  subject_id?: string;
+  tag?: string;
 }
 
-const DEFAULT_FILTERS: GlobalGraphFilters = {
-  min_confidence: 0.0,
-  include_types: ["note", "entity", "relation"],
-};
+const DEFAULT_FILTERS: GlobalGraphFilters = {};
 
 export interface UseGlobalGraphState {
   graph: GlobalGraphResponse | null;
@@ -24,7 +21,10 @@ export interface UseGlobalGraphActions {
   setFilters: (filters: GlobalGraphFilters) => void;
 }
 
-export function useGlobalGraph(baseUrl: string): UseGlobalGraphState & UseGlobalGraphActions {
+export function useGlobalGraph(
+  baseUrl: string,
+  confidenceThreshold: number = 0.9,
+): UseGlobalGraphState & UseGlobalGraphActions {
   const [graph, setGraph] = useState<GlobalGraphResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -37,7 +37,12 @@ export function useGlobalGraph(baseUrl: string): UseGlobalGraphState & UseGlobal
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const response = await fetchGlobalGraph(baseUrl, filters);
+      const response = await fetchGlobalGraph(baseUrl, {
+        min_confidence: confidenceThreshold,
+        include_types: ["note", "entity", "relation"],
+        subject_id: filters.subject_id,
+        tag: filters.tag,
+      });
       if (requestTokenRef.current !== token) return;
       setGraph(response);
     } catch {
@@ -49,7 +54,7 @@ export function useGlobalGraph(baseUrl: string): UseGlobalGraphState & UseGlobal
         setIsLoading(false);
       }
     }
-  }, [baseUrl, filters]);
+  }, [baseUrl, confidenceThreshold, filters]);
 
   return { graph, isLoading, errorMessage, filters, load, setFilters };
 }

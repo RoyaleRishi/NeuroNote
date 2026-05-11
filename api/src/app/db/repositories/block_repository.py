@@ -4,13 +4,18 @@ from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
 import re
-from uuid import uuid4
+from uuid import uuid4  # used for fallback_uid in _extract_blocks
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models.block import Block
 from app.db.models.note import Note
+from app.utils.tiptap import (
+    _as_object,
+    _ensure_block_uid,
+    extract_plain_text as _extract_plain_text,
+)
 
 _BLOCK_REF_PATTERN = re.compile(r"\(\(([A-Za-z0-9_-]{6,128})\)\)")
 _BLOCK_REF_HREF_PATTERN = re.compile(r"#block(?:=|-)([A-Za-z0-9_-]{6,128})")
@@ -75,62 +80,6 @@ class _ExtractionRow:
     content_text: str
     content_hash: str
     rich_content: dict[str, object]
-
-
-def _extract_plain_text(node: object) -> str:
-    if isinstance(node, dict):
-        text_value = node.get("text")
-        if isinstance(text_value, str):
-            return text_value
-        content = node.get("content")
-        if isinstance(content, list):
-            return "".join(_extract_plain_text(item) for item in content)
-        return ""
-    if isinstance(node, list):
-        return "".join(_extract_plain_text(item) for item in node)
-    return ""
-
-
-def _as_object(value: object) -> dict[str, object] | None:
-    if isinstance(value, dict):
-        return value
-    return None
-
-
-def _generate_unique_uid(used_uids: set[str]) -> str:
-    while True:
-        candidate = uuid4().hex
-        if candidate not in used_uids:
-            return candidate
-
-
-def _ensure_block_uid(
-    node: dict[str, object],
-    *,
-    used_uids: set[str],
-    latest_uid_by_raw: dict[str, str],
-) -> str:
-    attrs_value = node.get("attrs")
-    attrs = _as_object(attrs_value) or {}
-    existing = attrs.get("blockUid")
-    if isinstance(existing, str) and existing.strip():
-        raw_uid = existing.strip()
-    else:
-        raw_uid = _generate_unique_uid(used_uids)
-        attrs["blockUid"] = raw_uid
-        node["attrs"] = attrs
-
-    if raw_uid in used_uids:
-        replacement_uid = _generate_unique_uid(used_uids)
-        attrs["blockUid"] = replacement_uid
-        node["attrs"] = attrs
-        used_uids.add(replacement_uid)
-        latest_uid_by_raw[raw_uid] = replacement_uid
-        return replacement_uid
-
-    used_uids.add(raw_uid)
-    latest_uid_by_raw[raw_uid] = raw_uid
-    return raw_uid
 
 
 def _make_ref_snippet(content_text: str, block_uid: str) -> str:
@@ -252,8 +201,8 @@ def _walk_nodes(
         if node_type in _BLOCK_NODE_TYPES:
             block_uid = _ensure_block_uid(
                 node,
-                used_uids=used_uids,
-                latest_uid_by_raw=latest_uid_by_raw,
+                used=used_uids,
+                latest_by_raw=latest_uid_by_raw,
             )
             explicit_parent_uid = _extract_explicit_parent_uid(
                 node,

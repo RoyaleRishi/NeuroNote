@@ -19,6 +19,7 @@ class SaveNoteResponse(BaseModel):
     note_id: str = Field(min_length=1)
     saved_at: str = Field(min_length=1)
     version: int = Field(ge=1)
+    content_hash: str = Field(default="", min_length=0)
 
 
 class GetNoteResponse(BaseModel):
@@ -30,6 +31,7 @@ class GetNoteResponse(BaseModel):
     is_archived: bool = False
     content_json: dict[str, object] = Field(min_length=1)
     content_text: str = Field(min_length=1)
+    content_hash: str = Field(default="", min_length=0)
     updated_at: str = Field(min_length=1)
     version: int = Field(ge=1)
 

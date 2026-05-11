@@ -9,7 +9,6 @@ services:
       DATABASE_URL: postgresql+psycopg://neuronote:${DB_PASSWORD}@db:5432/neuronote
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       API_KEY: ${API_KEY}
-      NLP_EXTRACTION_PROFILE: ${NLP_EXTRACTION_PROFILE:-llm-enhanced}
       CORS_ORIGINS: https://${DOMAIN}
     restart: always
 

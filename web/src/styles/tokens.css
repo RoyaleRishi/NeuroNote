@@ -110,4 +110,25 @@
   --graph-node-highlight:   #e07b1a;
   --graph-edge-dim:         rgba(139, 162, 150, 0.15);
   --graph-node-dim-opacity: 0.2;
+  --graph-node-stroke-default:   #ffffff;
+  --graph-node-stroke-root:      #0f4e39;
+  --graph-node-stroke-highlight: #b85e10;
+  --graph-label-default:         #6c6f75;
+  --graph-label-highlight:       #7a3d0a;
+
+  /* Overlay scrim used for modal/dialog backgrounds. */
+  --overlay-scrim: rgba(15, 23, 42, 0.45);
+
+  /* Foreground for text rendered on accent/danger/info colored fills. */
+  --text-on-accent: #ffffff;
+
+  /* Tag chip colors (deterministic per-tag palette). */
+  --tag-blue-bg:   #dbeafe; --tag-blue-text:   #1e40af;
+  --tag-green-bg:  #dcfce7; --tag-green-text:  #15803d;
+  --tag-amber-bg:  #fef3c7; --tag-amber-text:  #b45309;
+  --tag-pink-bg:   #fce7f3; --tag-pink-text:   #be185d;
+  --tag-purple-bg: #ede9fe; --tag-purple-text: #6d28d9;
+  --tag-red-bg:    #fee2e2; --tag-red-text:    #b91c1c;
+  --tag-sky-bg:    #e0f2fe; --tag-sky-text:    #0369a1;
+  --tag-violet-bg: #f3e8ff; --tag-violet-text: #7e22ce;
 }

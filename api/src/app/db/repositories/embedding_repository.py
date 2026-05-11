@@ -36,7 +36,7 @@ class EmbeddingRepository:
         self._session.execute(
             text(
                 """
-                INSERT INTO public.note_embeddings (item_id, item_type, embedding)
+                INSERT INTO note_embeddings (item_id, item_type, embedding)
                 VALUES (:item_id, :item_type, CAST(:embedding AS vector(384)))
                 ON CONFLICT (item_id, item_type)
                 DO UPDATE SET embedding = EXCLUDED.embedding, created_at = NOW()
@@ -67,7 +67,7 @@ class EmbeddingRepository:
             text(
                 """
                 SELECT item_id, embedding <=> CAST(:query_embedding AS vector(384)) AS distance
-                FROM public.note_embeddings
+                FROM note_embeddings
                 WHERE item_type = :item_type
                 ORDER BY embedding <=> CAST(:query_embedding AS vector(384))
                 LIMIT :limit

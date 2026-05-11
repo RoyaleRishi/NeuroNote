@@ -52,16 +52,27 @@ services:
       - "${API_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://neuronote:neuronote@db:5432/neuronote
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       REQUIRE_DB_EXTENSIONS: "false"
       DB_AUTO_CREATE: "false"
-      NLP_MODEL_NAME: ${NLP_MODEL_NAME:-rule-based-small}
-      NLP_EXTRACTION_PROFILE: ${NLP_EXTRACTION_PROFILE:-rule-only}
-      NLP_ENABLE_REGEX_FALLBACK: ${NLP_ENABLE_REGEX_FALLBACK:-true}
-      NLP_ENTITY_SEED_TERMS: ${NLP_ENTITY_SEED_TERMS:-machine learning,entity resolution,graph reasoning,knowledge graph,neural networks}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-1}
+      LLM_API_KEY: ${LLM_API_KEY:-${ANTHROPIC_API_KEY:-}}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.anthropic.com/v1/}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       NLP_LLM_MODEL: ${NLP_LLM_MODEL:-claude-haiku-4-5-20251001}
       NLP_USE_SEMANTIC_EMBEDDINGS: ${NLP_USE_SEMANTIC_EMBEDDINGS:-false}
       API_KEY: ${API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-${SESSION_SECRET:-dev-jwt-secret-change-me}}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_BASE_URL: ${OAUTH_REDIRECT_BASE_URL:-http://localhost:8000}
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
+      PREF_ENCRYPTION_KEY: ${PREF_ENCRYPTION_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       UV_PROJECT_ENVIRONMENT: /tmp/neuronote-api-venv
       UV_CACHE_DIR: /tmp/uv-cache
       PYTHONPATH: api/src:.
@@ -84,7 +95,7 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
       NEXT_PUBLIC_API_KEY: ${API_KEY:-}
       APP_PASSWORD: ${APP_PASSWORD:-}
       SESSION_SECRET: ${SESSION_SECRET:-}

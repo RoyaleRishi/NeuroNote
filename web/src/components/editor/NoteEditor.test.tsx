@@ -3,12 +3,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NoteEditor } from "./NoteEditor";
+import { ToastProvider } from "../../lib/toast";
 import {
   getNote,
   queueNoteProcessing,
   saveNote,
   fetchLocalGraph,
 } from "../../lib/api-client";
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>);
+}
 
 vi.mock("../../lib/api-client", () => ({
   getNote: vi.fn(),
@@ -91,18 +96,20 @@ describe("NoteEditor", () => {
       content_text: "Loaded text",
       updated_at: "2026-03-01T13:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-1",
       saved_at: "2026-03-01T13:00:01Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-1",
       status: "queued",
     });
 
-    render(<NoteEditor noteId="note-1" baseUrl="http://localhost:8000" />);
+    renderWithProviders(<NoteEditor noteId="note-1" baseUrl="http://localhost:8000" />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("TipTap editor")).toHaveValue("Loaded text");
@@ -122,18 +129,20 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-2",
       saved_at: "2026-03-01T13:01:01Z",
       version: 2,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-2",
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-2"
         baseUrl="http://localhost:8000"
@@ -167,18 +176,20 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:01:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-title-1",
       saved_at: "2026-03-01T13:01:01Z",
       version: 2,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-title-1",
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-title-1"
         baseUrl="http://localhost:8000"
@@ -213,6 +224,7 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:02:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockRejectedValue(new Error("save failed"));
     vi.mocked(queueNoteProcessing).mockResolvedValue({
@@ -220,7 +232,7 @@ describe("NoteEditor", () => {
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-3"
         baseUrl="http://localhost:8000"
@@ -252,11 +264,13 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:00:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-tab-1",
       saved_at: "2026-03-01T13:00:01Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(fetchLocalGraph).mockResolvedValue({
       nodes: [],
@@ -268,7 +282,7 @@ describe("NoteEditor", () => {
       },
     });
 
-    render(<NoteEditor noteId="note-tab-1" baseUrl="http://localhost:8000" />);
+    renderWithProviders(<NoteEditor noteId="note-tab-1" baseUrl="http://localhost:8000" />);
 
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: "Write" })).toBeInTheDocument(),
@@ -297,18 +311,20 @@ describe("NoteEditor", () => {
       content_text: "",
       updated_at: "2026-03-01T13:03:00Z",
       version: 1,
+      content_hash: "hash-test",
     });
     vi.mocked(saveNote).mockResolvedValue({
       note_id: "note-meta-1",
       saved_at: "2026-03-01T13:03:01Z",
       version: 2,
+      content_hash: "hash-test",
     });
     vi.mocked(queueNoteProcessing).mockResolvedValue({
       job_id: "job-meta-1",
       status: "queued",
     });
 
-    render(
+    renderWithProviders(
       <NoteEditor
         noteId="note-meta-1"
         baseUrl="http://localhost:8000"

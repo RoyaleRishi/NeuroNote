@@ -10,6 +10,7 @@ import { TipTapEditor, type TipTapUpdatePayload } from "./TipTapEditor";
 import { SkeletonEditor } from "../ui/Skeleton";
 import { ErrorMessage } from "../ui/ErrorMessage";
 import { LocalGraphPanel } from "../graph/LocalGraphPanel";
+import { reportUserError } from "../../lib/ui/error-toast";
 import {
   exportNoteMarkdown,
   fetchLocalGraph,
@@ -44,6 +45,10 @@ interface NoteEditorProps {
   availableSubjects?: string[];
   availableTags?: string[];
   onOpenNote?: (noteId: string) => void;
+  /** Minimum confidence threshold applied when fetching the local graph. Defaults to 0.9. */
+  confidenceThreshold?: number;
+  /** Opens the linked mentions (backlinks) modal for the current note. */
+  onShowBacklinks?: () => void;
 }
 
 interface NoteSnapshot {
@@ -121,6 +126,7 @@ interface NoteOptionsMenuProps {
   isArchived: boolean;
   onArchivedChange: (value: boolean) => void;
   onExport: () => void;
+  onShowBacklinks?: () => void;
   disabled: boolean;
 }
 
@@ -136,6 +142,7 @@ function NoteOptionsMenu({
   isArchived,
   onArchivedChange,
   onExport,
+  onShowBacklinks,
   disabled,
 }: NoteOptionsMenuProps) {
   const [open, setOpen] = useState(false);
@@ -203,6 +210,15 @@ function NoteOptionsMenu({
             Archived
           </label>
           <div className="note-options-divider" />
+          {onShowBacklinks && (
+            <button
+              type="button"
+              className="note-options-action"
+              onClick={() => { onShowBacklinks(); setOpen(false); }}
+            >
+              Linked mentions
+            </button>
+          )}
           <button
             type="button"
             className="note-options-action"
@@ -217,13 +233,6 @@ function NoteOptionsMenu({
   );
 }
 
-const DEFAULT_LOCAL_GRAPH_FILTERS = {
-  max_hops: 1 as const,
-  limit_nodes: 80,
-  min_confidence: 0.35,
-  include_types: ["note", "entity", "relation"],
-};
-
 export function NoteEditor({
   noteId,
   baseUrl,
@@ -233,6 +242,8 @@ export function NoteEditor({
   availableSubjects = [],
   availableTags = [],
   onOpenNote,
+  confidenceThreshold = 0.9,
+  onShowBacklinks,
 }: NoteEditorProps) {
   const [documentJson, setDocumentJson] = useState<EditorDoc>(createEmptyEditorDoc());
   const [noteTitle, setNoteTitle] = useState("Untitled");
@@ -252,8 +263,6 @@ export function NoteEditor({
   const [localGraph, setLocalGraph] = useState<LocalGraphResponse | null>(null);
   const [localGraphLoading, setLocalGraphLoading] = useState(false);
   const [localGraphErrorMessage, setLocalGraphErrorMessage] = useState<string | null>(null);
-  const [localGraphFilters, setLocalGraphFilters] = useState({ ...DEFAULT_LOCAL_GRAPH_FILTERS, include_types: [...DEFAULT_LOCAL_GRAPH_FILTERS.include_types] });
-
   const latestSnapshotRef = useRef<NoteSnapshot>({
     noteTitle: "Untitled",
     subjectId: "inbox",
@@ -269,6 +278,12 @@ export function NoteEditor({
   const activeJobIdRef = useRef<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof createProcessPollingController> | null>(null);
   const lifecycleRef = useRef<ReturnType<typeof createNoteLifecycleController> | null>(null);
+  /**
+   * Most recent server-computed content hash (returned by saveNote). Used
+   * by the edge-mode processing pipeline as the cache key. Falls back to a
+   * locally computed hash if the server response did not include one.
+   */
+  const lastContentHashRef = useRef<string | null>(null);
   const persistedMetadataRef = useRef<PersistedMetadataSnapshot>({
     noteTitle: "Untitled",
     subjectId: "inbox",
@@ -313,6 +328,9 @@ export function NoteEditor({
         setDocumentJson(nextDoc);
         setPlainText(nextText);
         setUpdatedAt(note.updated_at);
+        if (note.content_hash) {
+          lastContentHashRef.current = note.content_hash;
+        }
         persistedMetadataRef.current = {
           noteTitle: nextTitle,
           subjectId: nextSubject,
@@ -381,6 +399,9 @@ export function NoteEditor({
       }, controller.signal);
 
       setSaveStatus("saved");
+      if (saveResult.content_hash) {
+        lastContentHashRef.current = saveResult.content_hash;
+      }
       const nextPersistedMetadata: PersistedMetadataSnapshot = {
         noteTitle: snapshot.noteTitle.trim() || "Untitled",
         subjectId: snapshot.subjectId || "inbox",
@@ -428,13 +449,15 @@ export function NoteEditor({
       return;
     }
 
+    const combinedText = `${snapshot.noteTitle.trim()}\n\n${snapshot.plainText}`.trim();
+    const localHash = makeHash(combinedText);
+
     try {
       setProcessStatus("queued");
-      const combinedText = `${snapshot.noteTitle.trim()}\n\n${snapshot.plainText}`.trim();
       const queued = await queueNoteProcessing(baseUrl, {
         note_id: noteId,
         content_text: combinedText,
-        content_hash: makeHash(combinedText),
+        content_hash: localHash,
         updated_at: snapshot.updatedAt,
       });
       setProcessStatus(queued.status);
@@ -445,11 +468,11 @@ export function NoteEditor({
         fetchStatus: async () => {
           const jobId = activeJobIdRef.current;
           if (!jobId) {
-            return { job_id: "", status: "failed" as const, created_at: "", updated_at: "" };
+            return { job_id: "", status: "failed" as const, created_at: "", updated_at: "", error: null, extraction_summary: null };
           }
           const result = await fetchProcessingStatus(baseUrl, jobId);
           if (result.status === "failed" && result.error) {
-            console.error("[NeuroNote] Processing failed:", result.error);
+            reportUserError("note-processing", result.error);
           }
           return result;
         },
@@ -638,7 +661,12 @@ export function NoteEditor({
     setLocalGraphLoading(true);
     setLocalGraphErrorMessage(null);
     try {
-      const result = await fetchLocalGraph(baseUrl, noteId, localGraphFilters);
+      const result = await fetchLocalGraph(baseUrl, noteId, {
+        max_hops: 1,
+        limit_nodes: 80,
+        min_confidence: confidenceThreshold,
+        include_types: ["note", "entity", "relation"],
+      });
       if (token !== localGraphRequestTokenRef.current) return;
       setLocalGraph(result);
     } catch {
@@ -649,7 +677,7 @@ export function NoteEditor({
         setLocalGraphLoading(false);
       }
     }
-  }, [baseUrl, noteId, localGraphFilters]);
+  }, [baseUrl, noteId, confidenceThreshold]);
 
   useEffect(() => {
     if (noteView === "graph") {
@@ -664,29 +692,17 @@ export function NoteEditor({
   return (
     <section className="note-editor" data-testid="note-editor">
       <div className="note-editor-top-bar">
-        <div className="note-editor-status-row">
-          <EditorToolbar dirty={dirty} saveStatus={saveStatus} processStatus={processStatus} />
-          <ExtractionSummaryBadge summary={extractionSummary} />
-          <NoteOptionsMenu
-            subjectId={subjectId}
-            onSubjectChange={handleSubjectChange}
-            availableSubjects={availableSubjects}
-            tags={parseTagsInput(tagsInput)}
-            onTagsChange={(newTags) => handleTagsChange(newTags.join(", "))}
-            availableTags={availableTags}
-            isPinned={isPinned}
-            onPinnedChange={handlePinnedChange}
-            isArchived={isArchived}
-            onArchivedChange={handleArchivedChange}
-            onExport={() => { void handleExportMarkdown(); }}
-            disabled={isLoading}
-          />
-        </div>
-        <div className="note-tabs" role="tablist" aria-label="Note view">
+        <EditorToolbar
+          dirty={dirty}
+          saveStatus={saveStatus}
+          processStatus={processStatus}
+        />
+        <ExtractionSummaryBadge summary={extractionSummary} />
+        <div className="note-view-tabs" role="tablist" aria-label="Note view">
           <button
             type="button"
             role="tab"
-            className={`note-tab${noteView === "write" ? " active" : ""}`}
+            className={`note-view-tab${noteView === "write" ? " active" : ""}`}
             aria-selected={noteView === "write"}
             onClick={() => setNoteView("write")}
           >
@@ -695,13 +711,28 @@ export function NoteEditor({
           <button
             type="button"
             role="tab"
-            className={`note-tab${noteView === "graph" ? " active" : ""}`}
+            className={`note-view-tab${noteView === "graph" ? " active" : ""}`}
             aria-selected={noteView === "graph"}
             onClick={() => setNoteView("graph")}
           >
             Graph
           </button>
         </div>
+        <NoteOptionsMenu
+          subjectId={subjectId}
+          onSubjectChange={handleSubjectChange}
+          availableSubjects={availableSubjects}
+          tags={parseTagsInput(tagsInput)}
+          onTagsChange={(newTags) => handleTagsChange(newTags.join(", "))}
+          availableTags={availableTags}
+          isPinned={isPinned}
+          onPinnedChange={handlePinnedChange}
+          isArchived={isArchived}
+          onArchivedChange={handleArchivedChange}
+          onExport={() => { void handleExportMarkdown(); }}
+          onShowBacklinks={onShowBacklinks}
+          disabled={isLoading}
+        />
       </div>
 
       {noteView === "write" ? (
@@ -735,11 +766,9 @@ export function NoteEditor({
           noteId={noteId}
           baseUrl={baseUrl}
           graph={localGraph}
-          filters={localGraphFilters}
           isLoading={localGraphLoading}
           errorMessage={localGraphErrorMessage}
           onRetry={() => { void loadLocalGraph(); }}
-          onFiltersChange={(next) => { setLocalGraphFilters({ ...next, max_hops: next.max_hops as 1 }); }}
           onOpenNote={(nextNoteId) => { onOpenNote?.(nextNoteId); }}
         />
       )}

@@ -7,14 +7,17 @@ interface EditorToolbarProps {
   processStatus: ProcessStatus;
 }
 
-export function EditorToolbar({ dirty, saveStatus, processStatus }: EditorToolbarProps) {
+export function EditorToolbar({
+  saveStatus,
+  processStatus,
+}: EditorToolbarProps) {
   return (
     <div className="editor-toolbar" data-testid="editor-toolbar">
       <div data-testid="save-status">
         <SaveStatusBadge status={saveStatus} />
       </div>
-      <div data-testid="process-status">
-        <ProcessStatusBadge status={processStatus} />
+      <div data-testid="process-status" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <ProcessStatusBadge status={processStatus} progress={null} />
       </div>
     </div>
   );

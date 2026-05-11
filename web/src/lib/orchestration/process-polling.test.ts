@@ -9,6 +9,8 @@ function makeResponse(overrides: Partial<ProcessStatusResponse> = {}): ProcessSt
     status: "running",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
+    error: null,
+    extraction_summary: null,
     ...overrides,
   };
 }

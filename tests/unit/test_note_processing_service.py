@@ -6,7 +6,6 @@ import pytest
 
 from app.db.engine import get_session_factory
 from app.db.repositories.note_repository import NoteRepository
-from app.nlp.types import BlockTextInput
 from app.nlp.types import ExtractedRelation
 from app.nlp.types import NoteExtractionResult
 from app.services import note_processing_service as note_processing_module
@@ -16,27 +15,20 @@ from shared.contracts.python.v1.process import ProcessNoteRequest
 
 class _FakePipeline:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, str, list[BlockTextInput], list[str]]] = []
+        self.calls: list[tuple[str, str, str, str, dict]] = []
 
     def extract(
         self,
         *,
+        session,
+        embedder,
         note_id: str,
-        title: str = "",
+        title: str,
         content_text: str,
+        document_json: dict,
         content_hash: str,
-        blocks: list[BlockTextInput] | None = None,
-        dictionary_terms: list[str] | None = None,
     ) -> NoteExtractionResult:
-        self.calls.append(
-            (
-                note_id,
-                content_text,
-                content_hash,
-                list(blocks or []),
-                list(dictionary_terms or []),
-            )
-        )
+        self.calls.append((note_id, title, content_text, content_hash, document_json))
         return NoteExtractionResult(
             note_id=note_id,
             content_hash=content_hash,
@@ -66,7 +58,25 @@ def test_process_note_raises_when_note_is_missing(configured_db: None) -> None:
         )
 
 
-def test_process_note_uses_latest_persisted_note_snapshot(configured_db: None) -> None:
+def _stub_postgres_path(monkeypatch: pytest.MonkeyPatch, service: NoteProcessingService) -> None:
+    """Force the postgres branch + stub graph/registry side-effects for sqlite tests."""
+
+    class _FakeGraphSyncService:
+        def __init__(self, *, session, graph_name: str) -> None:
+            pass
+
+        def sync_note_graph(self, _payload) -> None:
+            return
+
+    monkeypatch.setattr(note_processing_module, "GraphSyncService", _FakeGraphSyncService)
+    monkeypatch.setattr(service, "_is_postgres", lambda _session: True)
+    from app.nlp import concept_registry as _cr
+    monkeypatch.setattr(_cr, "register_concepts_with_embeddings", lambda *_a, **_k: None)
+
+
+def test_process_note_uses_latest_persisted_note_snapshot(
+    configured_db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     note_id = "note-process-1"
     note_title = "Persisted title"
     persisted_text = "Machine Learning supports Entity Resolution"
@@ -87,6 +97,7 @@ def test_process_note_uses_latest_persisted_note_snapshot(configured_db: None) -
 
     pipeline = _FakePipeline()
     service = NoteProcessingService(session_factory=session_factory, pipeline=pipeline)
+    _stub_postgres_path(monkeypatch, service)
     service.process_note(
         ProcessNoteRequest(
             note_id=note_id,
@@ -96,11 +107,12 @@ def test_process_note_uses_latest_persisted_note_snapshot(configured_db: None) -
         )
     )
 
-    assert pipeline.calls[0][0:3] == (note_id, combined_text, persisted_hash)
-    assert pipeline.calls[0][3] == [BlockTextInput(block_index=0, content_text=persisted_text)]
+    assert pipeline.calls[0][0:4] == (note_id, note_title, persisted_text, persisted_hash)
 
 
-def test_process_note_includes_note_title_in_pipeline_input(configured_db: None) -> None:
+def test_process_note_includes_note_title_in_pipeline_input(
+    configured_db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     note_id = "note-process-title-1"
     persisted_title = "Machine Learning"
     persisted_text = "Improves entity resolution across domains"
@@ -121,6 +133,7 @@ def test_process_note_includes_note_title_in_pipeline_input(configured_db: None)
 
     pipeline = _FakePipeline()
     service = NoteProcessingService(session_factory=session_factory, pipeline=pipeline)
+    _stub_postgres_path(monkeypatch, service)
     service.process_note(
         ProcessNoteRequest(
             note_id=note_id,
@@ -130,8 +143,7 @@ def test_process_note_includes_note_title_in_pipeline_input(configured_db: None)
         )
     )
 
-    assert pipeline.calls[0][0:3] == (note_id, combined_text, persisted_hash)
-    assert pipeline.calls[0][3] == [BlockTextInput(block_index=0, content_text=persisted_text)]
+    assert pipeline.calls[0][0:4] == (note_id, persisted_title, persisted_text, persisted_hash)
 
 
 def test_process_note_does_not_raise_transaction_error_when_postgres_path_is_used(
@@ -200,12 +212,13 @@ def test_process_note_collapses_relation_type_to_related_to(
         def extract(
             self,
             *,
+            session,
+            embedder,
             note_id: str,
-            title: str = "",
+            title: str,
             content_text: str,
+            document_json: dict,
             content_hash: str,
-            blocks: list[BlockTextInput] | None = None,
-            dictionary_terms: list[str] | None = None,
         ) -> NoteExtractionResult:
             return NoteExtractionResult(
                 note_id=note_id,

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 if TYPE_CHECKING:
@@ -31,6 +32,7 @@ def configured_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
         monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{test_db_path}")
     monkeypatch.setenv("DB_AUTO_CREATE", "true")
     monkeypatch.setenv("REQUIRE_DB_EXTENSIONS", "false")
+    monkeypatch.setenv("PREF_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
     from app.db.engine import initialize_database, reset_engine
     from app.core.backfill_store import reset_backfill_status
@@ -40,6 +42,21 @@ def configured_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
     reset_job_store()
     reset_backfill_status()
     initialize_database()
+
+    # Create tables that only exist in the SQL template (not in ORM models).
+    from app.db.engine import get_session_factory
+    from sqlalchemy import text as sa_text
+    factory = get_session_factory()
+    with factory() as session:
+        session.execute(sa_text(
+            "CREATE TABLE IF NOT EXISTS user_preferences ("
+            "  key VARCHAR(64) NOT NULL PRIMARY KEY,"
+            "  value TEXT NOT NULL,"
+            "  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            ")"
+        ))
+        session.commit()
+
     yield
     reset_job_store()
     reset_backfill_status()
@@ -49,9 +66,21 @@ def configured_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
 @pytest.fixture()
 def client(configured_db: None) -> Iterator[TestClient]:
     from app.main import app
+    from app.core.auth import UserContext, get_current_user
+    from app.db.session import get_db_session
+    from app.db.tenant_session import get_tenant_session
+
+    # Override auth + tenant session for tests: no JWT required, no schema scoping.
+    _fake_user = UserContext(user_id="test-user", email="test@test.com", schema_name="user_test0001")
+
+    app.dependency_overrides[get_current_user] = lambda: _fake_user
+    app.dependency_overrides[get_tenant_session] = get_db_session
 
     with TestClient(app) as test_client:
         yield test_client
+
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_tenant_session, None)
 
 
 @pytest.fixture()

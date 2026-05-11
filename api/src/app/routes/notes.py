@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.repositories.note_repository import NoteRepository, NoteTitleConflictError
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.services.note_asset_service import reconcile_note_assets_for_note
 from shared.contracts.python.v1.note import (
     GetNoteResponse,
@@ -27,7 +27,7 @@ def _utc_now_iso() -> str:
 def put_note(
     note_id: str,
     payload: SaveNoteRequest,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> SaveNoteResponse:
     if note_id != payload.note_id:
         raise HTTPException(
@@ -37,7 +37,7 @@ def put_note(
 
     repository = NoteRepository(session)
     try:
-        with session.begin():
+        with session.begin_nested():
             record = repository.upsert_note(
                 note_id=payload.note_id,
                 note_title=payload.note_title,
@@ -54,6 +54,7 @@ def put_note(
                 content_json=payload.content_json,
                 session=session,
             )
+        session.commit()
     except NoteTitleConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -67,13 +68,14 @@ def put_note(
         note_id=record.note_id,
         saved_at=_utc_now_iso(),
         version=record.version,
+        content_hash=record.content_hash,
     )
 
 
 @router.get("/notes/{note_id}", response_model=GetNoteResponse)
 def fetch_note(
     note_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> GetNoteResponse:
     record = NoteRepository(session).get_note(note_id)
     if record is None:
@@ -90,6 +92,7 @@ def fetch_note(
         is_archived=record.is_archived,
         content_json=record.content_json,
         content_text=record.content_text,
+        content_hash=record.content_hash,
         updated_at=record.updated_at,
         version=record.version,
     )
@@ -104,7 +107,7 @@ def list_notes(
     tag: str | None = Query(default=None, min_length=1),
     is_archived: bool | None = Query(default=False),
     is_pinned: bool | None = Query(default=None),
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> ListNotesResponse:
     items, total = NoteRepository(session).list_notes(
         limit=limit,
@@ -137,10 +140,11 @@ def list_notes(
 @router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_note(
     note_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> Response:
-    with session.begin():
+    with session.begin_nested():
         deleted = NoteRepository(session).delete_note(note_id)
+    session.commit()
 
     if not deleted:
         raise HTTPException(

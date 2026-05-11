@@ -38,4 +38,9 @@ export const GRAPH_CSS_VARS = {
   nodeHighlight: "--graph-node-highlight",
   edgeDim: "--graph-edge-dim",
   nodeDimOpacity: "--graph-node-dim-opacity",
+  nodeStrokeDefault: "--graph-node-stroke-default",
+  nodeStrokeRoot: "--graph-node-stroke-root",
+  nodeStrokeHighlight: "--graph-node-stroke-highlight",
+  labelDefault: "--graph-label-default",
+  labelHighlight: "--graph-label-highlight",
 } as const;

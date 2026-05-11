@@ -1,0 +1,11 @@
+-- Force the default search_path for the neuronote DB role to public.
+--
+-- Without this, the role's effective search_path is "$user", public, and
+-- since the role's $user is "neuronote", unqualified CREATE TABLE / SELECT
+-- statements run during migrations land in the auto-created "neuronote"
+-- schema (alongside AGE graph tables) instead of "public".
+--
+-- This ALTER ensures Alembic migrations create tables in "public" by
+-- default. The application's runtime SET search_path (via SQLAlchemy
+-- before_cursor_execute event) overrides this for tenant-scoped queries.
+ALTER ROLE neuronote SET search_path TO public, ag_catalog;

@@ -1,0 +1,602 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "aeda54d04d844a3783bacc23816fd020",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_328153ae_21c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "c2532785e4c24ef5b711bba46c20209d",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_9bfb4e39_106c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "42ae7b3300fd43ce8ff1fff007d87a7a",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_43b1a16d_26c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_dffd6021_13c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "23a4476cb4c34affbff91c9cc9ed86a0",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_a79f7ed8_109c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "7357e4173e3841cb86513f82dcd49fb1",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_af7ea99f_9c"
+        },
+        {
+          "type": "text",
+          "marks": [
+            {
+              "type": "italic"
+            }
+          ],
+          "text": "concept_9cd26bee_9c"
+        },
+        {
+          "type": "text",
+          "text": "concept_0764be56_17c"
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule",
+      "attrs": {
+        "blockUid": "59b627b3ada749b69145d860291cdcc6",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      }
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "6c7e138745ea4e62985f8c23b1ed2493",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_e17d0f7e_18c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "7ad0082c13444b738c99abf4e21512ad",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_2a2ae6ca_65c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "57d594a3dea3411c802182161575450a",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_2bd7ac39_130c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "df2a05146145412bbfa01af880d322d6",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_743838ea_52c"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "f0c217d2330246f297a67e02171fc155",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_1a670a6a_33c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "2661867e76e34893a80c1797f58f6730",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_a0a84bc5_9c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_1231e5a2_36c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "b67ece060ea748d292342d292a096e98",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_36a65105_58c"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "a76383ca091848c9a9a03842f1490f15",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_d029f87e_7c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "edf854abfa554e7fa6fcb14f8b3a20a6",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_e1bbe308_13c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "45a36c843d884ff994d0f1e7bbeb01f0",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_a0a84bc5_9c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_0b73dbe6_34c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "5dc43bd8a88e403997098ad84e50a6c5",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_bf7f786a_110c"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "f6a174a81a864bfc982ef35ed9bb7baa",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_d029f87e_7c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "5de9bfd09fba4b9db5c519e5c033c981",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_a0a84bc5_9c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_da6e10f4_36c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_a0a84bc5_9c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_4254cf39_43c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "e8588cc783ec46b7a7b2d64251b61e5f",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_e817af70_109c"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "658bd8d772264d5e94dbe34b13dc1f45",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_d029f87e_7c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "a93add3d4b7f4ce6b831b0d13aa90462",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_e1bbe308_13c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "4ef8b087d6bb4e4e999596dd575ef106",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_a0a84bc5_9c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_1a1eae22_35c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_d59887ff_42c"
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule",
+      "attrs": {
+        "blockUid": "4c44feba306e4f9c8d374ee5793e1e02",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      }
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "462eb6717e0f45f68b1427aaa81856bd",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "marks": [
+            {
+              "type": "bold"
+            }
+          ],
+          "text": "concept_b346a253_10c"
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule",
+      "attrs": {
+        "blockUid": "365161d868304048b9e4dd2d39c7b597",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      }
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "8c525def56e846cdb7cfb2fb02c34166",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_547f5c49_16c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "13711ad6d3584aeba793be6162e49d07",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_95476b9e_63c"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "7b7ad8a2e4e0435db46dca7cc5705daf",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_d029f87e_7c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "1c0c493f39e34fb5bb43319078dee58f",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_b373d0f2_20c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "99b26d16409948ae9ad8c4fa01142f42",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_b203e586_5c"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "concept_32115ea2_19c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "4ed957c0cf0042eb81f77bffa1f408a5",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_70b03540_47c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "aed1a536cace41fcad6c83257986a01d",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_700cff83_68c"
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule",
+      "attrs": {
+        "blockUid": "cd170e13648b4e04923a4c67fcdd88eb",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      }
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "blockUid": "125645a14c6947bc94a4e6c9e677cc00",
+        "parentBlockUid": null,
+        "indentLevel": 0,
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_355f79f2_8c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "03ad0363c7134a0683417bbef0abe394",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_9c39b8ef_74c"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "attrs": {
+        "blockUid": "50d7349113034e789b4568d97fdc4777",
+        "parentBlockUid": null,
+        "indentLevel": 0
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "concept_9c9e1221_22c"
+        },
+        {
+          "type": "text",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ],
+          "text": "concept_334359b9_1c"
+        },
+        {
+          "type": "text",
+          "text": "concept_474e2bdd_59c"
+        }
+      ]
+    }
+  ]
+}

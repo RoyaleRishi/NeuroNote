@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.repositories.note_asset_repository import NoteAssetRepository
 from app.db.repositories.note_repository import NoteRepository
-from app.db.session import get_db_session
+from app.db.tenant_session import get_tenant_session
 from app.media.config import get_media_settings
 from app.services.note_asset_service import (
     allowed_image_mime_types,
@@ -28,7 +28,7 @@ router = APIRouter()
 )
 async def upload_media(
     payload: UploadImageRequest,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> UploadImageResponse:
     if not note_assets_table_exists(session):
         raise HTTPException(
@@ -53,7 +53,7 @@ async def upload_media(
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Image too large")
 
     storage = get_media_storage()
-    with session.begin():
+    with session.begin_nested():
         note = NoteRepository(session).get_note(payload.note_id)
         if note is None:
             raise HTTPException(
@@ -71,6 +71,7 @@ async def upload_media(
             byte_size=len(file_bytes),
             relative_path=relative_path,
         )
+    session.commit()
 
     return UploadImageResponse(
         asset_id=asset_id,
@@ -84,7 +85,7 @@ async def upload_media(
 @router.get("/media/{asset_id}")
 def fetch_media(
     asset_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> Response:
     if not note_assets_table_exists(session):
         raise HTTPException(
@@ -107,7 +108,7 @@ def fetch_media(
 @router.delete("/media/{asset_id}", response_model=DeleteImageResponse)
 def delete_media(
     asset_id: str,
-    session: Session = Depends(get_db_session),
+    session: Session = Depends(get_tenant_session),
 ) -> DeleteImageResponse:
     if not note_assets_table_exists(session):
         raise HTTPException(
@@ -116,12 +117,13 @@ def delete_media(
         )
 
     storage = get_media_storage()
-    with session.begin():
+    with session.begin_nested():
         repository = NoteAssetRepository(session)
         asset = repository.get_asset(asset_id)
         if asset is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
         repository.mark_deleted(asset_id)
         storage.delete(relative_path=asset.relative_path)
+    session.commit()
 
     return DeleteImageResponse(asset_id=asset_id, deleted=True)

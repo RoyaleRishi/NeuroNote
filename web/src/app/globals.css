@@ -80,28 +80,61 @@ body {
 .notes-workspace {
   display: grid;
   grid-template-columns: 390px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 24px;
-  min-height: 100vh;
+  height: calc(100vh - 48px);
   padding: 24px;
+  overflow: hidden;
+  transition: grid-template-columns 0.22s ease, column-gap 0.22s ease, padding-left 0.22s ease;
+}
+
+.notes-workspace.sidebar-collapsed {
+  grid-template-columns: 0px minmax(0, 1fr);
+  column-gap: 0;
+  padding-left: 8px;
+}
+
+.notes-workspace.sidebar-collapsed .notes-sidebar {
+  overflow: hidden;
+  padding: 0;
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 .notes-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border-strong);
   border-radius: 24px;
   box-shadow: var(--shadow-panel);
   padding: 20px;
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  height: 100%;
+  overflow: hidden;
+  transition: padding 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.notes-sections-scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .notes-sidebar-header {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.notes-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .notes-sidebar-header h1 {
@@ -115,6 +148,28 @@ body {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.sidebar-collapse-btn:hover {
+  color: var(--text-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* Split New Note button */
@@ -344,6 +399,7 @@ body {
   padding: 0;
   display: grid;
   gap: 6px;
+  align-content: start;
 }
 
 .note-list-button {
@@ -495,21 +551,43 @@ body {
 
 .notes-editor-panel {
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--panel-border-strong);
   border-radius: 24px;
   box-shadow: var(--shadow-panel);
   background: var(--panel-bg);
-  overflow: hidden;
+  overflow-y: auto;
+  position: relative;
 }
 
-.notes-editor-actions {
+.sidebar-expand-btn {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 2;
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 16px 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
+
+.sidebar-expand-btn:hover {
+  color: var(--text-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 
 .local-graph-panel {
   margin: 10px 16px 0;
@@ -677,19 +755,19 @@ body {
   padding: 20px 22px;
 }
 
-/* Note editor top bar */
+/* Note editor top bar — single row: toolbar | badge | view-tabs | options-menu */
 .note-editor-top-bar {
   display: flex;
-  flex-direction: column;
-  gap: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 6px 0;
+  border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
 }
 
-.note-editor-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-bottom: 6px;
+.note-editor-top-bar .editor-toolbar {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Extraction summary badge */
@@ -2407,7 +2485,6 @@ select:focus-visible {
 .app-nav {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 24px;
   height: 48px;
   background: var(--panel-bg);
@@ -2416,10 +2493,19 @@ select:focus-visible {
 }
 
 .app-nav-brand {
+  flex: 1;
   font-weight: 600;
   font-size: 1rem;
   color: var(--text-strong);
   letter-spacing: -0.01em;
+}
+
+.app-nav-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .app-nav-tabs {
@@ -2468,35 +2554,33 @@ select:focus-visible {
   border-color: var(--danger);
 }
 
-/* ── Note Write / Graph tabs ───────────────────────────── */
-.note-tabs {
+/* ── Note Write / Graph inline tabs ─────────────────────── */
+.note-view-tabs {
   display: flex;
-  border-bottom: 1px solid var(--panel-border);
-  padding: 0 16px;
-  gap: 0;
-  flex-shrink: 0;
+  gap: 2px;
 }
 
-.note-tab {
-  padding: 8px 14px;
+.note-view-tab {
+  padding: 4px 12px;
   font-size: var(--text-sm);
   font-weight: 500;
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-muted);
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
 
-.note-tab:hover {
+.note-view-tab:hover {
   color: var(--text-strong);
+  background: var(--accent-soft);
 }
 
-.note-tab.active,
-.note-tab[aria-selected="true"] {
+.note-view-tab.active,
+.note-view-tab[aria-selected="true"] {
   color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--accent-soft);
   font-weight: 600;
 }
 
@@ -2717,6 +2801,37 @@ select:focus-visible {
 .tag-chip-remove:hover {
   opacity: 1;
 }
+
+/* Per-tag color modifiers — applied alongside .tag-chip (or .note-list-tag-chip).
+ * Override the default --info palette with the deterministic per-tag palette
+ * from tokens.css; border tracks text color at 27% alpha to match the prior
+ * inline-style border. */
+.tag-chip-blue   { background: var(--tag-blue-bg);   color: var(--tag-blue-text);   border-color: color-mix(in srgb, var(--tag-blue-text) 27%, transparent); }
+.tag-chip-green  { background: var(--tag-green-bg);  color: var(--tag-green-text);  border-color: color-mix(in srgb, var(--tag-green-text) 27%, transparent); }
+.tag-chip-amber  { background: var(--tag-amber-bg);  color: var(--tag-amber-text);  border-color: color-mix(in srgb, var(--tag-amber-text) 27%, transparent); }
+.tag-chip-pink   { background: var(--tag-pink-bg);   color: var(--tag-pink-text);   border-color: color-mix(in srgb, var(--tag-pink-text) 27%, transparent); }
+.tag-chip-purple { background: var(--tag-purple-bg); color: var(--tag-purple-text); border-color: color-mix(in srgb, var(--tag-purple-text) 27%, transparent); }
+.tag-chip-red    { background: var(--tag-red-bg);    color: var(--tag-red-text);    border-color: color-mix(in srgb, var(--tag-red-text) 27%, transparent); }
+.tag-chip-sky    { background: var(--tag-sky-bg);    color: var(--tag-sky-text);    border-color: color-mix(in srgb, var(--tag-sky-text) 27%, transparent); }
+.tag-chip-violet { background: var(--tag-violet-bg); color: var(--tag-violet-text); border-color: color-mix(in srgb, var(--tag-violet-text) 27%, transparent); }
+
+/* User-menu inline-style → class promotions (UserMenu.tsx).  Replace the
+ * sprinkling of style={{...}} blocks with named utilities so design-token
+ * changes flow through without touching JSX. */
+.user-menu-identity { display: flex; align-items: center; gap: 10px; }
+.user-menu-identity-name  { font-size: var(--text-xs); font-weight: 700; color: var(--text-strong); }
+.user-menu-identity-email { font-size: var(--text-xs); color: var(--text-muted); }
+.user-menu-mode-hint      { margin: 6px 0 0; font-size: var(--text-xs); color: var(--text-muted); }
+.user-menu-cloud-input    { font-size: var(--text-xs); }
+.user-menu-cloud-input-row { display: flex; gap: 6px; }
+.user-menu-cloud-input-row .user-menu-cloud-input { flex: 1; }
+.user-menu-test-status    { margin: 4px 0 0; font-size: var(--text-xs); color: var(--text-muted); }
+.user-menu-test-status.error { color: var(--danger); }
+.user-menu-confidence-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.user-menu-confidence-row > .user-menu-label { margin-bottom: 0; }
+.user-menu-confidence-value  { font-size: var(--text-xs); font-weight: 700; color: var(--accent); }
+.user-menu-confidence-slider { width: 100%; accent-color: var(--accent); }
+.user-menu-confidence-bounds { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
 
 /* ── Search Highlight ──────────────────────────────────────────── */
 
@@ -3125,4 +3240,103 @@ select:focus-visible {
   width: 100%;
   border-radius: var(--radius-sm);
   margin-bottom: 6px;
+}
+
+/* ── User menu dropdown ──────────────────────────────────────────── */
+
+.user-menu-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.user-menu-avatar-btn {
+  all: unset;
+  cursor: pointer;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-menu-avatar-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.user-menu-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  min-width: 240px;
+  z-index: var(--z-dropdown);
+  overflow: hidden;
+}
+
+.user-menu-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.user-menu-section:last-child {
+  border-bottom: none;
+}
+
+.user-menu-label {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.user-menu-mode-toggle {
+  display: flex;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.user-menu-mode-btn {
+  all: unset;
+  flex: 1;
+  padding: 6px 10px;
+  font-size: var(--text-xs);
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.user-menu-mode-btn.active {
+  background: var(--accent);
+  color: white;
+  font-weight: var(--font-semibold);
+}
+
+.user-menu-cloud-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.user-menu-signout-btn {
+  all: unset;
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: var(--text-sm);
+  color: var(--danger);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.user-menu-signout-btn:hover {
+  background: var(--workspace-bg);
 }

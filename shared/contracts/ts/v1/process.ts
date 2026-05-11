@@ -24,6 +24,6 @@ export interface ProcessStatusResponse {
   status: JobStatus;
   created_at: string;
   updated_at: string;
-  error?: string | null;
-  extraction_summary?: ExtractionSummary | null;
+  error: string | null;
+  extraction_summary: ExtractionSummary | null;
 }

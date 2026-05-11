@@ -21,7 +21,7 @@
 
 ## What this project is
 
-NeuroNote is a local-first AI-powered knowledge base. Users write notes in a rich TipTap editor; the system automatically extracts concepts and relations with an NLP pipeline (rule-based, spaCy, or Claude-enhanced), stores them in an Apache AGE property graph, and lets users explore the knowledge graph interactively. Clicking any concept node opens an AI-generated insight panel grounded in the user's own notes.
+NeuroNote is a local-first AI-powered knowledge base. Users write notes in a rich TipTap editor; the system automatically extracts concepts with a deterministic pipeline (kbir-inspec transformer + YAKE, embedding-based cross-note normalisation, structural relation derivation), stores them in an Apache AGE property graph, and lets users explore the knowledge graph interactively. Clicking any concept node opens an AI-generated insight panel grounded in the user's own notes.
 
 ## Monorepo layout
 
@@ -49,25 +49,50 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 ## Key architectural decisions
 
 ### API
-- **FastAPI** with async route handlers; `Depends(get_db_session)` for DB injection
+- **FastAPI** with async route handlers; `Depends(get_tenant_session)` for tenant-scoped DB injection (sets `search_path` per user); `Depends(get_db_session)` for public-schema-only routes (health, auth)
 - **SQLAlchemy** ORM (sync sessions, not async) — the DB layer is synchronous even though route handlers are `async def`
 - **Apache AGE** (typed property graph in PostgreSQL) — Cypher queries via raw SQL with `LOAD 'age'` + `ag_catalog` search path
 - **Schema is migration-first** — `DB_AUTO_CREATE=false`; always run `make compose-migrate` after pulling new migrations
-- **Alembic** for migrations — 12 migrations in `api/alembic/versions/`
-- **pgvector** for semantic embeddings — note-level embeddings stored in `public.note_embeddings` (384-dim, HNSW index); no per-entity embeddings
+- **Alembic** for migrations — 14 migrations in `api/alembic/versions/`
+- **Multi-tenancy** — schema-per-user isolation. Each user gets a PostgreSQL schema (`user_xxx`) with all data tables + an AGE graph (`nn_user_xxx`). `get_tenant_session()` sets `search_path` from JWT `schema_name`. All data queries use unqualified table names (resolved via `search_path`).
+- **OAuth authentication** — Google + GitHub via `authlib` + JWT. `httpOnly` secure cookies (`neuronote_access` 15min, `neuronote_refresh` 7d). `get_current_user()` FastAPI dependency extracts `UserContext` from JWT.
+- **pgvector** for semantic embeddings — note-level embeddings stored in `note_embeddings` (384-dim, HNSW index); per-user schema
 - **Shared contracts** — Pydantic models in `shared/contracts/python/v1/`; always update the matching TypeScript file in `shared/contracts/ts/v1/` when changing Python contracts, and vice versa
+
+#### Users table (migration 0014)
+- `public.users` — OAuth user records for multi-tenant SaaS. Stores identity (`email`, `oauth_provider`, `oauth_provider_id`), display info (`display_name`, `avatar_url`), and tenant mapping (`schema_name`). Each user maps to an isolated tenant schema. Unique constraints on `email`, `schema_name`, and `(oauth_provider, oauth_provider_id)`.
+
+#### Tenant provisioning (`api/src/app/db/tenant.py`)
+- Schema-per-user isolation: each user gets a PostgreSQL schema (`user_xxx`) with all 13 data tables + an AGE graph (`nn_user_xxx`).
+- `create_user_schema(session, schema_name)` — provisions schema, tables (from `schema_template.sql`), and AGE graph.
+- `drop_user_schema(session, schema_name)` — tears down graph + schema.
+- `apply_ddl_to_all_schemas(session, ddl)` — runs DDL across all tenant schemas (for future migrations).
+- SQLite fallback for tests: emulates schemas via `{schema}__{table}` prefixed table names.
+- Schema names must match `^user_[a-z0-9]{4,32}$`.
+
+#### User preferences (migration 0015)
+- `user_preferences` (per-tenant) — key-value store for per-user settings. Keys: `llm_mode` (`edge` | `cloud`), `llm_api_key`, `llm_base_url`, `llm_model`. Default is `edge`.
+- `GET /v1/preferences` returns all preferences with API key masked (`****abcd`). `PUT /v1/preferences` does partial updates.
+- `POST /v1/preferences/test-connection` validates a cloud-mode API key by making a test completion call.
+
+#### LLM dual-mode architecture
+- **Edge mode** (default): Gemma 4 E4B runs in-browser via WebGPU using `@mlc-ai/web-llm`. Frontend extracts concepts/relations locally, posts results to `POST /v1/extraction-results` and `POST /v1/meta-classification-results`. Server is purely a data layer for these users — no LLM cost.
+- **Cloud mode**: User's `llm_api_key` is read from `user_preferences` and passed to `NoteProcessingService` / `ConceptInsightService` (via `_load_user_llm_config` helpers). Existing `POST /v1/process-note` flow is reused. Falls back to env-var key if user hasn't configured one.
+- Frontend orchestration in `web/src/lib/orchestration/edge-processing.ts` (edge) and existing `process-polling.ts` (cloud). `NoteEditor.startProcessing` branches on `llmMode` prop.
+- Edge LLM lifecycle managed by `useEdgeLLM(enabled, retryToken)` hook — handles WebGPU detection, model download progress, ready state.
+- UI components: `ModelStatusIndicator` (header badge), `ModelDownloadProgress` (download banner), `WebGPUCheck` (modal when WebGPU unsupported).
 
 #### Cache tables (migration 0011)
 - `concept_insight_cache` — caches Claude-generated concept insights keyed by `(concept_label, content_digest)`. The digest is a SHA-256 of sorted `note_id:content_hash` pairs, so the cache auto-invalidates when any relevant note changes.
-- `nlp_extraction_cache` — caches NLP/SLM extraction results keyed by `(content_hash, extraction_profile)`. Eliminates redundant LLM calls after container restarts for unchanged notes.
+- `nlp_extraction_cache` — caches extraction results keyed by `content_hash`. Auto-shared across notes with identical text.
 
 ### NLP pipeline (`api/src/app/nlp/`)
-- `NoteNlpPipeline` in `pipeline.py` — entry point; reads `NLP_EXTRACTION_PROFILE` env var
-- Three profiles: `rule-only` (default), `hybrid-spacy`, `llm-enhanced`
-- LRU extraction cache keyed by `content_hash` — notes with identical text share one result; backed by `nlp_extraction_cache` DB table for cross-restart persistence
-- `SLMExtractor` (`slm_extractor.py`) wraps the LLM API for `llm-enhanced` profile — uses sync `LLMClient`
-- `ConceptMetaClassifier` (`concept_meta.py`) — called after each note's graph sync; uses the LLM to identify `SYNONYM_OF` pairs (e.g. "ML" ↔ "machine learning") and `SUBTOPIC_OF` pairs (e.g. "backpropagation" → "neural networks") among newly extracted concepts; writes edges to AGE; uses sync `LLMClient`. Guards against re-classification via `concept_registry.meta_classified_at` — already-classified concepts are always skipped.
-- `ConceptInsightService` (`services/concept_insight_service.py`) calls the LLM for on-demand insight generation — uses async `AsyncLLMClient`; cached in `concept_insight_cache`
+The pipeline is fully deterministic — the LLM is no longer in the extraction critical path. `NoteNlpPipeline` (`pipeline.py`) runs three stages on every note:
+1. **`extract_concepts`** (`extraction.py`) — ensemble of the `ml6team/keyphrase-extraction-kbir-inspec` transformer (high precision on dense prose) and YAKE (statistical recall on lists/informal text). Outputs a deduped list of `ConceptSpan`s passed through a cleanup filter (no leading determiners, no purely-stopword phrases, length 2–60, no code tokens).
+2. **`normalise_concepts`** (`normalisation.py`) — embeds each span and runs cosine nearest-neighbour against `concept_registry.embedding` (HNSW index). A match at threshold ≥0.88 reuses the existing canonical concept; otherwise a new registry row is inserted. This is how cross-note concept identity is established.
+3. **`derive_relations`** (`structure_relations.py`) — emits five structural edge types from block structure alone: `MENTIONED_TOGETHER`, `SUBTOPIC_OF`, `SIBLING_OF`, `REFERENCES`, `DEFINED_BY`. No model call required.
+
+Cross-restart caching is provided by `nlp_extraction_cache` (keyed by `content_hash`). The LLM is now used only for (a) optional per-note summaries and (b) the on-demand concept insight panel via `ConceptInsightService` (`services/concept_insight_service.py`, async `AsyncLLMClient`, cached in `concept_insight_cache`).
 
 ### Graph sync (`api/src/app/services/graph_sync_service.py`)
 - Delete-and-replace semantics: on each note save, all AGE nodes/edges sourced from that note are deleted then re-created
@@ -176,15 +201,13 @@ Frontend tests: `web/src/**/*.test.tsx`
 | Variable | Where set | Purpose |
 |---|---|---|
 | `DATABASE_URL` | `api/.env` | PostgreSQL connection string |
-| `NLP_EXTRACTION_PROFILE` | `api/.env` or compose | `rule-only` / `hybrid-spacy` / `llm-enhanced` |
-| `NLP_MODEL_NAME` | `api/.env` or compose | spaCy model (e.g. `spacy:en_core_web_sm`) |
-| `NLP_ENTITY_SEED_TERMS` | `api/.env` or compose | Comma-separated terms for deterministic seeding |
 | `LLM_API_KEY` | `api/.env` or compose | API key for the LLM provider. Falls back to `ANTHROPIC_API_KEY` if not set. |
 | `LLM_BASE_URL` | `api/.env` or compose | Base URL for any OpenAI-compatible endpoint. Default: `https://api.anthropic.com/v1/`. Examples: `https://api.openai.com/v1`, `https://api.groq.com/openai/v1`, `http://localhost:11434/v1` |
 | `ANTHROPIC_API_KEY` | `api/.env` or compose | Legacy fallback for `LLM_API_KEY` when using Anthropic. |
 | `NEXT_PUBLIC_API_BASE_URL` | `web/.env` | API URL for the browser (`http://localhost:8000`) |
 | `APP_PASSWORD` | `infra/.env` or compose | Password gate for the web UI. Unset = disabled (dev mode). When set, all routes require login. |
 | `SESSION_SECRET` | `infra/.env` or compose | Secret for HMAC-SHA256 session token. Falls back to `APP_PASSWORD` if unset. Use `openssl rand -hex 32`. |
+| `PREF_ENCRYPTION_KEY` | `api/.env` or compose | Base64url Fernet key for encrypting `llm_api_key` at rest. Generate with: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Unset = no-op (plaintext stored). |
 | `NEXT_PUBLIC_AUTH_ENABLED` | Set automatically by compose | `"true"` when `APP_PASSWORD` is non-empty. Controls logout button visibility. Do not set manually. |
 
 ## Files to be careful with
