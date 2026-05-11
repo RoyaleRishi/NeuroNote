@@ -1,3 +1,17 @@
+"""NeuroNote FastAPI application — entry point, middleware, and router registration.
+
+Startup sequence:
+  1. DB initialisation + required-extension validation (AGE, pgvector).
+  2. Mark any jobs that were in-flight when the process last died as failed.
+  3. Prewarm NLP extraction models (kbir-inspec transformer + YAKE).
+  4. Launch startup backfill to reprocess notes that have never been extracted.
+
+Middleware stack (inner to outer):
+  - ``request_id_middleware`` — injects ``X-Request-ID`` into log records.
+  - ``api_key_middleware``   — enforces ``X-Api-Key`` when ``API_KEY`` env var is set.
+  - ``SessionMiddleware``    — authlib OAuth state storage (SESSION_SECRET).
+  - ``CORSMiddleware``       — origins from ``CORS_ORIGINS`` env var (default ``*``).
+"""
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import logging
@@ -6,7 +20,6 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -14,7 +27,6 @@ from slowapi.errors import RateLimitExceeded
 from app.db.config import get_database_settings
 from app.db.engine import get_session_factory, initialize_database
 from app.db.extensions import validate_required_extensions
-from app.routes.auth import router as auth_router
 from app.routes.backfill import router as backfill_router
 from app.routes.concepts import router as concepts_router
 from app.routes.connections import router as connections_router
@@ -27,19 +39,13 @@ from app.routes.health import router as health_router
 from app.routes.import_ import router as import_router
 from app.routes.media import router as media_router
 from app.routes.notes import router as notes_router
-from app.routes.preferences import router as preferences_router
 from app.routes.process import router as process_router
 from app.core.job_store import mark_stale_jobs_as_failed
 from app.core.rate_limiter import limiter
 from app.services.startup_backfill_service import StartupBackfillService
 
 # Paths that are always public regardless of API_KEY setting.
-_PUBLIC_PATHS = {
-    "/health", "/docs", "/openapi.json", "/redoc",
-    "/v1/auth/google/login", "/v1/auth/google/callback",
-    "/v1/auth/github/login", "/v1/auth/github/callback",
-    "/v1/auth/dev/login", "/v1/auth/dev/status",
-}
+_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
 
 class _RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -77,11 +83,6 @@ def _startup_database() -> None:
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _startup_database()
     mark_stale_jobs_as_failed()
-    try:
-        from app.nlp import extraction as _extraction
-        _extraction.prewarm()
-    except Exception as exc:
-        _LOG.warning("extraction.prewarm() failed: %s", exc)
     backfill_service: StartupBackfillService | None = None
     settings = get_database_settings()
     if settings.database_url.startswith("postgresql"):
@@ -103,15 +104,10 @@ _cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Session middleware required by authlib for OAuth state storage.
-# Uses SESSION_SECRET (separate from JWT_SECRET) to avoid coupling rotation.
-_session_secret = os.environ.get("SESSION_SECRET") or os.environ.get("JWT_SECRET", "dev-session-secret")
-app.add_middleware(SessionMiddleware, secret_key=_session_secret)
 
 
 @app.middleware("http")
@@ -151,7 +147,6 @@ async def api_key_middleware(request: Request, call_next: object) -> object:
     return await call_next(request)  # type: ignore[operator]
 
 
-app.include_router(auth_router, prefix="/v1")
 app.include_router(health_router)
 app.include_router(notes_router, prefix="/v1")
 app.include_router(backlinks_router, prefix="/v1")
@@ -164,5 +159,4 @@ app.include_router(export_router, prefix="/v1")
 app.include_router(graph_router, prefix="/v1")
 app.include_router(connections_router, prefix="/v1")
 app.include_router(concepts_router, prefix="/v1")
-app.include_router(preferences_router, prefix="/v1")
 app.include_router(import_router, prefix="/v1")

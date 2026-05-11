@@ -4,7 +4,7 @@ NeuroNote is a local-first, AI-powered knowledge base. You write notes in a rich
 
 **Key capabilities:**
 - **Rich editor** — TipTap-based with slash commands, wiki-links (`[[Note Title]]`), block references (`((uid))`), LaTeX math, images, and checklists
-- **Automatic concept extraction** — deterministic NLP pipeline (kbir-inspec transformer + YAKE, embedding-based normalisation, structural relation derivation) identifies concepts and relations in every note
+- **Automatic concept extraction** — NLP pipeline (rule-based, spaCy, or Claude-powered) identifies entities and relations in every note
 - **Knowledge graph** — Apache AGE typed property graph; explore your notes as a D3 force-directed graph with hop depth, confidence, and node-type filters
 - **Concept Insight Panel** — click any concept or entity node in the graph to see all related notes, an AI-generated synthesis paragraph grounded solely in your notes, and curated external learning links
 - **Backlinks** — know which notes reference any note or block
@@ -46,11 +46,39 @@ Default URLs: Web `http://localhost:3000` · API `http://localhost:8000` · Post
 
 ## AI Features
 
-### NLP Extraction
+### NLP Extraction Profiles
 
-Every note save triggers a deterministic background pipeline: the `ml6team/keyphrase-extraction-kbir-inspec` transformer (high-precision on dense prose) and YAKE (statistical recall on lists/informal text) extract concept spans, an embedding-based nearest-neighbour pass against the per-tenant `concept_registry` normalises them onto canonical concepts (cosine threshold 0.88), and `derive_relations` emits five structural edge types (`MENTIONED_TOGETHER`, `SUBTOPIC_OF`, `SIBLING_OF`, `REFERENCES`, `DEFINED_BY`) from block structure. The LLM is no longer in the extraction critical path — it is used only for per-note summaries and the on-demand Concept Insight Panel.
+Every note save triggers background entity and relation extraction. Three profiles are available:
 
-**LLM provider configuration** (`LLM_BASE_URL` + `NLP_LLM_MODEL`) — used by summaries / insight panel:
+| Profile | How it works |
+|---|---|
+| `rule-only` | Dictionary matching + deterministic regex (default, no external dependencies) |
+| `hybrid-spacy` | Dictionary + spaCy NER + regex fallback |
+| `llm-enhanced` | Any OpenAI-compatible LLM — highest quality, requires `LLM_API_KEY` |
+
+Set via environment variable in `infra/docker-compose.yml` or on the command line:
+
+```bash
+# Hybrid spaCy
+NLP_EXTRACTION_PROFILE=hybrid-spacy \
+NLP_MODEL_NAME=spacy:en_core_web_sm \
+make compose-up
+
+# LLM-enhanced (any OpenAI-compatible provider)
+NLP_EXTRACTION_PROFILE=llm-enhanced \
+LLM_API_KEY=sk-ant-... \
+LLM_BASE_URL=https://api.anthropic.com/v1/ \
+NLP_LLM_MODEL=claude-haiku-4-5-20251001 \
+make compose-up
+```
+
+Seeding custom terms for deterministic recall:
+```bash
+NLP_ENTITY_SEED_TERMS="machine learning,knowledge graph,entity resolution" \
+make compose-up
+```
+
+**LLM provider configuration** (`LLM_BASE_URL` + `NLP_LLM_MODEL`):
 
 | Provider | `LLM_BASE_URL` | Example `NLP_LLM_MODEL` |
 |---|---|---|
@@ -74,6 +102,55 @@ Without `LLM_API_KEY`, notes list and snippets still render — the insight sect
 ```bash
 curl "http://localhost:8000/v1/concepts/insight?label=machine+learning&limit_notes=10"
 ```
+
+---
+
+## Authentication
+
+NeuroNote uses OAuth 2.0 (Google and GitHub) for user identity. Each authenticated user gets an isolated PostgreSQL schema (`user_<id>`) containing all their data tables and a dedicated AGE graph (`nn_user_<id>`).
+
+**Environment variables required for OAuth:**
+
+| Variable | Description |
+|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth app credentials |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app credentials |
+| `JWT_SECRET` | HS256 signing secret for access/refresh JWTs |
+| `SESSION_SECRET` | HMAC secret for authlib OAuth state storage (separate from JWT_SECRET) |
+
+**Token flow:**
+- Access token: 15-minute httpOnly cookie (`neuronote_access`) containing `user_id`, `email`, `schema_name`
+- Refresh token: 7-day httpOnly cookie (`neuronote_refresh`) — only `user_id`
+- Frontend transparently refreshes on 401 via `POST /v1/auth/refresh`
+
+**Dev bypass:** `POST /v1/auth/dev/login` (enabled only when no OAuth credentials are configured).
+
+**Password gate (self-hosted):** Set `APP_PASSWORD` in the compose env to enable a simple login page at `/login`. HMAC-SHA256 session token stored as `neuronote_session` cookie (cleared on browser close). When set, `NEXT_PUBLIC_AUTH_ENABLED` is automatically set to `"true"` by compose, showing a Logout button in the header.
+
+---
+
+## In-Browser AI (Edge Mode)
+
+NeuroNote supports fully private, server-free NLP processing via **Gemma 4 E4B** running in the browser using [WebLLM](https://webllm.mlc.ai/) + WebGPU.
+
+**Edge mode vs. cloud mode:**
+
+| | Edge mode (default) | Cloud mode |
+|---|---|---|
+| Who runs the LLM | Browser (WebGPU) | API server |
+| Data leaves device | No (notes stay local) | Yes (sent to LLM provider) |
+| Requires API key | No | Yes (`llm_api_key` in preferences) |
+| Model download | ~2–4 GB first launch | None |
+| Browser requirement | WebGPU-capable Chromium | Any |
+
+**How it works:**
+1. On first use, the browser downloads Gemma 4 E4B into IndexedDB via `@mlc-ai/web-llm`.
+2. A consent dialog is shown before any model download begins. The choice is persisted to `localStorage`.
+3. A crash-detection flag (`edge-init-pending`) is set in localStorage before download and cleared after the first successful inference. If a previous session crashed mid-download, a recovery banner offers retry or cloud switch.
+4. Once ready, extraction results are POSTed to `POST /v1/extraction-results` and `POST /v1/meta-classification-results` — the server acts as a pure data layer.
+5. Concept insight generation for the insight panel uses `GET /v1/concepts/insight-context` (server finds relevant note excerpts) and runs the LLM call in the browser.
+
+**Requirements:** Chrome 113+, Edge 113+, or any browser with `navigator.gpu` support. Safari and Firefox are currently unsupported.
 
 ---
 
@@ -190,18 +267,24 @@ make run-web      # Start Next.js dev server
 Schema is migration-first (`DB_AUTO_CREATE=false` in the compose API runtime). Always run `make compose-migrate` after pulling changes that include new migrations.
 
 Migration history:
-- `20260307_0001` — core schema (notes, blocks, entities, entity_aliases)
+- `20260301_0001` — core schema (notes, blocks, entities, entity_aliases)
 - `20260307_0002` — entity_aliases idempotent repair
 - `20260311_0003` — `notes.note_title` column
 - `20260312_0004` — workspace organization (flags + note_tags)
 - `20260313_0005` — media schema (note_assets)
 - `20260314_0006` — block tree fields (block_uid, parent_block_uid, sibling_order)
 - `20260314_0007` — note_assets schema drift repair
-- `20260330_0008` — semantic embeddings (pgvector)
-- `20260401_0009` — processing jobs persistence
+- `20260402_0008` — semantic embeddings (pgvector, note_embeddings)
+- `20260402_0009` — processing jobs persistence
 - `20260402_0010` — concept registry
 - `20260403_0011` — AI cache tables (concept_insight_cache, nlp_extraction_cache)
 - `20260403_0012` — concept meta-classification (meta_classified_at on concept_registry)
+- `20260407_0013` — extraction_summary JSONB column on processing_jobs
+- `20260409_0014` — public.users table (OAuth identity + tenant mapping)
+- `20260421_0015` — user_preferences key-value store (llm_mode, llm_api_key, etc.)
+- `20260503_0016` — clear plaintext API keys (one-time data migration)
+- `20260505_0017` — concept_registry.embedding column + HNSW index (cross-note normalisation)
+- `20260506_0018` — drop unused extraction_profile column
 
 ---
 
@@ -263,6 +346,32 @@ Migration history:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/v1/connections/{note_id}` | Immediate neighbors of a note |
+
+### Authentication
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/v1/auth/google/login` | Initiate Google OAuth flow |
+| `GET` | `/v1/auth/google/callback` | Google OAuth callback |
+| `GET` | `/v1/auth/github/login` | Initiate GitHub OAuth flow |
+| `GET` | `/v1/auth/github/callback` | GitHub OAuth callback |
+| `POST` | `/v1/auth/refresh` | Issue new access token from refresh cookie |
+| `POST` | `/v1/auth/logout` | Clear both auth cookies |
+| `GET` | `/v1/auth/me` | Return authenticated user profile |
+
+### User Preferences
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/v1/preferences` | Return all preferences (API key masked) |
+| `PUT` | `/v1/preferences` | Partial-update preferences |
+| `POST` | `/v1/preferences/test-connection` | Validate a cloud-mode API key |
+
+### Import
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/notes/import` | Import a markdown or text file as a new note |
 
 ---
 
@@ -360,5 +469,6 @@ unzip -l demo-note.zip
 |---|---|
 | `relation "note_assets" does not exist` | Run `make compose-migrate` |
 | Insight section shows config hint | Set `LLM_API_KEY` in compose env |
+| spaCy model not found | Install the model inside the API container or use `rule-only` profile |
 | AGE concurrent lock error in logs | Known AGE issue with parallel note processing — non-critical, retries succeed |
 | Port already in use | Use `WEB_PORT=3001 API_PORT=8001 make compose-up` |

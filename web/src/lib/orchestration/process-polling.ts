@@ -1,3 +1,14 @@
+/**
+ * NLP processing job poller.
+ *
+ * Creates a non-blocking polling loop that calls `fetchStatus` every
+ * `intervalMs` (default 1 s) and delivers each `ProcessStatusResponse` to
+ * `onStatus`.  The loop stops automatically when the job reaches a terminal
+ * state ("completed" | "failed") or when `stop()` is called explicitly.
+ *
+ * Callers own the controller lifetime — call `stop()` on component unmount
+ * to prevent stale callbacks from firing after navigation.
+ */
 import type { ProcessStatusResponse } from "../../../../shared/contracts/ts/v1/process";
 
 type ProcessStatus = "queued" | "running" | "completed" | "failed";
@@ -53,7 +64,6 @@ export function createProcessPollingController(
         created_at: "",
         updated_at: "",
         error: "Polling failed",
-        extraction_summary: null,
       });
     }
 

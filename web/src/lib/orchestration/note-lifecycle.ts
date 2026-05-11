@@ -1,3 +1,13 @@
+/**
+ * Note save/process lifecycle controller.
+ *
+ * Wraps two debounced actions — autosave and processing queue — behind a
+ * simple `onEdit` / `onBlur` / `dispose` interface so editor components
+ * don't need to own timer state.
+ *
+ * Defaults: autosave 800 ms, process queue 3 000 ms.  `onBlur` flushes
+ * both timers immediately (e.g. tab close / navigation away).
+ */
 import { createDebouncedAction } from "../timing/debounce";
 
 interface NoteLifecycleOptions {
