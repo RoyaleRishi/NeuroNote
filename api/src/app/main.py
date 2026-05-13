@@ -23,10 +23,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.db.config import get_database_settings
 from app.db.engine import get_session_factory, initialize_database
 from app.db.extensions import validate_required_extensions
+from app.routes.auth import router as auth_router
 from app.routes.backfill import router as backfill_router
 from app.routes.concepts import router as concepts_router
 from app.routes.connections import router as connections_router
@@ -39,13 +41,20 @@ from app.routes.health import router as health_router
 from app.routes.import_ import router as import_router
 from app.routes.media import router as media_router
 from app.routes.notes import router as notes_router
+from app.routes.preferences import router as preferences_router
 from app.routes.process import router as process_router
 from app.core.job_store import mark_stale_jobs_as_failed
 from app.core.rate_limiter import limiter
 from app.services.startup_backfill_service import StartupBackfillService
 
 # Paths that are always public regardless of API_KEY setting.
-_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {
+    "/health", "/docs", "/openapi.json", "/redoc",
+    "/v1/auth/google/login", "/v1/auth/google/callback",
+    "/v1/auth/github/login", "/v1/auth/github/callback",
+    "/v1/auth/dev/login", "/v1/auth/dev/status",
+    "/v1/auth/refresh",
+}
 
 class _RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -104,10 +113,14 @@ _cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# SessionMiddleware required by authlib for OAuth state storage.
+_session_secret = os.environ.get("SESSION_SECRET") or os.environ.get("JWT_SECRET", "dev-session-secret")
+app.add_middleware(SessionMiddleware, secret_key=_session_secret)
 
 
 @app.middleware("http")
@@ -148,6 +161,8 @@ async def api_key_middleware(request: Request, call_next: object) -> object:
 
 
 app.include_router(health_router)
+app.include_router(auth_router, prefix="/v1")
+app.include_router(preferences_router, prefix="/v1")
 app.include_router(notes_router, prefix="/v1")
 app.include_router(backlinks_router, prefix="/v1")
 app.include_router(blocks_router, prefix="/v1")

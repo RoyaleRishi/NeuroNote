@@ -35,6 +35,21 @@ import type {
   GlobalGraphResponse,
   ConceptInsightResponse,
 } from "../../../shared/contracts/ts/v1/graph";
+import type { UserProfile } from "../../../shared/contracts/ts/v1/auth";
+import type {
+  UserPreferences,
+  UpdatePreferencesRequest,
+  TestConnectionResponse,
+} from "../../../shared/contracts/ts/v1/preferences";
+
+export type { UserPreferences, UpdatePreferencesRequest, TestConnectionResponse };
+
+export function getBaseUrl(): string {
+  return (
+    (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) ||
+    "http://localhost:8000"
+  );
+}
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -79,6 +94,7 @@ async function apiFetch(
   try {
     return await fetch(url, {
       ...rest,
+      credentials: rest.credentials ?? "include",
       signal: effectiveSignal,
       headers: {
         ...getAuthHeaders(),
@@ -340,4 +356,43 @@ export async function fetchGlobalGraph(
     { timeoutMs: 60_000 },
   );
   return parseJsonResponse<GlobalGraphResponse>(response);
+}
+
+export async function fetchCurrentUser(): Promise<UserProfile | null> {
+  const response = await apiFetch(`${getBaseUrl()}/v1/auth/me`);
+  if (response.status === 401) return null;
+  return parseJsonResponse<UserProfile>(response);
+}
+
+export async function logoutUser(): Promise<void> {
+  const response = await apiFetch(`${getBaseUrl()}/v1/auth/logout`, {
+    method: "POST",
+  });
+  if (!response.ok && response.status !== 401) {
+    throw new ApiClientError(response.status);
+  }
+}
+
+export async function fetchPreferences(): Promise<UserPreferences> {
+  const response = await apiFetch(`${getBaseUrl()}/v1/preferences`);
+  return parseJsonResponse<UserPreferences>(response);
+}
+
+export async function updatePreferences(
+  payload: UpdatePreferencesRequest,
+): Promise<UserPreferences> {
+  const response = await apiFetch(`${getBaseUrl()}/v1/preferences`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse<UserPreferences>(response);
+}
+
+export async function testLlmConnection(): Promise<TestConnectionResponse> {
+  const response = await apiFetch(
+    `${getBaseUrl()}/v1/preferences/test-connection`,
+    { method: "POST", timeoutMs: 60_000 },
+  );
+  return parseJsonResponse<TestConnectionResponse>(response);
 }
