@@ -43,6 +43,7 @@ import { useBacklinks } from "../../lib/hooks/useBacklinks";
 import { useGlobalGraph } from "../../lib/hooks/useGlobalGraph";
 import { useSelectionMode } from "../../lib/hooks/useSelectionMode";
 import { useQuickSwitch } from "../../lib/hooks/useQuickSwitch";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 import { QuickCaptureModal, type QuickCaptureResult } from "./QuickCaptureModal";
 import { FileDropZone } from "./FileDropZone";
 import { UserMenu } from "../auth/UserMenu";
@@ -166,14 +167,8 @@ function NewNoteButton({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useDismissable(ref, open, close);
 
   return (
     <div ref={ref} className="new-note-split">
@@ -393,37 +388,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
     setHighlightedNoteId(fallback?.note_id ?? null);
   }, [notes, selectedNoteId]);
 
-  useEffect(() => {
-    if (!contextMenu) {
-      return;
-    }
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (!contextMenuRef.current) {
-        return;
-      }
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (!contextMenuRef.current.contains(target)) {
-        closeContextMenu();
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeContextMenu();
-      }
-    };
-
-    window.addEventListener("mousedown", handleMouseDown);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("mousedown", handleMouseDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [closeContextMenu, contextMenu]);
+  useDismissable(contextMenuRef, contextMenu !== null, closeContextMenu);
 
   const recentNotes = useMemo(() => {
     const index = new Map(notes.map((note) => [note.note_id, note]));

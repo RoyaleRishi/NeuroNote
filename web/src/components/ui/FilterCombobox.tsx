@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 
 interface FilterComboboxProps {
   label: string;
@@ -25,16 +26,8 @@ export function FilterCombobox({
     opt.toLowerCase().includes(value.toLowerCase()),
   );
 
-  useEffect(() => {
-    if (!open) return;
-    function handleOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useDismissable(containerRef, open, close);
 
   return (
     <div ref={containerRef} className="filter-combobox">

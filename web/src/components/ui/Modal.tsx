@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useRef } from "react";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 
 interface ModalProps {
   isOpen: boolean;
@@ -8,23 +9,17 @@ interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children }: ModalProps) {
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [isOpen, onClose]);
+  // The overlay click handler closes on outside-click, so we only need
+  // Escape dismissal here. useDismissable also listens for outside
+  // mousedown, but the dialog spans the full overlay so that's a no-op.
+  const containerRef = useRef<HTMLDivElement>(null);
+  useDismissable(containerRef, isOpen, onClose);
 
   if (!isOpen) return null;
 
   return (
     <div
+      ref={containerRef}
       className="modal-overlay"
       onClick={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useId, KeyboardEvent } from "react";
+import { useCallback, useId, useRef, useState, KeyboardEvent } from "react";
 import { getTagColorClass } from "../../lib/ui/tag-colors";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 
 interface TagPickerProps {
   value: string[];
@@ -17,17 +18,9 @@ export function TagPicker({ value, onChange, suggestions, disabled }: TagPickerP
   const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
 
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [isOpen]);
+  // Close on Escape or outside click.
+  const close = useCallback(() => setIsOpen(false), []);
+  useDismissable(containerRef, isOpen, close);
 
   const filtered = suggestions.filter(
     (s) => s.toLowerCase().includes(inputValue.toLowerCase()) && !value.includes(s),
@@ -52,10 +45,7 @@ export function TagPicker({ value, onChange, suggestions, disabled }: TagPickerP
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Escape") {
-      setIsOpen(false);
-      return;
-    }
+    // Escape is handled globally by useDismissable above.
     if ((e.key === "Enter" || e.key === ",") && inputValue.trim()) {
       e.preventDefault();
       addTag(inputValue);

@@ -11,7 +11,8 @@
  * re-shows on next reload.
  */
 
-import React, { useEffect } from "react";
+import React, { useRef } from "react";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 
 interface EdgeConsentDialogProps {
   isOpen: boolean;
@@ -26,19 +27,17 @@ export function EdgeConsentDialog({
   onDecline,
   onDismiss,
 }: EdgeConsentDialogProps) {
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onDismiss();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onDismiss]);
+  // Outside-click on the scrim already triggers onDismiss via onClick below,
+  // so useDismissable's outside-mousedown is a no-op (ref spans the overlay)
+  // and we rely on it solely for the Escape-key handler.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useDismissable(overlayRef, isOpen, onDismiss);
 
   if (!isOpen) return null;
 
   return (
     <div
+      ref={overlayRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="edge-consent-title"

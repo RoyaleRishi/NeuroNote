@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 
 const SECTIONS = [
   {
@@ -62,27 +63,19 @@ export function HelpWidget() {
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  // Global `?` hotkey to toggle the panel — separate concern from dismissal.
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "?" && !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)) {
         setOpen((prev) => !prev);
       }
-      if (e.key === "Escape" && open) setOpen(false);
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [open]);
+  }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleOutside(e: MouseEvent) {
-      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useDismissable(dialogRef, open, close);
 
   return (
     <>

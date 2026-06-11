@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useId } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 
 interface SubjectPickerProps {
   value: string;
@@ -28,17 +29,12 @@ export function SubjectPicker({ value, onChange, suggestions, disabled }: Subjec
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [isOpen]);
+  // Close dropdown (and exit edit mode) on Escape or outside click.
+  const dismiss = useCallback(() => {
+    setIsOpen(false);
+    setEditing(false);
+  }, []);
+  useDismissable(containerRef, isOpen || editing, dismiss);
 
   const filtered = suggestions.filter(
     (s) => s.toLowerCase().includes(inputValue.toLowerCase()) && s !== inputValue,
@@ -109,10 +105,7 @@ export function SubjectPicker({ value, onChange, suggestions, disabled }: Subjec
           setTimeout(() => setEditing(false), 150);
         }}
         onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            setIsOpen(false);
-            setEditing(false);
-          }
+          // Escape is handled by useDismissable above.
           if (e.key === "Enter" && inputValue.trim()) {
             e.preventDefault();
             commit(inputValue);

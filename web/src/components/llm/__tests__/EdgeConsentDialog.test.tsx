@@ -68,7 +68,7 @@ describe("EdgeConsentDialog", () => {
         onDismiss={onDismiss}
       />,
     );
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "Escape" });
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

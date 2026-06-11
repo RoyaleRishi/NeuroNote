@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDismissable } from "../../lib/hooks/useDismissable";
 
 import { EditorToolbar } from "./EditorToolbar";
 import { ExtractionSummaryBadge } from "./ExtractionSummaryBadge";
@@ -148,16 +149,8 @@ function NoteOptionsMenu({
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [open]);
+  const closeMenu = useCallback(() => setOpen(false), []);
+  useDismissable(menuRef, open, closeMenu);
 
   return (
     <div ref={menuRef} className="note-options-menu">
