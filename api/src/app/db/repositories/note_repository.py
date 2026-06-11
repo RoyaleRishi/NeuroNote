@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
-import re
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -16,7 +15,6 @@ from app.utils.text import extract_wiki_link_titles, normalize_title, normalize_
 
 DEFAULT_SUBJECT_ID = "inbox"
 DEFAULT_SUBJECT_NAME = "Inbox"
-WIKI_LINK_PATTERN = re.compile(r"\[\[([^\[\]]+)\]\]")
 
 
 @dataclass(slots=True)
@@ -96,14 +94,8 @@ class NoteRepository:
             normalized.append(cleaned)
         return normalized
 
-    def _normalize_title(self, note_title: str) -> str:
-        return normalize_title(note_title)
-
-    def _normalize_title_key(self, note_title: str) -> str:
-        return normalize_title_key(note_title)
-
     def _assert_unique_title_for_note(self, *, note_id: str, note_title: str) -> None:
-        normalized_key = self._normalize_title_key(note_title)
+        normalized_key = normalize_title_key(note_title)
         conflict = self._session.execute(
             select(Note.note_id).where(
                 Note.note_id != note_id,
@@ -111,10 +103,7 @@ class NoteRepository:
             ).limit(1),
         ).first()
         if conflict is not None:
-            raise NoteTitleConflictError(self._normalize_title(note_title))
-
-    def _iter_wiki_link_titles(self, content_text: str) -> list[str]:
-        return extract_wiki_link_titles(content_text)
+            raise NoteTitleConflictError(normalize_title(note_title))
 
     def _make_backlink_snippet(self, content_text: str, matched_title: str) -> str:
         token = f"[[{matched_title}]]"
@@ -229,7 +218,7 @@ class NoteRepository:
         updated_at: str,
     ) -> NoteRecord:
         resolved_subject_id = subject_id.strip() or DEFAULT_SUBJECT_ID
-        normalized_title = self._normalize_title(note_title)
+        normalized_title = normalize_title(note_title)
         normalized_tags = self._normalize_tags(tags)
 
         self._assert_unique_title_for_note(note_id=note_id, note_title=normalized_title)
@@ -368,7 +357,7 @@ class NoteRepository:
             return []
 
         _, target_title = target
-        normalized_target_title = self._normalize_title(str(target_title))
+        normalized_target_title = normalize_title(str(target_title))
         normalized_target_key = normalized_target_title.lower()
         if not normalized_target_title:
             return []
@@ -390,7 +379,7 @@ class NoteRepository:
         for source_note_id, source_note_title, source_content_text, source_updated_at in rows:
             # Confirm the LIKE hit is an actual wiki-link (not a false positive substring).
             linked_titles = {
-                title.lower() for title in self._iter_wiki_link_titles(str(source_content_text))
+                title.lower() for title in extract_wiki_link_titles(str(source_content_text))
             }
             if normalized_target_key not in linked_titles:
                 continue

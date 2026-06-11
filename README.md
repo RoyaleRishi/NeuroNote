@@ -211,7 +211,6 @@ Subjects (notebooks) and tags are managed via the note editor's three-dots menu.
 | `docs/plan.md` | Executable implementation plan and epic history |
 | `docs/decisions.md` | Architecture decisions and operational notes |
 | `docs/initial_scoping_doc.md` | Original requirements baseline |
-| `docs/release_checklist.md` | Mandatory end-of-epic release gate sequence |
 | `docs/retrospective_learnings.md` | Implementation insights |
 | `docs/LLM.md` | LLM integration notes |
 | `shared/contracts/README.md` | Versioned contract documentation |

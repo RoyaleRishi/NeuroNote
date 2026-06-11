@@ -45,18 +45,6 @@ class LocalGraphService:
         self._session = session
         self._graph_name = graph_name
 
-    @staticmethod
-    def _normalize_title(value: str) -> str:
-        return normalize_title_key(value)
-
-    @staticmethod
-    def _normalize_include_types(values: list[str]) -> list[str]:
-        return normalize_include_types(values)
-
-    @staticmethod
-    def _extract_wiki_links(content_text: str) -> list[str]:
-        return extract_wiki_link_titles(content_text)
-
     def _fetch_reachable_notes(self, seed_id: str, max_hops: int) -> list[_NoteSnapshot]:
         """Load notes reachable from seed_id within max_hops via wiki-links.
 
@@ -88,7 +76,7 @@ class LocalGraphService:
             outgoing_titles: set[str] = set()
             for fid in frontier_ids:
                 _, content, _ = visited[fid]
-                for t in self._extract_wiki_links(content):
+                for t in extract_wiki_link_titles(content):
                     outgoing_titles.add(t)
 
             new_ids: set[str] = set()
@@ -103,7 +91,7 @@ class LocalGraphService:
                     visited[nid] = (str(r[1]), str(r[2]), str(r[3]) if r[3] else "inbox")
                     new_ids.add(nid)
 
-            frontier_titles = [self._normalize_title(visited[fid][0]) for fid in frontier_ids]
+            frontier_titles = [normalize_title_key(visited[fid][0]) for fid in frontier_ids]
             if frontier_titles:
                 like_clauses = [
                     Note.content_text.ilike(f"%[[{t}]]%") for t in frontier_titles
@@ -131,7 +119,7 @@ class LocalGraphService:
         ]
 
     def get_local_graph(self, query: LocalGraphQuery) -> LocalGraphResponse:
-        include_types = self._normalize_include_types(query.include_types)
+        include_types = normalize_include_types(query.include_types)
 
         note_version = get_note_version(self._session, query.note_id)
         cache_key = (
@@ -150,14 +138,14 @@ class LocalGraphService:
             raise LocalGraphNoteNotFoundError(f"Note {query.note_id} was not found")
 
         title_index: dict[str, str] = {
-            self._normalize_title(note.note_title): note.note_id for note in notes
+            normalize_title_key(note.note_title): note.note_id for note in notes
         }
 
         # LINKS_TO edges from wiki-link parsing (SQL — always available)
         edge_map: dict[tuple[str, str, str], LocalGraphEdge] = {}
         if "relation" in include_type_set:
             for note in notes:
-                for linked_title in self._extract_wiki_links(note.content_text):
+                for linked_title in extract_wiki_link_titles(note.content_text):
                     target_id = title_index.get(linked_title)
                     if target_id is None or target_id == note.note_id:
                         continue

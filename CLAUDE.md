@@ -17,7 +17,7 @@
 13. For frontend behavior changes, write/adjust tests first for all user-visible scenarios, then implement.
 14. Every destructive action must have both mouse and keyboard access parity.
 15. Use a consistent visual system (tokens/variables, spacing scale, typography scale); avoid ad-hoc styling..
-16. Epic completion requires passing every gate in `docs/release_checklist.md` (no skipped gates).
+16. Before declaring an epic complete, run `make compose-test` and the frontend `vitest` suite green, and walk the user-visible flows touched by the epic in a browser.
 
 ## What this project is
 
@@ -76,9 +76,9 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 - `POST /v1/preferences/test-connection` validates a cloud-mode API key by making a test completion call.
 
 #### LLM dual-mode architecture
-- **Edge mode** (default): Gemma 4 E4B runs in-browser via WebGPU using `@mlc-ai/web-llm`. Frontend extracts concepts/relations locally, posts results to `POST /v1/extraction-results` and `POST /v1/meta-classification-results`. Server is purely a data layer for these users — no LLM cost.
+- **Edge mode** (default): Gemma 4 E4B runs in-browser via WebGPU using `@mlc-ai/web-llm`. The deterministic concept-extraction pipeline runs server-side regardless of mode; edge mode skips the cloud LLM for per-note summaries and concept insights. Server is purely a data layer for these users — no LLM cost.
 - **Cloud mode**: User's `llm_api_key` is read from `user_preferences` and passed to `NoteProcessingService` / `ConceptInsightService` (via `_load_user_llm_config` helpers). Existing `POST /v1/process-note` flow is reused. Falls back to env-var key if user hasn't configured one.
-- Frontend orchestration in `web/src/lib/orchestration/edge-processing.ts` (edge) and existing `process-polling.ts` (cloud). `NoteEditor.startProcessing` branches on `llmMode` prop.
+- Frontend orchestration lives in `web/src/lib/orchestration/{note-lifecycle,process-polling}.ts`. Edge-mode LLM inference is driven from the editor via the `useEdgeLLM` hook and `web/src/lib/edge-llm/model-manager.ts`; `NoteEditor.startProcessing` branches on `llmMode` prop.
 - Edge LLM lifecycle managed by `useEdgeLLM(enabled, retryToken)` hook — handles WebGPU detection, model download progress, ready state.
 - UI components: `ModelStatusIndicator` (header badge), `ModelDownloadProgress` (download banner), `WebGPUCheck` (modal when WebGPU unsupported).
 

@@ -43,18 +43,6 @@ class GlobalGraphService:
         self._session = session
         self._graph_name = graph_name
 
-    @staticmethod
-    def _normalize_title(value: str) -> str:
-        return normalize_title_key(value)
-
-    @staticmethod
-    def _normalize_include_types(values: list[str]) -> list[str]:
-        return normalize_include_types(values)
-
-    @staticmethod
-    def _extract_wiki_links(content_text: str) -> list[str]:
-        return extract_wiki_link_titles(content_text)
-
     def _list_notes(
         self,
         *,
@@ -90,7 +78,7 @@ class GlobalGraphService:
         ]
 
     def get_global_graph(self, query: GlobalGraphQuery) -> GlobalGraphResponse:
-        include_types = self._normalize_include_types(query.include_types)
+        include_types = normalize_include_types(query.include_types)
 
         notes_version = get_notes_version(self._session)
         cache_key = (
@@ -111,7 +99,7 @@ class GlobalGraphService:
         )
         total_notes = len(notes)
         title_index: dict[str, str] = {
-            self._normalize_title(n.note_title): n.note_id for n in notes
+            normalize_title_key(n.note_title): n.note_id for n in notes
         }
 
         node_map: dict[str, LocalGraphNode] = {}
@@ -133,7 +121,7 @@ class GlobalGraphService:
                     },
                 )
             if "relation" in include_type_set:
-                for linked_title in self._extract_wiki_links(note.content_text):
+                for linked_title in extract_wiki_link_titles(note.content_text):
                     target_id = title_index.get(linked_title)
                     if target_id is None or target_id == note.note_id:
                         continue
