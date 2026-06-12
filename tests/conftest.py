@@ -22,6 +22,21 @@ if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
 
 
+@pytest.fixture(autouse=True)
+def _reset_llm_client_cache() -> Iterator[None]:
+    """Drop the AsyncLLMClient module-level cache between tests.
+
+    Without this, the openai.AsyncOpenAI captured by the first complete()
+    call leaks into the next test, defeating any per-test monkeypatch of
+    ``openai.AsyncOpenAI``.
+    """
+    from app.nlp.llm_client import reset_client_cache
+
+    reset_client_cache()
+    yield
+    reset_client_cache()
+
+
 @pytest.fixture()
 def configured_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     external_db_url = os.getenv("TEST_DATABASE_URL")
