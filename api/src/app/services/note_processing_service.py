@@ -109,7 +109,7 @@ class NoteProcessingService:
         return session.bind.dialect.name == "postgresql"
 
     def _persist_graph_and_vector(self, *, snapshot: ProcessedNoteSnapshot) -> ExtractionSummary:
-        from app.nlp.embeddings import embed_for_normalisation
+        from app.nlp.embeddings import embed_batch_for_normalisation
         from app.nlp.concept_registry import register_concepts_with_embeddings
 
         with self._open_session() as session:
@@ -123,7 +123,7 @@ class NoteProcessingService:
             with session.begin():
                 result = self._pipeline.extract(
                     session=session,
-                    embedder=embed_for_normalisation,
+                    embedder=embed_batch_for_normalisation,
                     note_id=snapshot.note_id,
                     title=snapshot.note_title,
                     content_text=snapshot.content_text,
@@ -135,9 +135,13 @@ class NoteProcessingService:
 
                 # Persist newly-canonical concepts (with embeddings) so future
                 # notes find them via NN — closing the normalisation loop.
+                # Batched encode mirrors the normalisation hot path: one
+                # transformer forward pass for all entities instead of N.
+                entity_texts = [e.text for e in result.entities]
+                entity_embeddings = embed_batch_for_normalisation(entity_texts)
                 new_pairs: list[tuple[str, str, list[float]]] = [
-                    (e.text, e.entity_id, embed_for_normalisation(e.text))
-                    for e in result.entities
+                    (e.text, e.entity_id, emb)
+                    for e, emb in zip(result.entities, entity_embeddings)
                 ]
                 register_concepts_with_embeddings(session, new_pairs)
 

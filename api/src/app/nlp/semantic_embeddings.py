@@ -57,4 +57,32 @@ def build_semantic_embedding(text: str) -> list[float] | None:
         return None
 
 
-__all__ = ["SemanticEmbedder", "build_semantic_embedding"]
+def build_semantic_embeddings(texts: list[str]) -> list[list[float]] | None:
+    """Encode a batch of texts in a single sentence-transformers call.
+
+    Uses ``model.encode(list, normalize_embeddings=True)`` which is dramatically
+    faster than N single calls (one transformer forward pass per batch).
+    Returns a list of 384-dimensional float lists, or ``None`` if the model
+    could not be loaded — callers should then fall back to per-text encoding
+    (which may itself fall back to the deterministic hash embedder).
+    """
+    if not texts:
+        return []
+
+    model = SemanticEmbedder.get()
+    if model is None:
+        return None
+
+    try:
+        vectors = model.encode(texts, normalize_embeddings=True)  # type: ignore[attr-defined]
+        return [v.tolist() for v in vectors]
+    except Exception as exc:
+        _LOGGER.warning("Semantic batch embedding failed: %s", exc)
+        return None
+
+
+__all__ = [
+    "SemanticEmbedder",
+    "build_semantic_embedding",
+    "build_semantic_embeddings",
+]

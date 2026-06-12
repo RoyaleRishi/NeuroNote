@@ -4,7 +4,10 @@ import hashlib
 import math
 import re
 
-from app.nlp.semantic_embeddings import build_semantic_embedding
+from app.nlp.semantic_embeddings import (
+    build_semantic_embedding,
+    build_semantic_embeddings,
+)
 
 _TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
 
@@ -39,3 +42,20 @@ def embed_for_normalisation(text: str) -> list[float]:
     if vec is None:
         return build_embedding(text)
     return vec
+
+
+def embed_batch_for_normalisation(texts: list[str]) -> list[list[float]]:
+    """Batched variant of :func:`embed_for_normalisation`.
+
+    Runs every input text through the sentence-transformer model in a single
+    encode call (one forward pass per batch). If the model is unavailable —
+    or the batch encode raises — falls back to the deterministic hash
+    embedder per text so the output shape and length are preserved.
+    """
+    if not texts:
+        return []
+
+    vectors = build_semantic_embeddings(texts)
+    if vectors is None:
+        return [build_embedding(t) for t in texts]
+    return vectors

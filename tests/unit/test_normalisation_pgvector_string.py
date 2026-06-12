@@ -31,23 +31,34 @@ class _FakeResult:
         return self._rows
 
 
+class _FakeBind:
+    url = "sqlite:///:memory:"
+
+
 class _FakeSession:
     def __init__(self, rows: list[_FakeRow]) -> None:
         self._rows = rows
 
-    def execute(self, _stmt: object) -> _FakeResult:
+    def execute(self, _stmt: object, _params: dict | None = None) -> _FakeResult:
         return _FakeResult(self._rows)
+
+    def get_bind(self) -> _FakeBind:
+        return _FakeBind()
 
 
 def test_normalise_concepts_handles_pgvector_string_embeddings() -> None:
-    """Normalisation must not crash when pgvector returns embedding as a string."""
+    """Normalisation must not crash when pgvector returns embedding as a string.
+
+    Exercises the SQLite/Python fallback path which still needs to parse the
+    pgvector literal string format ``"[a,b,c]"`` returned from the registry.
+    """
     rows = [_FakeRow("machine learning", "[1.0,0.0,0.0]")]
     session = _FakeSession(rows)
 
     result = normalise_concepts(
         session,  # type: ignore[arg-type]
         [ConceptSpan(text="ML", confidence=0.9, source="transformer")],
-        embed=lambda _t: [1.0, 0.0, 0.0],
+        embed=lambda texts: [[1.0, 0.0, 0.0] for _ in texts],
         cosine_threshold=0.5,
     )
 
