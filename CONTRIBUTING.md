@@ -66,4 +66,4 @@ All new CSS must use tokens from `web/src/app/globals.css`, not hardcoded values
 - All CI checks must pass before merge (ruff, mypy, pytest, tsc, vitest)
 - New API endpoints need a matching integration test in `tests/integration/`
 - New frontend user-visible behavior needs a Vitest test in `web/src/**/*.test.tsx`
-- Follow existing patterns — see `CLAUDE.md` for architectural decisions and `docs/decisions.md` for historical rationale
+- Follow existing patterns — see `CLAUDE.md` for architectural decisions and `docs/superpowers/specs/` + `docs/superpowers/plans/` for historical design rationale
