@@ -20,55 +20,22 @@ export function EdgeCrashBanner({ isOpen, onAcknowledge }: EdgeCrashBannerProps)
   if (!isOpen) return null;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-        background: "color-mix(in srgb, var(--danger) 14%, transparent)",
-        borderBottom: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)",
-        padding: "10px 20px",
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        fontSize: "var(--text-sm)",
-      }}
-    >
-      <span style={{ flex: 1, color: "var(--text-strong)" }}>
+    <div role="status" aria-live="polite" className="edge-crash-banner">
+      <span className="edge-crash-banner-message">
         <strong>⚠ Edge AI didn't finish loading last time.</strong>{" "}
         This usually means the device ran out of memory.
       </span>
       <button
         type="button"
         onClick={() => onAcknowledge("switchToCloud")}
-        style={{
-          padding: "0.3rem 0.75rem",
-          fontSize: "var(--text-xs)",
-          fontWeight: 600,
-          color: "var(--text-on-accent)",
-          background: "var(--accent)",
-          border: "1px solid var(--accent)",
-          borderRadius: "4px",
-          cursor: "pointer",
-        }}
+        className="btn btn-sm btn-primary"
       >
         Switch to Cloud AI
       </button>
       <button
         type="button"
         onClick={() => onAcknowledge("retry")}
-        style={{
-          padding: "0.3rem 0.75rem",
-          fontSize: "var(--text-xs)",
-          fontWeight: 600,
-          color: "var(--text-strong)",
-          background: "transparent",
-          border: "1px solid var(--panel-border)",
-          borderRadius: "4px",
-          cursor: "pointer",
-        }}
+        className="btn btn-sm btn-secondary"
       >
         Try Edge AI again
       </button>
@@ -76,14 +43,7 @@ export function EdgeCrashBanner({ isOpen, onAcknowledge }: EdgeCrashBannerProps)
         type="button"
         aria-label="Dismiss"
         onClick={() => onAcknowledge("retry")}
-        style={{
-          padding: "0.2rem 0.5rem",
-          fontSize: "var(--text-base)",
-          color: "var(--text-muted)",
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-        }}
+        className="edge-crash-banner-dismiss"
       >
         ×
       </button>

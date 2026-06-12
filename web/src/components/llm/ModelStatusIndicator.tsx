@@ -26,11 +26,17 @@ interface ModelStatusIndicatorProps {
   error?: string | null;
 }
 
+type BadgeVariant =
+  | "cloud"
+  | "downloading"
+  | "ready"
+  | "unsupported"
+  | "error"
+  | "idle";
+
 interface BadgeStyle {
   label: string;
-  bg: string;
-  fg: string;
-  border: string;
+  variant: BadgeVariant;
 }
 
 function styleFor(
@@ -39,54 +45,24 @@ function styleFor(
   progress: ModelProgress | null,
 ): BadgeStyle {
   if (mode === "cloud") {
-    return {
-      label: "Cloud AI",
-      bg: "color-mix(in srgb, var(--info) 14%, transparent)",
-      fg: "var(--info-text)",
-      border: "color-mix(in srgb, var(--info) 35%, transparent)",
-    };
+    return { label: "Cloud AI", variant: "cloud" };
   }
 
   // Edge mode (or unknown — default to edge styling so users see progress).
   switch (status) {
     case "downloading": {
       const pct = Math.round((progress?.progress ?? 0) * 100);
-      return {
-        label: `Edge AI: Loading ${pct}%`,
-        bg: "color-mix(in srgb, var(--accent) 12%, transparent)",
-        fg: "var(--accent-strong)",
-        border: "color-mix(in srgb, var(--accent) 35%, transparent)",
-      };
+      return { label: `Edge AI: Loading ${pct}%`, variant: "downloading" };
     }
     case "ready":
-      return {
-        label: "Edge AI: Ready",
-        bg: "var(--accent-soft)",
-        fg: "var(--accent-strong)",
-        border: "color-mix(in srgb, var(--accent) 45%, transparent)",
-      };
+      return { label: "Edge AI: Ready", variant: "ready" };
     case "unsupported":
-      return {
-        label: "Edge AI: WebGPU Required",
-        bg: "color-mix(in srgb, var(--warning) 14%, transparent)",
-        fg: "var(--warning-text)",
-        border: "color-mix(in srgb, var(--warning) 40%, transparent)",
-      };
+      return { label: "Edge AI: WebGPU Required", variant: "unsupported" };
     case "error":
-      return {
-        label: "Edge AI: Error",
-        bg: "color-mix(in srgb, var(--danger) 14%, transparent)",
-        fg: "var(--danger)",
-        border: "color-mix(in srgb, var(--danger) 40%, transparent)",
-      };
+      return { label: "Edge AI: Error", variant: "error" };
     case "idle":
     default:
-      return {
-        label: "Edge AI: Idle",
-        bg: "transparent",
-        fg: "var(--text-muted)",
-        border: "var(--panel-border)",
-      };
+      return { label: "Edge AI: Idle", variant: "idle" };
   }
 }
 
@@ -107,29 +83,14 @@ export function ModelStatusIndicator({
       role="status"
       aria-live="polite"
       title={tooltip}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "6px",
-        padding: "0.2rem 0.55rem",
-        borderRadius: "999px",
-        border: `1px solid ${style.border}`,
-        background: style.bg,
-        color: style.fg,
-        fontSize: "var(--text-xs)",
-        fontWeight: 500,
-        whiteSpace: "nowrap",
-      }}
+      className={`model-status-indicator is-${style.variant}`}
     >
       <span
         aria-hidden="true"
-        style={{
-          width: "8px",
-          height: "8px",
-          borderRadius: "50%",
-          background: "currentColor",
-          opacity: status === "downloading" ? 0.7 : 0.9,
-        }}
+        className={
+          "model-status-indicator-dot" +
+          (status === "downloading" ? " is-downloading" : "")
+        }
       />
       {style.label}
     </span>

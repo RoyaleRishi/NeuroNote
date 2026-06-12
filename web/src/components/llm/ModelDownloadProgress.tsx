@@ -43,74 +43,26 @@ export function ModelDownloadProgress({
   };
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-        background: "var(--accent-soft)",
-        borderBottom: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
-        padding: "10px 20px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "6px",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "12px",
-          fontSize: "var(--text-sm)",
-          color: "var(--accent-ink)",
-        }}
-      >
+    <div role="status" aria-live="polite" className="model-download-progress">
+      <div className="model-download-progress-header">
         <strong>Downloading AI model... {pct}%</strong>
-        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+        <span className="model-download-progress-hint">
           One-time download (~2GB). The model will be cached for future visits.
         </span>
       </div>
-      <div
-        aria-hidden="true"
-        style={{
-          height: "6px",
-          width: "100%",
-          background:
-            "color-mix(in srgb, var(--accent) 18%, transparent)",
-          borderRadius: "999px",
-          overflow: "hidden",
-        }}
-      >
+      <div aria-hidden="true" className="model-download-progress-bar">
         <div
-          style={{
-            height: "100%",
-            width: `${pct}%`,
-            background: "var(--accent)",
-            transition: "width 200ms ease-out",
-          }}
+          className="model-download-progress-bar-fill"
+          style={{ width: `${pct}%` }}
         />
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-          {detail}
-        </span>
+      <div className="model-download-progress-footer">
+        <span className="model-download-progress-detail">{detail}</span>
         <button
           type="button"
           onClick={() => void handleReset()}
           disabled={resetting}
-          style={{
-            fontSize: "var(--text-xs)",
-            color: "var(--text-muted)",
-            background: "transparent",
-            border: "1px solid var(--panel-border)",
-            borderRadius: "4px",
-            padding: "0.2rem 0.5rem",
-            cursor: resetting ? "default" : "pointer",
-            opacity: resetting ? 0.5 : 1,
-          }}
+          className="model-download-progress-reset-btn"
           title="Clear partial download and start over"
         >
           {resetting ? "Clearing..." : "Reset cache"}

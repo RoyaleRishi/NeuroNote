@@ -42,130 +42,53 @@ export function EdgeConsentDialog({
       aria-modal="true"
       aria-labelledby="edge-consent-title"
       onClick={onDismiss}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: "var(--z-modal)",
-        background: "var(--overlay-scrim)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "1rem",
-      }}
+      className="edge-consent-overlay"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "var(--panel-bg)",
-          border: "1px solid var(--panel-border)",
-          borderRadius: "12px",
-          padding: "2rem",
-          maxWidth: "480px",
-          width: "100%",
-          boxShadow: "var(--shadow-panel)",
-        }}
+        className="edge-consent-panel"
       >
-        <h2
-          id="edge-consent-title"
-          style={{
-            margin: "0 0 0.5rem",
-            fontSize: "1.25rem",
-            fontWeight: 700,
-            color: "var(--text-strong)",
-          }}
-        >
+        <h2 id="edge-consent-title" className="edge-consent-title">
           Choose how AI runs
         </h2>
-        <p
-          style={{
-            margin: "0 0 1.25rem",
-            fontSize: "var(--text-sm)",
-            color: "var(--text-muted)",
-          }}
-        >
+        <p className="edge-consent-subtitle">
           You can change this later in settings.
         </p>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1.5rem" }}>
-          <div
-            style={{
-              padding: "0.75rem 1rem",
-              border: "1px solid var(--panel-border)",
-              borderRadius: "8px",
-              background: "var(--workspace-surface)",
-            }}
-          >
-            <strong style={{ color: "var(--text-strong)", fontSize: "var(--text-base)" }}>
+        <div className="edge-consent-options">
+          <div className="edge-consent-option">
+            <strong className="edge-consent-option-title">
               🖥️ Edge AI (in your browser)
             </strong>
-            <p
-              style={{
-                margin: "0.25rem 0 0",
-                fontSize: "var(--text-sm)",
-                color: "var(--text-muted)",
-                lineHeight: 1.5,
-              }}
-            >
+            <p className="edge-consent-option-desc">
               Your notes never leave this device. Uses ~2GB of memory while you
               work. Processing takes ~30s for long notes.
             </p>
           </div>
 
-          <div
-            style={{
-              padding: "0.75rem 1rem",
-              border: "1px solid var(--panel-border)",
-              borderRadius: "8px",
-              background: "var(--workspace-surface)",
-            }}
-          >
-            <strong style={{ color: "var(--text-strong)", fontSize: "var(--text-base)" }}>
+          <div className="edge-consent-option">
+            <strong className="edge-consent-option-title">
               ☁️ Cloud AI (your API key)
             </strong>
-            <p
-              style={{
-                margin: "0.25rem 0 0",
-                fontSize: "var(--text-sm)",
-                color: "var(--text-muted)",
-                lineHeight: 1.5,
-              }}
-            >
+            <p className="edge-consent-option-desc">
               Faster. Works on any device. Requires an API key from
               OpenAI/Anthropic.
             </p>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+        <div className="edge-consent-actions">
           <button
             type="button"
             onClick={onDecline}
-            style={{
-              padding: "0.5rem 1rem",
-              fontSize: "var(--text-sm)",
-              fontWeight: 600,
-              color: "var(--text-strong)",
-              background: "transparent",
-              border: "1px solid var(--panel-border)",
-              borderRadius: "6px",
-              cursor: "pointer",
-            }}
+            className="btn btn-sm btn-secondary"
           >
             Use Cloud AI
           </button>
           <button
             type="button"
             onClick={onAccept}
-            style={{
-              padding: "0.5rem 1rem",
-              fontSize: "var(--text-sm)",
-              fontWeight: 600,
-              color: "var(--text-on-accent)",
-              background: "var(--accent)",
-              border: "1px solid var(--accent)",
-              borderRadius: "6px",
-              cursor: "pointer",
-            }}
+            className="btn btn-sm btn-primary"
           >
             Use Edge AI
           </button>
