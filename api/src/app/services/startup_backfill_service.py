@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 import logging
+import os
+import threading
 from typing import TYPE_CHECKING
 
 from app.core.backfill_store import (
@@ -27,15 +29,51 @@ class BackfillRunOptions:
     enabled: bool = True
 
 
+@dataclass
+class _Totals:
+    """Thread-safe counters shared between tenant workers.
+
+    All mutations and ``set_backfill_status`` publishes happen under ``lock``
+    so concurrent workers can't clobber each other's running totals.
+    """
+
+    total: int
+    processed: int = 0
+    failed: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def record(self, *, failed: bool) -> None:
+        with self.lock:
+            self.processed += 1
+            if failed:
+                self.failed += 1
+            set_backfill_status(
+                BackfillStatusSnapshot(
+                    total_notes=self.total,
+                    processed_notes=self.processed,
+                    failed_notes=self.failed,
+                    in_progress=True,
+                )
+            )
+
+
+def _default_max_workers() -> int:
+    """Cap the worker pool at 4 — the semantic embedder is a single shared
+    instance and CPU/GIL-bound; more threads only deepen contention."""
+    return min(os.cpu_count() or 1, 4)
+
+
 class StartupBackfillService:
     def __init__(
         self,
         *,
-        max_workers: int = 1,
+        max_workers: int | None = None,
         options: BackfillRunOptions | None = None,
     ) -> None:
-        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        workers = max_workers if max_workers is not None else _default_max_workers()
+        self._executor = ThreadPoolExecutor(max_workers=workers)
         self._options = options or BackfillRunOptions()
+        self._max_workers = workers
 
     def run_async(self, runner: Callable[[], None]) -> None:
         self._executor.submit(runner)
@@ -103,6 +141,44 @@ class StartupBackfillService:
             _LOGGER.debug("could not list tenant schemas from public.users", exc_info=True)
             return []
 
+    def _process_tenant(
+        self,
+        schema_name: str | None,
+        note_ids: list[str],
+        graph_name: str,
+        totals: _Totals,
+    ) -> None:
+        """Process every note for a single tenant on the calling worker thread.
+
+        Notes within a tenant share AGE graph and concept-registry rows, so we
+        keep this loop sequential to avoid MERGE deadlocks and registry races.
+        One ``NoteProcessingService`` is reused across all notes so the NLP
+        pipeline only initialises once per tenant.
+
+        ``set_tenant_schema`` writes to a ContextVar — in a sync
+        ``ThreadPoolExecutor`` each worker thread carries its own context, so
+        the binding is isolated to this tenant's thread.
+        """
+        set_tenant_schema(schema_name)
+        try:
+            service = NoteProcessingService(schema_name=schema_name, graph_name=graph_name)
+            for note_id in note_ids:
+                failed = False
+                try:
+                    service.process_note(
+                        ProcessNoteRequest(
+                            note_id=note_id,
+                            content_text="backfill",
+                            content_hash="backfill",
+                            updated_at="backfill",
+                        )
+                    )
+                except (NoteNotFoundError, Exception):
+                    failed = True
+                totals.record(failed=failed)
+        finally:
+            set_tenant_schema(None)
+
     def run_note_reprocessing_backfill(self, *, force: bool = False) -> None:
         if not self._options.enabled:
             set_backfill_status(
@@ -120,8 +196,11 @@ class StartupBackfillService:
             # Single-tenant or test environment — operate on default schema.
             tenant_schemas = [None]  # type: ignore[list-item]
 
-        # Build (note_id, schema_name, graph_name) tuples across all tenants.
-        work_items: list[tuple[str, str | None, str]] = []
+        # Per-tenant work map: {schema_name: (graph_name, [note_ids])}.
+        # Building this on the orchestrator thread (serially across tenants)
+        # avoids interleaving the per-tenant ContextVar bindings during
+        # discovery — workers re-set their own schema before processing.
+        tenant_work: dict[str | None, tuple[str, list[str]]] = {}
         session_factory = get_session_factory()
 
         for schema_name in tenant_schemas:
@@ -150,51 +229,54 @@ class StartupBackfillService:
                     else:
                         all_ids = NoteRepository(session).list_note_ids()
                         note_ids = self._filter_stale_notes(session, all_ids, graph_name=graph_name)
-                work_items.extend((nid, schema_name, graph_name) for nid in note_ids)
+                if note_ids:
+                    tenant_work[schema_name] = (graph_name, note_ids)
             finally:
                 set_tenant_schema(None)
 
-        total = len(work_items)
-        processed = 0
-        failed = 0
+        total = sum(len(ids) for _, ids in tenant_work.values())
+        totals = _Totals(total=total)
         set_backfill_status(
             BackfillStatusSnapshot(
                 total_notes=total,
-                processed_notes=processed,
-                failed_notes=failed,
+                processed_notes=0,
+                failed_notes=0,
                 in_progress=True,
             )
         )
 
-        for note_id, work_schema, graph_name in work_items:
-            service = NoteProcessingService(schema_name=work_schema, graph_name=graph_name)
-            try:
-                service.process_note(
-                    ProcessNoteRequest(
-                        note_id=note_id,
-                        content_text="backfill",
-                        content_hash="backfill",
-                        updated_at="backfill",
+        if tenant_work:
+            # Parallelise ACROSS tenants (disjoint schemas + AGE graphs are
+            # safe to write concurrently) but SERIALISE notes within a tenant.
+            # A dedicated pool sized to the work bounds thread count
+            # independently of the orchestrator's ``_executor``.
+            pool_size = min(self._max_workers, len(tenant_work))
+            with ThreadPoolExecutor(max_workers=pool_size) as pool:
+                futures = [
+                    pool.submit(
+                        self._process_tenant,
+                        schema_name,
+                        note_ids,
+                        graph_name,
+                        totals,
                     )
-                )
-            except (NoteNotFoundError, Exception):
-                failed += 1
-            finally:
-                processed += 1
-                set_backfill_status(
-                    BackfillStatusSnapshot(
-                        total_notes=total,
-                        processed_notes=processed,
-                        failed_notes=failed,
-                        in_progress=True,
-                    )
-                )
+                    for schema_name, (graph_name, note_ids) in tenant_work.items()
+                ]
+                for future in as_completed(futures):
+                    # Surface unexpected errors but don't let one tenant's
+                    # failure abort the others — per-note errors are already
+                    # swallowed inside ``_process_tenant``.
+                    try:
+                        future.result()
+                    except Exception:
+                        _LOGGER.exception("tenant backfill task crashed")
 
-        set_backfill_status(
-            BackfillStatusSnapshot(
-                total_notes=total,
-                processed_notes=processed,
-                failed_notes=failed,
-                in_progress=False,
+        with totals.lock:
+            set_backfill_status(
+                BackfillStatusSnapshot(
+                    total_notes=totals.total,
+                    processed_notes=totals.processed,
+                    failed_notes=totals.failed,
+                    in_progress=False,
+                )
             )
-        )

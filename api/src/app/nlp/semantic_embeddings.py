@@ -11,9 +11,15 @@ Falls back gracefully if sentence-transformers is not installed.
 from __future__ import annotations
 
 import logging
+import threading
 
 _LOGGER = logging.getLogger(__name__)
 _MODEL_NAME = "all-MiniLM-L6-v2"
+
+# Guards lazy model initialisation against concurrent loaders. Without this,
+# parallel backfill workers can each trigger SentenceTransformer construction
+# (which downloads weights and allocates GPU/CPU buffers) at the same time.
+_INIT_LOCK = threading.Lock()
 
 
 class SemanticEmbedder:
@@ -23,20 +29,27 @@ class SemanticEmbedder:
 
     @classmethod
     def get(cls) -> object | None:
+        # Double-checked locking: fast path avoids lock acquisition once the
+        # model is loaded. Slow path serialises the first-time load across
+        # threads so only one SentenceTransformer instance ever exists.
         if cls._instance is not None:
             return cls._instance
 
-        try:
-            from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
+        with _INIT_LOCK:
+            if cls._instance is not None:
+                return cls._instance
 
-            cls._instance = SentenceTransformer(_MODEL_NAME)
-            _LOGGER.info("Loaded semantic embedding model: %s", _MODEL_NAME)
-        except ImportError:
-            _LOGGER.debug("sentence-transformers not installed; semantic embeddings unavailable")
-        except Exception as exc:
-            _LOGGER.warning("Failed to load embedding model %s: %s", _MODEL_NAME, exc)
+            try:
+                from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
 
-        return cls._instance
+                cls._instance = SentenceTransformer(_MODEL_NAME)
+                _LOGGER.info("Loaded semantic embedding model: %s", _MODEL_NAME)
+            except ImportError:
+                _LOGGER.debug("sentence-transformers not installed; semantic embeddings unavailable")
+            except Exception as exc:
+                _LOGGER.warning("Failed to load embedding model %s: %s", _MODEL_NAME, exc)
+
+            return cls._instance
 
 
 def build_semantic_embedding(text: str) -> list[float] | None:
