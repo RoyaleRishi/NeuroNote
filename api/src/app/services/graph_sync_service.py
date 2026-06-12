@@ -144,38 +144,49 @@ class GraphSyncService:
             graph_name=self._graph_name,
         )
 
+        # Batch Note→Block CONTAINS edges (one per dirty block).
+        contains_edges: list[dict[str, object]] = []
+        # Batch Block→Block HAS_CHILD edges (one per dirty block with parent).
+        has_child_edges: list[dict[str, object]] = []
         for block in dirty_blocks:
             block_node_id = block_node_ids_by_uid[block.block_uid]
-            self._repository.upsert_typed_edge(
-                source_label="Note",
-                source_id=payload.note_id,
-                target_label="Block",
-                target_id=block_node_id,
-                relation_type="CONTAINS",
-                properties={
+            contains_edges.append({
+                "source_id": payload.note_id,
+                "target_id": block_node_id,
+                "properties": {
                     "source_note_id": payload.note_id,
                     "confidence": 1.0,
                     "created_at": now_iso,
                     "updated_at": now_iso,
                 },
-                graph_name=self._graph_name,
-            )
+            })
             if block.parent_block_uid and block.parent_block_uid in block_node_ids_by_uid:
                 parent_node_id = block_node_ids_by_uid[block.parent_block_uid]
-                self._repository.upsert_typed_edge(
-                    source_label="Block",
-                    source_id=parent_node_id,
-                    target_label="Block",
-                    target_id=block_node_id,
-                    relation_type="HAS_CHILD",
-                    properties={
+                has_child_edges.append({
+                    "source_id": parent_node_id,
+                    "target_id": block_node_id,
+                    "properties": {
                         "source_note_id": payload.note_id,
                         "confidence": 1.0,
                         "created_at": now_iso,
                         "updated_at": now_iso,
                     },
-                    graph_name=self._graph_name,
-                )
+                })
+
+        self._repository.upsert_typed_edges_batch(
+            source_label="Note",
+            target_label="Block",
+            relation_type="CONTAINS",
+            edges=contains_edges,
+            graph_name=self._graph_name,
+        )
+        self._repository.upsert_typed_edges_batch(
+            source_label="Block",
+            target_label="Block",
+            relation_type="HAS_CHILD",
+            edges=has_child_edges,
+            graph_name=self._graph_name,
+        )
 
     def _upsert_entity_nodes_and_note_edges(
         self,
@@ -219,21 +230,26 @@ class GraphSyncService:
             graph_name=self._graph_name,
         )
 
-        for canonical_id, best_conf in note_entity_max_conf.items():
-            self._repository.upsert_typed_edge(
-                source_label="Note",
-                source_id=payload.note_id,
-                target_label="Entity",
-                target_id=canonical_id,
-                relation_type="MENTIONS",
-                properties={
+        mention_edges: list[dict[str, object]] = [
+            {
+                "source_id": payload.note_id,
+                "target_id": canonical_id,
+                "properties": {
                     "source_note_id": payload.note_id,
                     "confidence": best_conf,
                     "created_at": now_iso,
                     "updated_at": now_iso,
                 },
-                graph_name=self._graph_name,
-            )
+            }
+            for canonical_id, best_conf in note_entity_max_conf.items()
+        ]
+        self._repository.upsert_typed_edges_batch(
+            source_label="Note",
+            target_label="Entity",
+            relation_type="MENTIONS",
+            edges=mention_edges,
+            graph_name=self._graph_name,
+        )
 
     def _upsert_block_refs(
         self,
@@ -269,6 +285,7 @@ class GraphSyncService:
         }
 
         emitted_pairs: set[tuple[str, str]] = set()
+        refers_to_edges: list[dict[str, object]] = []
         for source_block in dirty_blocks:
             source_node_id = block_node_ids_by_uid.get(source_block.block_uid)
             if source_node_id is None:
@@ -283,22 +300,30 @@ class GraphSyncService:
                 if pair in emitted_pairs:
                     continue
                 emitted_pairs.add(pair)
-                self._repository.upsert_typed_edge(
-                    source_label="Block",
-                    source_id=source_node_id,
-                    target_label="Block",
-                    target_id=target_node_id,
-                    relation_type="REFERS_TO",
-                    properties={
+                refers_to_edges.append({
+                    "source_id": source_node_id,
+                    "target_id": target_node_id,
+                    "properties": {
                         "source_note_id": payload.note_id,
                         "confidence": 1.0,
                         "created_at": now_iso,
                         "updated_at": now_iso,
                     },
-                    graph_name=self._graph_name,
-                )
+                })
+
+        self._repository.upsert_typed_edges_batch(
+            source_label="Block",
+            target_label="Block",
+            relation_type="REFERS_TO",
+            edges=refers_to_edges,
+            graph_name=self._graph_name,
+        )
 
     def _upsert_relations(self, *, payload: GraphSyncPayload, now_iso: str) -> None:
+        # First pass: filter to allowlisted predicates (warn + drop the rest),
+        # collect distinct Concept nodes, and bucket edges by predicate so each
+        # predicate group emits a single UNWIND round-trip.
+        accepted: list[ExtractedRelation] = []
         for relation in payload.relations:
             if relation.predicate not in _STRUCTURAL_RELATIONS:
                 _LOG.warning(
@@ -306,39 +331,53 @@ class GraphSyncService:
                     payload.note_id, relation.predicate,
                 )
                 continue
-            self._repository.upsert_node(
-                label="Concept",
-                node_id=relation.subject_id,
-                properties={
-                    "name": relation.subject_text,
-                    "canonical_form": relation.subject_text,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
-            self._repository.upsert_node(
-                label="Concept",
-                node_id=relation.object_id,
-                properties={
-                    "name": relation.object_text,
-                    "canonical_form": relation.object_text,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
-            self._repository.upsert_typed_edge(
-                source_label="Concept",
-                source_id=relation.subject_id,
-                target_label="Concept",
-                target_id=relation.object_id,
-                relation_type=relation.predicate,
-                properties={
+            accepted.append(relation)
+
+        if not accepted:
+            return
+
+        # Dedup Concept nodes by id so we batch each canonical node exactly
+        # once even when it appears as subject + object across relations.
+        concept_nodes_by_id: dict[str, dict[str, object]] = {}
+        for relation in accepted:
+            concept_nodes_by_id.setdefault(relation.subject_id, {
+                "id": relation.subject_id,
+                "name": relation.subject_text,
+                "canonical_form": relation.subject_text,
+                "updated_at": now_iso,
+            })
+            concept_nodes_by_id.setdefault(relation.object_id, {
+                "id": relation.object_id,
+                "name": relation.object_text,
+                "canonical_form": relation.object_text,
+                "updated_at": now_iso,
+            })
+        self._repository.upsert_nodes_batch(
+            label="Concept",
+            nodes=list(concept_nodes_by_id.values()),
+            graph_name=self._graph_name,
+        )
+
+        edges_by_predicate: dict[str, list[dict[str, object]]] = {}
+        for relation in accepted:
+            edges_by_predicate.setdefault(relation.predicate, []).append({
+                "source_id": relation.subject_id,
+                "target_id": relation.object_id,
+                "properties": {
                     "source_note_id": payload.note_id,
                     "confidence": float(relation.confidence),
                     "predicate": relation.predicate,
                     "created_at": now_iso,
                     "updated_at": now_iso,
                 },
+            })
+
+        for predicate, edges in edges_by_predicate.items():
+            self._repository.upsert_typed_edges_batch(
+                source_label="Concept",
+                target_label="Concept",
+                relation_type=predicate,
+                edges=edges,
                 graph_name=self._graph_name,
             )
 

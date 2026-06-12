@@ -234,6 +234,99 @@ class GraphRepository:
 
         self._exec_cypher(graph_name, query)
 
+    def upsert_typed_edges_batch(
+        self,
+        *,
+        source_label: str,
+        target_label: str,
+        relation_type: str,
+        edges: list[dict[str, object]],
+        graph_name: str = "neuronote",
+    ) -> None:
+        """Upsert N edges that share the same source label, target label, and
+        relation type in a single AGE UNWIND query.
+
+        Each dict in ``edges`` must contain ``source_id``, ``target_id``, and a
+        ``properties`` mapping (the edge property bag that ``SET r += `` will
+        receive).
+
+        Reduces N round-trips to 1 for homogeneous edge batches; degrades to
+        the single-edge path when ``len(edges) <= 1`` so call sites stay simple.
+        """
+        if not edges:
+            return
+        if len(edges) == 1:
+            row = edges[0]
+            self.upsert_typed_edge(
+                source_label=source_label,
+                source_id=str(row["source_id"]),
+                target_label=target_label,
+                target_id=str(row["target_id"]),
+                relation_type=relation_type,
+                properties=dict(row.get("properties") or {}),  # type: ignore[arg-type]
+                graph_name=graph_name,
+            )
+            return
+
+        self._validate_label(source_label)
+        self._validate_label(target_label)
+        self._validate_label(relation_type)
+        self.ensure_graph_exists(graph_name=graph_name)
+
+        # Determine the property key set from the first row. Apache AGE's Cypher
+        # implementation rejects `SET r += row.properties` when `row.properties`
+        # is a nested-map projection (it expects a literal map). We work around
+        # this by flattening properties into the row literal and emitting an
+        # explicit `SET r.<key> = row.<key>` chain — same shape AGE accepts for
+        # `upsert_nodes_batch` (which sets `n += row` against a flat row).
+        first_props = dict(edges[0].get("properties") or {})  # type: ignore[arg-type]
+        property_keys = list(first_props.keys())
+
+        # Defense in depth: property keys are substituted into raw Cypher as
+        # `row.<key>` field accesses, so they must be safe identifiers.
+        for key in property_keys:
+            self._validate_label(key)
+
+        # Defensive: every row in a batch must carry the same property key set,
+        # otherwise the per-key SET assignments would silently write missing
+        # keys as NULL. Today's call sites always pass homogeneous bags, but
+        # validate so future regressions surface loudly.
+        expected_keys = set(property_keys)
+        for idx, row in enumerate(edges):
+            row_keys = set((row.get("properties") or {}).keys())  # type: ignore[union-attr]
+            if row_keys != expected_keys:
+                raise ValueError(
+                    "upsert_typed_edges_batch: heterogeneous property keys in "
+                    f"batch (row 0 keys={sorted(expected_keys)}, "
+                    f"row {idx} keys={sorted(row_keys)})"
+                )
+
+        row_literals: list[str] = []
+        for row in edges:
+            flat: dict[str, object] = {
+                "source_id": str(row["source_id"]),
+                "target_id": str(row["target_id"]),
+            }
+            props = row.get("properties") or {}
+            for key in property_keys:
+                flat[key] = props[key]  # type: ignore[index]
+            row_literals.append(self._cypher_map_literal(flat))
+
+        set_clause = ", ".join(f"r.{key} = row.{key}" for key in property_keys)
+        # If there are no properties (unlikely for current call sites), skip the
+        # SET clause entirely — MERGE alone is sufficient.
+        set_line = f"SET {set_clause}" if set_clause else ""
+
+        query = f"""
+        UNWIND [{", ".join(row_literals)}] AS row
+        MERGE (a:{source_label} {{id: row.source_id}})
+        MERGE (b:{target_label} {{id: row.target_id}})
+        MERGE (a)-[r:{relation_type}]->(b)
+        {set_line}
+        RETURN count(r)
+        """
+        self._exec_cypher(graph_name, query)
+
     def delete_source_artifacts(
         self,
         *,

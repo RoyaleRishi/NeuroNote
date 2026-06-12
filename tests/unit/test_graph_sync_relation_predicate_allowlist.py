@@ -43,7 +43,22 @@ class _FakeGraphRepository:
         self.fetch_block_states = MagicMock(return_value={})
         self.delete_block_node = MagicMock()
         self.delete_note_mention_edges = MagicMock()
+        self.delete_concept_relation_edges = MagicMock()
         self.delete_source_artifacts = MagicMock()
+
+    def upsert_typed_edges_batch(self, **kwargs) -> None:
+        # Fan out to the single-edge mock so existing call_args_list
+        # assertions continue to observe each emitted edge.
+        for edge in kwargs.get("edges", []):
+            self.upsert_typed_edge(
+                source_label=kwargs["source_label"],
+                source_id=str(edge["source_id"]),
+                target_label=kwargs["target_label"],
+                target_id=str(edge["target_id"]),
+                relation_type=kwargs["relation_type"],
+                properties=dict(edge.get("properties") or {}),
+                graph_name=kwargs.get("graph_name", "neuronote"),
+            )
 
     def upsert_embedding(self, **_kwargs) -> None:
         return

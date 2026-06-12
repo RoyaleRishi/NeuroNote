@@ -60,6 +60,18 @@ def test_graph_sync_drops_unknown_relation_predicates(
         def upsert_nodes_batch(self, **_kwargs) -> None:
             return
 
+        def upsert_typed_edges_batch(self, **kwargs) -> None:
+            for edge in kwargs.get("edges", []):
+                self.upsert_typed_edge(
+                    source_label=kwargs["source_label"],
+                    source_id=str(edge["source_id"]),
+                    target_label=kwargs["target_label"],
+                    target_id=str(edge["target_id"]),
+                    relation_type=kwargs["relation_type"],
+                    properties=dict(edge.get("properties") or {}),
+                    graph_name=kwargs.get("graph_name", "neuronote"),
+                )
+
         def upsert_typed_edge(self, **kwargs) -> None:
             if kwargs["source_label"] == "Concept" and kwargs["target_label"] == "Concept":
                 captured_relation_types.append(str(kwargs["relation_type"]))
@@ -159,6 +171,18 @@ def test_graph_sync_emits_refers_to_edges_from_block_tokens(
 
         def upsert_nodes_batch(self, **_kwargs) -> None:
             return
+
+        def upsert_typed_edges_batch(self, **kwargs) -> None:
+            for edge in kwargs.get("edges", []):
+                self.upsert_typed_edge(
+                    source_label=kwargs["source_label"],
+                    source_id=str(edge["source_id"]),
+                    target_label=kwargs["target_label"],
+                    target_id=str(edge["target_id"]),
+                    relation_type=kwargs["relation_type"],
+                    properties=dict(edge.get("properties") or {}),
+                    graph_name=kwargs.get("graph_name", "neuronote"),
+                )
 
         def upsert_typed_edge(self, **kwargs) -> None:
             if kwargs["relation_type"] == "REFERS_TO":
@@ -266,6 +290,18 @@ def test_graph_sync_emits_refers_to_edges_from_reference_link_marks(
 
         def upsert_nodes_batch(self, **_kwargs) -> None:
             return
+
+        def upsert_typed_edges_batch(self, **kwargs) -> None:
+            for edge in kwargs.get("edges", []):
+                self.upsert_typed_edge(
+                    source_label=kwargs["source_label"],
+                    source_id=str(edge["source_id"]),
+                    target_label=kwargs["target_label"],
+                    target_id=str(edge["target_id"]),
+                    relation_type=kwargs["relation_type"],
+                    properties=dict(edge.get("properties") or {}),
+                    graph_name=kwargs.get("graph_name", "neuronote"),
+                )
 
         def upsert_typed_edge(self, **kwargs) -> None:
             if kwargs["relation_type"] == "REFERS_TO":

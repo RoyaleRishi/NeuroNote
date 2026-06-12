@@ -165,6 +165,85 @@ def test_fetch_graph_for_notes_returns_mentions_and_relations(db_session) -> Non
 
 
 # ---------------------------------------------------------------------------
+# Batched edge upsert (Task 3.3) — AGE compatibility regression guard
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_typed_edges_batch_writes_against_real_age(db_session) -> None:
+    """Batched MENTIONS upsert must execute against AGE without rejection.
+
+    Regression guard for the AGE Cypher quirk: ``SET r += row.properties``
+    against a nested-map projection raises ``FeatureNotSupported``. The fix
+    flattens properties to top-level row keys and emits explicit
+    ``SET r.<key> = row.<key>`` assignments. Unit tests with fakes do not
+    exercise the real Cypher parser, so this test is required to catch
+    AGE-compatibility regressions in future edits.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+
+    from app.db.repositories.graph_repository import GraphRepository
+
+    repo = GraphRepository(db_session)
+
+    note_id = "batch-edge-note-1"
+    # Seed Note + 3 Entity nodes so the MENTIONS batch has > 1 edge (the
+    # single-edge fallback path bypasses the batched UNWIND entirely).
+    repo.upsert_node(
+        label="Note",
+        node_id=note_id,
+        properties={"id": note_id, "name": "Batch Test", "updated_at": "2026-06-12T00:00:00Z"},
+        graph_name=_GRAPH,
+    )
+    entity_ids = ["batch-ent-python", "batch-ent-fastapi", "batch-ent-ml"]
+    for eid in entity_ids:
+        repo.upsert_node(
+            label="Entity",
+            node_id=eid,
+            properties={"id": eid, "name": eid, "kind": "concept",
+                        "updated_at": "2026-06-12T00:00:00Z"},
+            graph_name=_GRAPH,
+        )
+
+    edges = [
+        {
+            "source_id": note_id,
+            "target_id": eid,
+            "properties": {
+                "source_note_id": note_id,
+                "confidence": 0.9,
+                "created_at": "2026-06-12T00:00:00Z",
+                "updated_at": "2026-06-12T00:00:00Z",
+            },
+        }
+        for eid in entity_ids
+    ]
+    # The pre-fix Cypher (`SET r += row.properties`) would raise here.
+    repo.upsert_typed_edges_batch(
+        source_label="Note",
+        target_label="Entity",
+        relation_type="MENTIONS",
+        edges=edges,
+        graph_name=_GRAPH,
+    )
+    db_session.commit()
+
+    result = repo.fetch_graph_for_notes(
+        note_ids=[note_id],
+        min_confidence=0.0,
+        graph_name=_GRAPH,
+    )
+    fetched_ids = {m.entity_id for m in result.mentions}
+    for eid in entity_ids:
+        assert eid in fetched_ids, f"Missing MENTIONS edge for {eid}"
+    for m in result.mentions:
+        if m.entity_id in entity_ids:
+            assert m.source_note_id == note_id
+            assert abs(m.confidence - 0.9) < 1e-6
+
+
+# ---------------------------------------------------------------------------
 # Delta sync correctness tests (Task 2)
 # ---------------------------------------------------------------------------
 
