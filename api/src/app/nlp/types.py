@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(slots=True)
@@ -10,13 +10,6 @@ class ExtractedEntity:
     text: str
     label: str
     confidence: float
-
-
-@dataclass(slots=True)
-class ExtractedKeyphrase:
-    phrase_id: str
-    text: str
-    score: float
 
 
 @dataclass(slots=True)
@@ -60,16 +53,6 @@ class RelationDerivation:
 
 
 @dataclass(slots=True)
-class ExtractedEntityMention:
-    entity_id: str
-    block_index: int
-    mention_text: str
-    start_offset: int
-    end_offset: int
-    confidence: float
-
-
-@dataclass(slots=True)
 class BlockTextInput:
     block_index: int
     content_text: str
@@ -80,11 +63,8 @@ class NoteExtractionResult:
     note_id: str
     content_hash: str
     entities: list[ExtractedEntity]
-    keyphrases: list[ExtractedKeyphrase]
     relations: list[ExtractedRelation]
     embedding: list[float] | None
-    entity_mentions: list[ExtractedEntityMention] = field(default_factory=list)
-    summary: str = ""
     distinct_blocks_with_concepts: int = 0  # populated by structure_relations stage; default keeps existing callers intact
 
     def with_note_id(self, note_id: str) -> "NoteExtractionResult":

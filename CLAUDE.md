@@ -92,12 +92,12 @@ The pipeline is fully deterministic — the LLM is no longer in the extraction c
 2. **`normalise_concepts`** (`normalisation.py`) — embeds each span and runs cosine nearest-neighbour against `concept_registry.embedding` (HNSW index). A match at threshold ≥0.88 reuses the existing canonical concept; otherwise a new registry row is inserted. This is how cross-note concept identity is established.
 3. **`derive_relations`** (`structure_relations.py`) — emits five structural edge types from block structure alone: `MENTIONED_TOGETHER`, `SUBTOPIC_OF`, `SIBLING_OF`, `REFERENCES`, `DEFINED_BY`. No model call required.
 
-Cross-restart caching is provided by `nlp_extraction_cache` (keyed by `content_hash`). The LLM is now used only for (a) optional per-note summaries and (b) the on-demand concept insight panel via `ConceptInsightService` (`services/concept_insight_service.py`, async `AsyncLLMClient`, cached in `concept_insight_cache`).
+Cross-restart caching is provided by `nlp_extraction_cache` (keyed by `content_hash`). The LLM is used only for the on-demand concept insight panel via `ConceptInsightService` (`services/concept_insight_service.py`, async `AsyncLLMClient`, cached in `concept_insight_cache`).
 
 ### Graph sync (`api/src/app/services/graph_sync_service.py`)
 - Delete-and-replace semantics: on each note save, all AGE nodes/edges sourced from that note are deleted then re-created
-- `GraphSyncPayload` carries entities, keyphrases, relations, resolved_entities, embedding, entity_mentions
-- Block-scoped `MENTIONS` edges: each edge carries `source_note_id`, `mention_text`, `start_offset`, `end_offset`
+- `GraphSyncPayload` carries `entities`, `relations`, `resolved_entities`, and an optional `embedding`
+- Note→Entity `MENTIONS` edges: aggregate edges from a note to each Entity it mentions, carrying `source_note_id`. Block-scoped MENTIONS with offsets are not emitted by the current deterministic pipeline.
 - **Concept meta edges are durable**: `SYNONYM_OF` and `SUBTOPIC_OF` edges between Entity nodes carry no `source_note_id`, so they are never deleted by the note's delete-and-replace sync. They persist across note re-edits.
 - **Entity node properties**: `id` (slug), `name` (canonical text), `kind` (label), `updated_at`. The property is `name` — **not** `text`. Cypher queries must use `e.name`, not `e.text`.
 

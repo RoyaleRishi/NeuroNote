@@ -15,7 +15,6 @@ export interface ProcessNoteResponse {
 export interface ExtractionSummary {
   entity_count: number;
   relation_count: number;
-  keyphrase_count: number;
   top_entities: string[];
 }
 

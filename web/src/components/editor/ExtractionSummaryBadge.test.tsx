@@ -6,7 +6,6 @@ import type { ExtractionSummary } from "../../../../shared/contracts/ts/v1/proce
 const SAMPLE_SUMMARY: ExtractionSummary = {
   entity_count: 5,
   relation_count: 3,
-  keyphrase_count: 2,
   top_entities: ["machine learning", "neural networks", "backpropagation"],
 };
 
@@ -21,7 +20,6 @@ describe("ExtractionSummaryBadge", () => {
     expect(screen.getByTestId("extraction-summary-badge")).toBeTruthy();
     expect(screen.getByText(/5 concepts/)).toBeTruthy();
     expect(screen.getByText(/3 relations/)).toBeTruthy();
-    expect(screen.getByText(/2 keyphrases/)).toBeTruthy();
   });
 
   it("renders top entity pills", () => {
@@ -50,18 +48,17 @@ describe("ExtractionSummaryBadge", () => {
   it("handles singular counts correctly", () => {
     render(
       <ExtractionSummaryBadge
-        summary={{ entity_count: 1, relation_count: 1, keyphrase_count: 1, top_entities: [] }}
+        summary={{ entity_count: 1, relation_count: 1, top_entities: [] }}
       />,
     );
     expect(screen.getByText(/1 concept/)).toBeTruthy();
     expect(screen.getByText(/1 relation(?!s)/)).toBeTruthy();
-    expect(screen.getByText(/1 keyphrase(?!s)/)).toBeTruthy();
   });
 
   it("renders nothing when all counts are zero", () => {
     const { container } = render(
       <ExtractionSummaryBadge
-        summary={{ entity_count: 0, relation_count: 0, keyphrase_count: 0, top_entities: [] }}
+        summary={{ entity_count: 0, relation_count: 0, top_entities: [] }}
       />,
     );
     expect(container.innerHTML).toBe("");

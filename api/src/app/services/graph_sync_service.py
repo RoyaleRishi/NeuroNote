@@ -13,8 +13,6 @@ from app.db.repositories.embedding_repository import EmbeddingRepository
 from app.db.repositories.graph_repository import GraphRepository
 from app.nlp.types import (
     ExtractedEntity,
-    ExtractedEntityMention,
-    ExtractedKeyphrase,
     ExtractedRelation,
 )
 
@@ -46,12 +44,9 @@ class GraphSyncPayload:
     content_hash: str
     updated_at: str
     entities: list[ExtractedEntity]
-    keyphrases: list[ExtractedKeyphrase]
     relations: list[ExtractedRelation]
     resolved_entities: dict[str, CanonicalEntityMapping]
     embedding: list[float] | None
-    entity_mentions: list[ExtractedEntityMention]
-    note_summary: str = ""
 
 
 def _utc_now_iso() -> str:
@@ -108,8 +103,6 @@ class GraphSyncService:
             "updated_at": payload.updated_at,
             "created_at": now_iso,
         }
-        if payload.note_summary:
-            note_props["summary"] = payload.note_summary
         self._repository.upsert_node(
             label="Note",
             node_id=payload.note_id,
@@ -184,77 +177,29 @@ class GraphSyncService:
                     graph_name=self._graph_name,
                 )
 
-    def _upsert_mentions(
+    def _upsert_entity_nodes_and_note_edges(
         self,
         *,
-        blocks: list[Block],
-        block_node_ids_by_index: dict[int, str],
         payload: GraphSyncPayload,
         now_iso: str,
-        dirty_uids: set[str],
-        dirty_block_indices: set[int],
     ) -> None:
-        entity_by_id = {entity.entity_id: entity for entity in payload.entities}
+        """Upsert Entity nodes for every extracted entity and the Note→Entity
+        aggregate MENTIONS edge for each canonical entity.
 
-        # Keyphrases: upsert nodes always, but MENTIONS edges only for dirty blocks
-        concept_node_props: list[dict[str, object]] = [
-            {
-                "id": kp.phrase_id,
-                "name": kp.text,
-                "score": kp.score,
-                "updated_at": now_iso,
-            }
-            for kp in payload.keyphrases
-        ]
-        self._repository.upsert_nodes_batch(
-            label="Concept",
-            nodes=concept_node_props,
-            graph_name=self._graph_name,
-        )
+        The deterministic pipeline emits concept entities without block-level
+        positions, so MENTIONS edges are computed Note-level only — one edge
+        per canonical entity at that entity's confidence.
+        """
+        if not payload.entities:
+            return
 
-        for keyphrase in payload.keyphrases:
-            self._repository.upsert_typed_edge(
-                source_label="Concept",
-                source_id=keyphrase.phrase_id,
-                target_label="Subject",
-                target_id=payload.subject_id,
-                relation_type="APPEARS_IN",
-                properties={
-                    "source_note_id": payload.note_id,
-                    "confidence": float(keyphrase.score),
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
-            for block in blocks:
-                if block.block_uid not in dirty_uids:
-                    continue  # skip unchanged blocks
-                if keyphrase.text.lower() not in block.content_text.lower():
-                    continue
-                block_node_id = block_node_ids_by_index.get(block.block_index)
-                if block_node_id is None:
-                    continue
-                self._repository.upsert_typed_edge(
-                    source_label="Block",
-                    source_id=block_node_id,
-                    target_label="Concept",
-                    target_id=keyphrase.phrase_id,
-                    relation_type="MENTIONS",
-                    properties={
-                        "source_note_id": payload.note_id,
-                        "confidence": float(keyphrase.score),
-                        "created_at": now_iso,
-                        "updated_at": now_iso,
-                    },
-                    graph_name=self._graph_name,
-                )
-
-        # Entity nodes: always upsert (MERGE, idempotent)
         entity_node_props: list[dict[str, object]] = []
+        note_entity_max_conf: dict[str, float] = {}
         for entity in payload.entities:
             resolved = payload.resolved_entities.get(entity.entity_id)
-            canonical_id = resolved.canonical_entity_id if resolved is not None else entity.entity_id
+            canonical_id = (
+                resolved.canonical_entity_id if resolved is not None else entity.entity_id
+            )
             canonical_name = resolved.canonical_name if resolved is not None else entity.text
             entity_node_props.append({
                 "id": canonical_id,
@@ -262,119 +207,17 @@ class GraphSyncService:
                 "kind": entity.label,
                 "updated_at": now_iso,
             })
+            conf = float(entity.confidence)
+            if resolved is not None:
+                conf = max(conf, float(resolved.confidence))
+            if canonical_id not in note_entity_max_conf or conf > note_entity_max_conf[canonical_id]:
+                note_entity_max_conf[canonical_id] = conf
+
         self._repository.upsert_nodes_batch(
             label="Entity",
             nodes=entity_node_props,
             graph_name=self._graph_name,
         )
-
-        # Block→Entity MENTIONS: only for dirty block indices
-        seen_mentions: set[tuple[str, str, int, int]] = set()
-        for mention in payload.entity_mentions:
-            if mention.block_index not in dirty_block_indices:
-                continue  # skip mentions from unchanged blocks
-            mention_block_node_id = block_node_ids_by_index.get(mention.block_index)
-            if mention_block_node_id is None:
-                continue
-            source_entity = entity_by_id.get(mention.entity_id)
-            if source_entity is None:
-                continue
-
-            resolved = payload.resolved_entities.get(source_entity.entity_id)
-            canonical_id = resolved.canonical_entity_id if resolved is not None else source_entity.entity_id
-            mention_key = (
-                mention_block_node_id,
-                canonical_id,
-                mention.start_offset,
-                mention.end_offset,
-            )
-            if mention_key in seen_mentions:
-                continue
-            seen_mentions.add(mention_key)
-
-            mention_confidence = (
-                max(float(source_entity.confidence), float(resolved.confidence))
-                if resolved is not None
-                else float(source_entity.confidence)
-            )
-            mention_confidence = max(mention_confidence, float(mention.confidence))
-            self._repository.upsert_typed_edge(
-                source_label="Block",
-                source_id=mention_block_node_id,
-                target_label="Entity",
-                target_id=canonical_id,
-                relation_type="MENTIONS",
-                properties={
-                    "source_note_id": payload.note_id,
-                    "confidence": mention_confidence,
-                    "mention_text": mention.mention_text,
-                    "start_offset": int(mention.start_offset),
-                    "end_offset": int(mention.end_offset),
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                },
-                graph_name=self._graph_name,
-            )
-
-        # Note→Entity aggregate MENTIONS: always recompute (we deleted these before entering)
-        self._recompute_note_entity_mentions(payload=payload, now_iso=now_iso)
-
-    def _recompute_note_entity_mentions(
-        self,
-        *,
-        payload: GraphSyncPayload,
-        now_iso: str,
-    ) -> None:
-        """Recompute Note→Entity aggregate MENTIONS edges from all entity mentions.
-
-        Finds the highest-confidence mention per canonical entity across all
-        blocks and upserts a single Note→Entity MENTIONS edge for each. Called
-        after deleting stale Note→Entity edges so the aggregate stays fresh.
-        """
-        entity_by_id = {entity.entity_id: entity for entity in payload.entities}
-        note_entity_max_conf: dict[str, float] = {}
-        for mention in payload.entity_mentions:
-            source_entity = entity_by_id.get(mention.entity_id)
-            if source_entity is None:
-                continue
-            resolved = payload.resolved_entities.get(source_entity.entity_id)
-            canonical_id = (
-                resolved.canonical_entity_id if resolved is not None else source_entity.entity_id
-            )
-            conf = float(source_entity.confidence)
-            if resolved is not None:
-                conf = max(conf, float(resolved.confidence))
-            conf = max(conf, float(mention.confidence))
-            if canonical_id not in note_entity_max_conf or conf > note_entity_max_conf[canonical_id]:
-                note_entity_max_conf[canonical_id] = conf
-
-        # LLM-enhanced path: entities extracted without block-level positions.
-        # Upsert Entity nodes with full properties first so MERGE in upsert_typed_edge
-        # never creates skeleton nodes with empty name/kind.
-        if not note_entity_max_conf and payload.entities:
-            entity_node_props: list[dict[str, object]] = []
-            for entity in payload.entities:
-                resolved = payload.resolved_entities.get(entity.entity_id)
-                canonical_id = (
-                    resolved.canonical_entity_id if resolved is not None else entity.entity_id
-                )
-                canonical_name = resolved.canonical_name if resolved is not None else entity.text
-                entity_node_props.append({
-                    "id": canonical_id,
-                    "name": canonical_name,
-                    "kind": entity.label,
-                    "updated_at": now_iso,
-                })
-                conf = float(entity.confidence)
-                if resolved is not None:
-                    conf = max(conf, float(resolved.confidence))
-                if canonical_id not in note_entity_max_conf or conf > note_entity_max_conf[canonical_id]:
-                    note_entity_max_conf[canonical_id] = conf
-            self._repository.upsert_nodes_batch(
-                label="Entity",
-                nodes=entity_node_props,
-                graph_name=self._graph_name,
-            )
 
         for canonical_id, best_conf in note_entity_max_conf.items():
             self._repository.upsert_typed_edge(
@@ -508,10 +351,6 @@ class GraphSyncService:
             b.block_uid: self._block_node_id(note_id=payload.note_id, block_uid=b.block_uid)
             for b in blocks
         }
-        block_node_ids_by_index: dict[int, str] = {
-            b.block_index: block_node_ids_by_uid[b.block_uid]
-            for b in blocks
-        }
 
         # Delta: compare current blocks against AGE state
         age_block_states = self._repository.fetch_block_states(
@@ -525,10 +364,6 @@ class GraphSyncService:
             if age_block_states.get(b.block_uid) != b.content_hash
         }
         deleted_uids: set[str] = set(age_block_states.keys()) - current_uids
-        dirty_block_indices: set[int] = {
-            b.block_index for b in blocks if b.block_uid in dirty_uids
-        }
-
         # All-unchanged fast path: blocks didn't change, but the pipeline
         # output (concepts, normalisation, structural relations) can still
         # change between runs — so refresh Note→Entity aggregate and the
@@ -539,7 +374,7 @@ class GraphSyncService:
                 note_id=payload.note_id,
                 graph_name=self._graph_name,
             )
-            self._recompute_note_entity_mentions(payload=payload, now_iso=now_iso)
+            self._upsert_entity_nodes_and_note_edges(payload=payload, now_iso=now_iso)
             self._repository.delete_concept_relation_edges(
                 source_note_id=payload.note_id,
                 graph_name=self._graph_name,
@@ -578,14 +413,7 @@ class GraphSyncService:
             now_iso=now_iso,
             dirty_uids=dirty_uids,
         )
-        self._upsert_mentions(
-            blocks=blocks,
-            block_node_ids_by_index=block_node_ids_by_index,
-            payload=payload,
-            now_iso=now_iso,
-            dirty_uids=dirty_uids,
-            dirty_block_indices=dirty_block_indices,
-        )
+        self._upsert_entity_nodes_and_note_edges(payload=payload, now_iso=now_iso)
         self._upsert_block_refs(
             blocks=blocks,
             block_node_ids_by_uid=block_node_ids_by_uid,

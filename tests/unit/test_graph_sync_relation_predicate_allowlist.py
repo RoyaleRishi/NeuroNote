@@ -18,7 +18,6 @@ def _make_payload(predicate: str) -> GraphSyncPayload:
         content_hash="hash-x",
         updated_at="2026-05-09T00:00:00Z",
         entities=[],
-        keyphrases=[],
         relations=[
             ExtractedRelation(
                 subject_id="concept-a",
@@ -31,7 +30,6 @@ def _make_payload(predicate: str) -> GraphSyncPayload:
         ],
         resolved_entities={},
         embedding=None,
-        entity_mentions=[],
     )
 
 

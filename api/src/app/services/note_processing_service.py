@@ -117,7 +117,6 @@ class NoteProcessingService:
                 return ExtractionSummary(
                     entity_count=0,
                     relation_count=0,
-                    keyphrase_count=0,
                     top_entities=[],
                 )
 
@@ -150,19 +149,15 @@ class NoteProcessingService:
                         content_hash=snapshot.content_hash,
                         updated_at=snapshot.updated_at,
                         entities=result.entities,
-                        keyphrases=result.keyphrases,
                         relations=result.relations,
                         resolved_entities={},
                         embedding=result.embedding,
-                        entity_mentions=result.entity_mentions,
-                        note_summary=result.summary,
                     )
                 )
 
         return ExtractionSummary(
             entity_count=len(result.entities),
             relation_count=len(result.relations),
-            keyphrase_count=len(result.keyphrases),
             top_entities=[e.text for e in result.entities[:5]],
         )
 

@@ -60,7 +60,7 @@ describe("createProcessPollingController", () => {
   });
 
   it("passes extraction_summary when completed", async () => {
-    const summary = { entity_count: 3, relation_count: 1, keyphrase_count: 2, top_entities: ["foo"] };
+    const summary = { entity_count: 3, relation_count: 1, top_entities: ["foo"] };
     const fetchStatus = vi.fn().mockResolvedValueOnce(
       makeResponse({ status: "completed", extraction_summary: summary }),
     );

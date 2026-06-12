@@ -33,10 +33,8 @@ class _FakePipeline:
             note_id=note_id,
             content_hash=content_hash,
             entities=[],
-            keyphrases=[],
             relations=[],
             embedding=[0.0] * 384,
-            entity_mentions=[],
         )
 
 
@@ -224,7 +222,6 @@ def test_process_note_collapses_relation_type_to_related_to(
                 note_id=note_id,
                 content_hash=content_hash,
                 entities=[],
-                keyphrases=[],
                 relations=[
                     ExtractedRelation(
                         subject_id="concept-a",
@@ -236,7 +233,6 @@ def test_process_note_collapses_relation_type_to_related_to(
                     )
                 ],
                 embedding=None,
-                entity_mentions=[],
             )
 
     captured_predicates: list[str] = []

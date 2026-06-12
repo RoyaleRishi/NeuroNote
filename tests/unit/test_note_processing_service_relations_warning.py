@@ -21,7 +21,6 @@ def _make_result(*, entities: int, relations: int, blocks: int) -> NoteExtractio
             ExtractedEntity(entity_id=f"c-{i}", text=f"c{i}", label="concept", confidence=0.9)
             for i in range(entities)
         ],
-        keyphrases=[],
         relations=[
             ExtractedRelation(
                 subject_id="c-0", subject_text="c0",

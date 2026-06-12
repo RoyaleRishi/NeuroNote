@@ -132,11 +132,8 @@ class NoteNlpPipeline:
             note_id=note_id,
             content_hash=content_hash,
             entities=entities,
-            keyphrases=[],
             relations=relations,
             embedding=embedding,
-            entity_mentions=[],
-            summary="",
             distinct_blocks_with_concepts=derivation.distinct_blocks_with_concepts,
         )
 

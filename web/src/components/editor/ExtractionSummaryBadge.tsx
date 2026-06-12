@@ -30,7 +30,6 @@ export function ExtractionSummaryBadge({
   const parts: string[] = [];
   if (summary.entity_count > 0) parts.push(`${summary.entity_count} concept${summary.entity_count !== 1 ? "s" : ""}`);
   if (summary.relation_count > 0) parts.push(`${summary.relation_count} relation${summary.relation_count !== 1 ? "s" : ""}`);
-  if (summary.keyphrase_count > 0) parts.push(`${summary.keyphrase_count} keyphrase${summary.keyphrase_count !== 1 ? "s" : ""}`);
 
   if (parts.length === 0) return null;
 

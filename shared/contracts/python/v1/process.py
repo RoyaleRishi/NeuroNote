@@ -20,10 +20,9 @@ class ProcessNoteResponse(BaseModel):
 
 
 class ExtractionSummary(BaseModel):
-    """Counts of entities, relations, and keyphrases extracted from a note."""
+    """Counts of entities and relations extracted from a note."""
     entity_count: int = Field(ge=0)
     relation_count: int = Field(ge=0)
-    keyphrase_count: int = Field(ge=0)
     top_entities: list[str] = Field(default_factory=list)
 
 
