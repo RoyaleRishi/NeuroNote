@@ -2,6 +2,8 @@
 
 import React, { Component, ReactNode } from "react";
 
+import { reportUserError } from "../lib/ui/error-toast";
+
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
@@ -22,8 +24,8 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("ErrorBoundary caught error:", error, errorInfo);
+  componentDidCatch(error: Error, _errorInfo: React.ErrorInfo) {
+    reportUserError("error-boundary", error);
   }
 
   render() {

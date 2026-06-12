@@ -11,8 +11,13 @@ registered, later registrations of the same normalised key are ignored
 """
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
+_log = logging.getLogger(__name__)
 
 
 def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
@@ -29,8 +34,6 @@ def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
     if not normalised:
         return
 
-    import logging
-    _log = logging.getLogger(__name__)
     try:
         for concept_text, entity_id in normalised:
             session.execute(
@@ -43,9 +46,9 @@ def register_concepts(session: Session, items: list[tuple[str, str]]) -> None:
                 ),
                 {"concept_text": concept_text, "entity_id": entity_id},
             )
-    except Exception as exc:
+    except SQLAlchemyError as exc:
+        # Registry is best-effort; never fail NLP processing on DB hiccups.
         _log.warning("register_concepts failed: %s", exc, exc_info=True)
-        # Registry is best-effort; never fail NLP processing
 
 
 def register_concepts_with_embeddings(
@@ -67,8 +70,6 @@ def register_concepts_with_embeddings(
     if not normalised:
         return
 
-    import logging
-    _log = logging.getLogger(__name__)
     try:
         for concept_text, entity_id, embedding in normalised:
             vector_literal = "[" + ",".join(f"{v:.8f}" for v in embedding) + "]"
@@ -88,31 +89,25 @@ def register_concepts_with_embeddings(
                     "embedding": vector_literal,
                 },
             )
-    except Exception as exc:
+    except SQLAlchemyError as exc:
+        # Registry is best-effort; never fail NLP processing on DB hiccups.
         _log.warning("register_concepts_with_embeddings failed: %s", exc, exc_info=True)
-        # Registry is best-effort; never fail NLP processing
 
 
 def get_known_concepts(session: Session) -> list[str]:
     """Return all registered concept texts, sorted for deterministic prompts."""
-    try:
-        rows = session.execute(
-            text("SELECT concept_text FROM concept_registry ORDER BY concept_text")
-        ).all()
-        return [str(row[0]) for row in rows]
-    except Exception:
-        return []
+    rows = session.execute(
+        text("SELECT concept_text FROM concept_registry ORDER BY concept_text")
+    ).all()
+    return [str(row[0]) for row in rows]
 
 
 def registry_size(session: Session) -> int:
     """Return the number of registered concepts."""
-    try:
-        row = session.execute(
-            text("SELECT COUNT(*) FROM concept_registry")
-        ).scalar()
-        return int(row) if row else 0
-    except Exception:
-        return 0
+    row = session.execute(
+        text("SELECT COUNT(*) FROM concept_registry")
+    ).scalar()
+    return int(row) if row else 0
 
 
 __all__ = [
