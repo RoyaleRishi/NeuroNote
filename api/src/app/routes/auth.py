@@ -3,14 +3,12 @@ from __future__ import annotations
 
 import logging
 import threading
-import uuid
 from datetime import UTC, datetime
 
 import httpx
 from authlib.integrations.starlette_client import OAuth  # type: ignore[import-untyped]
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.auth import (
@@ -25,7 +23,7 @@ from app.core.auth import (
 from app.core.oauth_config import OAuthSettings, get_oauth_settings
 from app.db.models.user import User
 from app.db.session import get_db_session
-from app.db.tenant import create_user_schema
+from app.db.tenant import create_user_schema, mint_schema_name
 from shared.contracts.python.v1.auth import UserProfile
 
 logger = logging.getLogger(__name__)
@@ -127,7 +125,7 @@ def dev_login(
 
     user = session.query(User).filter(User.email == "dev@neuronote.local").first()
     if user is None:
-        schema_name = f"user_{uuid.uuid4().hex[:12]}"
+        schema_name = mint_schema_name()
         user = User(
             email="dev@neuronote.local",
             display_name="Dev User",
@@ -138,18 +136,6 @@ def dev_login(
         session.add(user)
         session.flush()
         create_user_schema(session, schema_name)
-
-        _url = str(session.get_bind().url)  # type: ignore[union-attr]
-        if _url.startswith("postgresql"):
-            session.execute(text(f"SET search_path TO {schema_name}, public"))
-            session.execute(
-                text(
-                    "INSERT INTO subjects (id, name, created_at, updated_at) "
-                    "VALUES (:id, :name, NOW(), NOW()) ON CONFLICT DO NOTHING"
-                ),
-                {"id": "inbox", "name": "Inbox"},
-            )
-            session.execute(text("SET search_path TO public"))
         session.commit()
         logger.info("Dev user created: %s", schema_name)
     else:
@@ -328,7 +314,7 @@ def _upsert_user(
         return user
 
     # New user — provision tenant schema.
-    schema_name = f"user_{uuid.uuid4().hex[:12]}"
+    schema_name = mint_schema_name()
     user = User(
         email=email,
         display_name=display_name,
@@ -341,21 +327,6 @@ def _upsert_user(
     session.flush()  # Assign PK before schema provisioning.
 
     create_user_schema(session, schema_name)
-
-    # Create default "Inbox" subject in the new user's schema.
-    _url = str(session.get_bind().url)  # type: ignore[union-attr]
-    if _url.startswith("postgresql"):
-        session.execute(text(f"SET search_path TO {schema_name}, public"))
-        session.execute(
-            text(
-                "INSERT INTO subjects (id, name, created_at, updated_at) "
-                "VALUES (:id, :name, NOW(), NOW()) ON CONFLICT DO NOTHING"
-            ),
-            {"id": "inbox", "name": "Inbox"},
-        )
-        # Reset search_path back to public for the auth route context.
-        session.execute(text("SET search_path TO public"))
-
     session.commit()
     logger.info("New user registered: %s (%s) -> %s", email, provider, schema_name)
     return user

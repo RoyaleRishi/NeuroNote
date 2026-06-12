@@ -85,16 +85,18 @@ def _pg_create_schema(session: Session, schema_name: str) -> None:
         cleaned = "\n".join(sql_lines).strip()
         if not cleaned:
             continue
-        # Make CREATE TABLE / CREATE INDEX idempotent.
+        # Make CREATE TABLE / CREATE INDEX idempotent — but only if the
+        # template hasn't already written "IF NOT EXISTS" itself.
         upper = cleaned.upper()
-        if upper.startswith("CREATE TABLE"):
-            cleaned = cleaned.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
-        elif upper.startswith("CREATE UNIQUE INDEX"):
-            cleaned = cleaned.replace(
-                "CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS", 1
-            )
-        elif upper.startswith("CREATE INDEX"):
-            cleaned = cleaned.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS", 1)
+        if "IF NOT EXISTS" not in upper:
+            if upper.startswith("CREATE TABLE"):
+                cleaned = cleaned.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)
+            elif upper.startswith("CREATE UNIQUE INDEX"):
+                cleaned = cleaned.replace(
+                    "CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS", 1
+                )
+            elif upper.startswith("CREATE INDEX"):
+                cleaned = cleaned.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS", 1)
         session.execute(text(cleaned))
 
     # Create per-user AGE graph.
@@ -200,13 +202,39 @@ def _sqlite_drop_tables(session: Session, schema_name: str) -> None:
 # Public API
 # ------------------------------------------------------------------
 
+def mint_schema_name() -> str:
+    """Generate a fresh tenant schema name matching ``^user_[a-z0-9]{4,32}$``."""
+    import uuid
+
+    return f"user_{uuid.uuid4().hex[:12]}"
+
+
+def _seed_default_inbox(session: Session, schema_name: str) -> None:
+    """Insert the default 'Inbox' subject row into a freshly-provisioned schema.
+
+    Postgres only. The table reference is schema-qualified so this works
+    regardless of where the prior step (AGE bootstrap) left ``search_path``.
+    SQLite tests don't need the seed because they own their own fixture data.
+    """
+    if not _is_postgres(session):
+        return
+    session.execute(
+        text(
+            f"INSERT INTO {schema_name}.subjects (id, name, created_at, updated_at) "
+            "VALUES (:id, :name, NOW(), NOW()) ON CONFLICT DO NOTHING"
+        ),
+        {"id": "inbox", "name": "Inbox"},
+    )
+
+
 def create_user_schema(session: Session, schema_name: str) -> None:
-    """Provision all tenant tables (+ AGE graph on Postgres) for a new user."""
+    """Provision tenant tables (+ AGE graph on Postgres) and seed default rows."""
     validate_schema_name(schema_name)
     if _is_postgres(session):
         _pg_create_schema(session, schema_name)
     else:
         _sqlite_create_tables(session, schema_name)
+    _seed_default_inbox(session, schema_name)
     logger.info("Provisioned tenant schema %s", schema_name)
 
 
