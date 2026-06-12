@@ -48,6 +48,11 @@ api/dev.db
 # Next.js / Turbopack
 .turbo/
 
+# Playwright
+web/playwright-report/
+web/test-results/
+web/playwright/.cache/
+
 # Superpowers brainstorming sessions
 .superpowers/
 web/.eslintcache

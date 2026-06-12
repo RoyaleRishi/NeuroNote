@@ -1,4 +1,4 @@
-.PHONY: setup setup-web check check-web test test-api test-structure test-web test-db test-perf run run-api run-api-db run-web db-up db-down db-bootstrap-extensions db-migrate db-check-extensions compose-build compose-up compose-down compose-check compose-test compose-test-db compose-migrate compose-bootstrap-extensions compose-logs deploy-prod prod-migrate prod-logs prod-down
+.PHONY: setup setup-web check check-web test test-api test-structure test-web test-db test-perf run run-api run-api-db run-web db-up db-down db-bootstrap-extensions db-migrate db-check-extensions compose-build compose-up compose-down compose-check compose-test compose-test-db compose-migrate compose-bootstrap-extensions compose-logs e2e deploy-prod prod-migrate prod-logs prod-down
 
 UV_CACHE_DIR ?= .uv-cache
 DB_URL ?= postgresql+psycopg://neuronote:neuronote@127.0.0.1:5432/neuronote
@@ -90,6 +90,9 @@ compose-bootstrap-extensions:
 
 compose-logs:
 	$(COMPOSE) logs -f db api web
+
+e2e: ## Run Playwright e2e suite (requires docker stack up)
+	cd web && npm run e2e
 
 # ─── Production (VPS + Caddy) ────────────────────────────────────────────────
 
