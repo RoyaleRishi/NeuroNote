@@ -11,7 +11,7 @@ from app.db.models.note_tag import NoteTag
 from app.db.models.subject import Subject
 from app.db.models.tag import Tag
 from app.db.repositories.block_repository import BlockRepository
-from app.utils.text import extract_wiki_link_titles, normalize_title, normalize_title_key
+from app.utils.text import collapse_whitespace, extract_wiki_link_titles, normalize_title, normalize_title_key
 
 DEFAULT_SUBJECT_ID = "inbox"
 DEFAULT_SUBJECT_NAME = "Inbox"
@@ -111,12 +111,12 @@ class NoteRepository:
         lower_token = token.lower()
         start = lower_content.find(lower_token)
         if start < 0:
-            compact = " ".join(content_text.split())
+            compact = collapse_whitespace(content_text)
             return compact[:140] if compact else matched_title
 
         window_start = max(0, start - 40)
         window_end = min(len(content_text), start + len(token) + 80)
-        snippet = " ".join(content_text[window_start:window_end].split())
+        snippet = collapse_whitespace(content_text[window_start:window_end])
         if window_start > 0:
             snippet = f"...{snippet}"
         if window_end < len(content_text):

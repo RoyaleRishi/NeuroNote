@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.block import Block
 from app.db.models.note import Note
+from app.utils.text import collapse_whitespace
 from app.utils.tiptap import (
     _as_object,
     _ensure_block_uid,
@@ -86,12 +87,12 @@ def _make_ref_snippet(content_text: str, block_uid: str) -> str:
     token = f"(({block_uid}))"
     start = content_text.find(token)
     if start < 0:
-        compact = " ".join(content_text.split())
+        compact = collapse_whitespace(content_text)
         return compact[:140]
 
     window_start = max(0, start - 40)
     window_end = min(len(content_text), start + len(token) + 80)
-    snippet = " ".join(content_text[window_start:window_end].split())
+    snippet = collapse_whitespace(content_text[window_start:window_end])
     if window_start > 0:
         snippet = f"...{snippet}"
     if window_end < len(content_text):

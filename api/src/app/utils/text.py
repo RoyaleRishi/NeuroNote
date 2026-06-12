@@ -13,9 +13,14 @@ _WIKI_LINK_PATTERN = re.compile(r"\[\[([^\[\]]+)\]\]")
 _VALID_INCLUDE_TYPES = {"note", "entity", "relation"}
 
 
+def collapse_whitespace(value: str) -> str:
+    """Collapse internal runs of whitespace into single spaces and strip the ends."""
+    return " ".join(value.split())
+
+
 def normalize_title(value: str) -> str:
     """Collapse whitespace and strip a title string."""
-    return " ".join(value.split()).strip()
+    return collapse_whitespace(value)
 
 
 def normalize_title_key(value: str) -> str:

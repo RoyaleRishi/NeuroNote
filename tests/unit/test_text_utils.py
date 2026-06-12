@@ -2,12 +2,33 @@
 from __future__ import annotations
 
 from app.utils.text import (
+    collapse_whitespace,
     normalize_title,
     normalize_title_key,
     extract_wiki_link_titles,
     normalize_entity_key,
     normalize_include_types,
 )
+
+
+# ── collapse_whitespace ─────────────────────────────────────────────────────
+
+
+class TestCollapseWhitespace:
+    def test_empty_string(self) -> None:
+        assert collapse_whitespace("") == ""
+
+    def test_single_word(self) -> None:
+        assert collapse_whitespace("hello") == "hello"
+
+    def test_multiple_internal_spaces(self) -> None:
+        assert collapse_whitespace("foo    bar     baz") == "foo bar baz"
+
+    def test_leading_and_trailing_whitespace(self) -> None:
+        assert collapse_whitespace("   hello world   ") == "hello world"
+
+    def test_mixed_tabs_spaces_newlines(self) -> None:
+        assert collapse_whitespace("a\t b\n\nc \td") == "a b c d"
 
 
 # ── normalize_title ──────────────────────────────────────────────────────────
