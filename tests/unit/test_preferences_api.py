@@ -177,12 +177,12 @@ def test_load_user_llm_config_does_not_clobber_context_var(
         set_tenant_schema(None)  # always clean up so other tests are unaffected
 
 
-# ── _resolve_llm_settings (concepts route helper) ──────────────────────────
+# ── resolve_user_llm_settings (shared resolver in app/nlp/config) ───────────
 
 
 def test_resolve_llm_settings_edge_mode(db_session: "Session") -> None:
     """Edge mode returns None."""
-    from app.routes.concepts import _resolve_llm_settings
+    from app.nlp.config import resolve_user_llm_settings as _resolve_llm_settings
 
     result = _resolve_llm_settings(db_session)
     assert result is None
@@ -192,7 +192,7 @@ def test_resolve_llm_settings_cloud_mode(
     client: TestClient, db_session: "Session"
 ) -> None:
     """Cloud mode with API key returns overridden NlpSettings."""
-    from app.routes.concepts import _resolve_llm_settings
+    from app.nlp.config import resolve_user_llm_settings as _resolve_llm_settings
 
     client.put(
         "/v1/preferences",

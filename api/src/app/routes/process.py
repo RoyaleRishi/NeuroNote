@@ -1,9 +1,6 @@
 import logging
 
-from dataclasses import replace as _dataclass_replace
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
 from app.core.job_store import (
@@ -17,7 +14,7 @@ from app.core.auth import UserContext, get_current_user
 from app.db.repositories.note_repository import NoteRepository
 from app.db.tenant_session import get_tenant_session
 from app.core.rate_limiter import limiter
-from app.nlp.config import NlpSettings, get_nlp_settings
+from app.nlp.config import NlpSettings, resolve_user_llm_settings
 from app.nlp.pipeline import NoteNlpPipeline
 from app.services.note_processing_service import NoteNotFoundError, NoteProcessingService
 from shared.contracts.python.v1.process import (
@@ -31,12 +28,12 @@ _LOG = logging.getLogger(__name__)
 
 
 def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
-    """Load user's LLM preferences from the tenant schema.
+    """Background-thread wrapper around :func:`resolve_user_llm_settings`.
 
-    Returns an overridden NlpSettings for cloud mode with an API key,
-    or None for edge mode / missing key (fall back to server defaults).
+    Mints a tenant-bound session for ``schema_name`` (the HTTP layer's
+    ``get_tenant_session`` dependency is unavailable here) and delegates the
+    actual preference read / decrypt / settings build to the shared resolver.
     """
-    from app.core.crypto import decrypt_api_key, InvalidToken
     from app.db.engine import bind_session_to_tenant, get_session_factory
     from app.db.tenant import validate_schema_name
 
@@ -46,32 +43,7 @@ def _load_user_llm_config(schema_name: str) -> NlpSettings | None:
         url = str(session.get_bind().url)  # type: ignore[union-attr]
         if url.startswith("postgresql"):
             bind_session_to_tenant(session, schema_name)
-        rows = session.execute(
-            sa_text("SELECT key, value FROM user_preferences")
-        ).all()
-
-    prefs = {str(r[0]): str(r[1]) for r in rows}
-    if prefs.get("llm_mode") != "cloud" or not prefs.get("llm_api_key"):
-        return None
-
-    # Decrypt the API key; if it's invalid (wrong key or plaintext), log and skip.
-    api_key = prefs["llm_api_key"]
-    try:
-        api_key = decrypt_api_key(api_key)
-    except InvalidToken:
-        _LOG.warning("llm_api_key could not be decrypted (wrong key or plaintext); skipping cloud mode.")
-        return None
-
-    if not api_key:
-        return None
-
-    base = get_nlp_settings()
-    return _dataclass_replace(
-        base,
-        llm_api_key=api_key,
-        llm_base_url=prefs.get("llm_base_url", base.llm_base_url),
-        llm_model=prefs.get("llm_model", base.llm_model),
-    )
+        return resolve_user_llm_settings(session)
 
 
 def _run_processing_job(

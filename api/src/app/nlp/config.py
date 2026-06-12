@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, replace as _dataclass_replace
 import os
+
+from sqlalchemy import text as sa_text
+from sqlalchemy.orm import Session
+
+_LOG = logging.getLogger(__name__)
 
 
 def _as_bool(raw_value: str | None, *, default: bool) -> bool:
@@ -45,4 +51,41 @@ def get_nlp_settings() -> NlpSettings:
     )
 
 
-__all__ = ["NlpSettings", "get_nlp_settings"]
+def resolve_user_llm_settings(session: Session) -> NlpSettings | None:
+    """Return cloud-mode NlpSettings from ``user_preferences`` or None.
+
+    Reads the tenant's stored LLM preferences via the caller's session, decrypts
+    the API key, and produces an overridden ``NlpSettings``. Returns None when
+    the user is on edge mode, has no API key, or the stored key cannot be
+    decrypted — callers fall back to server defaults in that case.
+    """
+    from app.core.crypto import decrypt_api_key, InvalidToken
+
+    rows = session.execute(
+        sa_text("SELECT key, value FROM user_preferences")
+    ).all()
+    prefs = {str(r[0]): str(r[1]) for r in rows}
+    if prefs.get("llm_mode") != "cloud" or not prefs.get("llm_api_key"):
+        return None
+
+    try:
+        api_key = decrypt_api_key(prefs["llm_api_key"])
+    except InvalidToken:
+        _LOG.warning(
+            "llm_api_key could not be decrypted (wrong key or plaintext); skipping cloud mode."
+        )
+        return None
+
+    if not api_key:
+        return None
+
+    base = get_nlp_settings()
+    return _dataclass_replace(
+        base,
+        llm_api_key=api_key,
+        llm_base_url=prefs.get("llm_base_url", base.llm_base_url),
+        llm_model=prefs.get("llm_model", base.llm_model),
+    )
+
+
+__all__ = ["NlpSettings", "get_nlp_settings", "resolve_user_llm_settings"]
