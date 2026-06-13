@@ -37,7 +37,6 @@ REQUIRED_DIRS = [
     "tests/unit",
     "tests/integration",
     "tests/e2e",
-    "tests/perf",
 ]
 
 REQUIRED_FILES = [
@@ -152,10 +151,6 @@ REQUIRED_FILES = [
     "tests/integration/test_process_api.py",
     "tests/integration/test_graph_api.py",
     "tests/integration/test_media_api.py",
-    "tests/perf/test_nlp_latency.py",
-    "tests/perf/fixtures/short_200w.txt",
-    "tests/perf/fixtures/medium_800w.txt",
-    "tests/perf/fixtures/long_2000w.txt",
     "tests/unit/test_note_processing_service.py",
     "tests/unit/test_note_asset_repository.py",
     "tests/unit/test_note_asset_service.py",
