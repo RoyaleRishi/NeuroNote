@@ -25,6 +25,15 @@ export async function loginAsDev(page: Page): Promise<void> {
       `dev login failed: ${response.status()} ${await response.text()}`,
     );
   }
+
+  // Pin LLM mode to cloud so the EdgeConsentDialog — which renders as a
+  // full-screen scrim and intercepts pointer events on every other control —
+  // is never shown for tests that don't explicitly need it.  The edge-mode
+  // consent test snapshots and restores this value itself.
+  await page.request.put(`${API_BASE_URL}/v1/preferences`, {
+    data: { llm_mode: "cloud" },
+  });
+
   await page.goto("/");
   // The workspace shell renders a [data-testid="notes-workspace"] section
   // once `useAuth` has confirmed the session. If the cookie didn't make it,
