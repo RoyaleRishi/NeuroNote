@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * Compact status badge shown in the workspace header indicating the
- * current AI mode and (for edge mode) model readiness.
+ * Compact status badge shown in the workspace header indicating where note
+ * summaries are written and (for on-device mode) model readiness. It does NOT
+ * reflect the knowledge graph, which always runs on the server.
  *
  * Variants:
- *   - "Cloud AI" (cloud mode)
- *   - "Edge AI: Loading NN%" (downloading)
- *   - "Edge AI: Ready"
- *   - "Edge AI: WebGPU Required" (browser doesn't support WebGPU)
- *   - "Edge AI: Error" (initialisation failed)
+ *   - "Summaries: cloud" (cloud mode)
+ *   - "Summaries: on-device (NN%)" (downloading)
+ *   - "Summaries: on-device" (ready / idle)
+ *   - "Summaries: on-device (WebGPU needed)" (browser doesn't support WebGPU)
+ *   - "Summaries: on-device (error)" (initialisation failed)
  */
 
 import React from "react";
@@ -45,24 +46,24 @@ function styleFor(
   progress: ModelProgress | null,
 ): BadgeStyle {
   if (mode === "cloud") {
-    return { label: "Cloud AI", variant: "cloud" };
+    return { label: "Summaries: cloud", variant: "cloud" };
   }
 
-  // Edge mode (or unknown — default to edge styling so users see progress).
+  // On-device mode (or unknown — default to edge styling so users see progress).
   switch (status) {
     case "downloading": {
       const pct = Math.round((progress?.progress ?? 0) * 100);
-      return { label: `Edge AI: Loading ${pct}%`, variant: "downloading" };
+      return { label: `Summaries: on-device (${pct}%)`, variant: "downloading" };
     }
     case "ready":
-      return { label: "Edge AI: Ready", variant: "ready" };
+      return { label: "Summaries: on-device", variant: "ready" };
     case "unsupported":
-      return { label: "Edge AI: WebGPU Required", variant: "unsupported" };
+      return { label: "Summaries: on-device (WebGPU needed)", variant: "unsupported" };
     case "error":
-      return { label: "Edge AI: Error", variant: "error" };
+      return { label: "Summaries: on-device (error)", variant: "error" };
     case "idle":
     default:
-      return { label: "Edge AI: Idle", variant: "idle" };
+      return { label: "Summaries: on-device", variant: "idle" };
   }
 }
 

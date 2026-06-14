@@ -38,6 +38,13 @@
   --font-semibold: 600;
   --font-bold:     700;
 
+  /* Font families. `--font-serif-next` is injected by next/font in layout.tsx
+     and only used for the note editor surface; UI chrome stays on the sans
+     stack. */
+  --font-family-body: "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+  --font-family-serif: var(--font-serif-next), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-family-mono: "SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace;
+
   /* ── Border Radius ──────────────────────────────────────── */
   --radius-sm:   4px;
   --radius-md:   8px;
@@ -102,22 +109,23 @@
   --info-bg:   #dbeafe;
   --info-text: #1e40af;
 
-  /* Graph colors */
-  --graph-node-note:        #1d6d4f;
-  --graph-node-entity:      #4568a6;
-  --graph-node-other:       #6c6f75;
-  --graph-edge:             #8ba296;
-  --graph-node-highlight:   #e07b1a;
-  --graph-edge-dim:         rgba(139, 162, 150, 0.15);
+  /* Graph colors — warmed to sit on the parchment canvas. Note vs. entity stay
+     distinct (olive vs. bronze) but both read warm. */
+  --graph-node-note:        #3f6b3a;  /* olive, matches accent */
+  --graph-node-entity:      #9a6b34;  /* warm bronze */
+  --graph-node-other:       #7a6f5a;  /* warm grey */
+  --graph-edge:             #b8a585;  /* warm taupe */
+  --graph-node-highlight:   #e07b1a;  /* amber (already warm) */
+  --graph-edge-dim:         rgba(184, 165, 133, 0.18);
   --graph-node-dim-opacity: 0.2;
-  --graph-node-stroke-default:   #ffffff;
-  --graph-node-stroke-root:      #0f4e39;
+  --graph-node-stroke-default:   #faf4e6;  /* paper, matches panel-bg */
+  --graph-node-stroke-root:      #335a30;
   --graph-node-stroke-highlight: #b85e10;
-  --graph-label-default:         #6c6f75;
+  --graph-label-default:         #6f6450;  /* walnut */
   --graph-label-highlight:       #7a3d0a;
 
-  /* Overlay scrim used for modal/dialog backgrounds. */
-  --overlay-scrim: rgba(15, 23, 42, 0.45);
+  /* Overlay scrim used for modal/dialog backgrounds — warm sepia-dark. */
+  --overlay-scrim: rgba(40, 30, 15, 0.45);
 
   /* Foreground for text rendered on accent/danger/info colored fills. */
   --text-on-accent: #ffffff;

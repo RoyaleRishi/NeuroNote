@@ -32,7 +32,6 @@ import {
   importNote,
   listNotes,
   saveNote,
-  updatePreferences,
 } from "../../lib/api-client";
 import type { WorkspaceFilters } from "../../lib/workspace/types";
 import type { QuickSwitchItem } from "../../lib/workspace/quick-switch";
@@ -235,7 +234,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const { user } = useAuth();
 
   // ── Preferences ──
-  const { prefs, reload: reloadPrefs } = usePreferences();
+  const { prefs, mutate: mutatePrefs } = usePreferences();
 
   // ── Edge LLM lifecycle ──
   // Bumping `edgeRetryToken` re-runs WebGPU detection + engine init
@@ -246,12 +245,11 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
 
   const switchToCloud = useCallback(async () => {
     try {
-      await updatePreferences({ llm_mode: "cloud" });
-      void reloadPrefs();
+      await mutatePrefs({ llm_mode: "cloud" });
     } catch (err) {
       reportUserError("switchToCloud", err);
     }
-  }, [reloadPrefs]);
+  }, [mutatePrefs]);
 
   // ── Extracted hooks ──
   const qs = useQuickSwitch(notes, selectedNoteId);
@@ -1089,6 +1087,10 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             setAppView("notes");
             setSelectedNoteId(nextNoteId);
             setHighlightedNoteId(nextNoteId);
+          }}
+          onCreateNote={() => {
+            setAppView("notes");
+            void handleCreateNote();
           }}
         />
       ) : (

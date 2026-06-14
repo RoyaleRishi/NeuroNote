@@ -3,8 +3,8 @@
 /**
  * Modal shown when the user has selected edge mode but the browser does
  * not support WebGPU. Offers two paths forward:
- *   - "Switch to Cloud AI" — opens the LLM settings modal so the user
- *     can flip the mode toggle.
+ *   - "Switch to cloud" — opens the LLM settings modal so the user
+ *     can flip the summaries mode toggle.
  *   - "Try Again" — re-checks WebGPU support (e.g. after the user has
  *     enabled an experimental flag in their browser).
  */
@@ -81,8 +81,8 @@ export function WebGPUCheck({
           }}
         >
           Your browser doesn&apos;t support WebGPU, which is required for
-          in-browser AI. You can switch to Cloud AI mode (with your own API
-          key) instead, or try a Chromium-based browser with WebGPU enabled.
+          on-device summaries. You can switch to cloud summaries (with your own
+          API key) instead, or try a Chromium-based browser with WebGPU enabled.
         </p>
         <div
           style={{
@@ -104,7 +104,7 @@ export function WebGPUCheck({
             className="btn btn-primary btn-sm"
             onClick={onOpenSettings}
           >
-            Switch to Cloud AI
+            Switch to cloud
           </button>
         </div>
       </div>

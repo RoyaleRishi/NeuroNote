@@ -4,15 +4,16 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("../../lib/api-client", () => ({
   logoutUser: vi.fn(),
-  updatePreferences: vi.fn(),
   testLlmConnection: vi.fn(),
 }));
 vi.mock("../../lib/hooks/usePreferences", () => ({
   usePreferences: vi.fn(),
 }));
 
-import { updatePreferences, testLlmConnection } from "../../lib/api-client";
+import { testLlmConnection } from "../../lib/api-client";
 import { usePreferences } from "../../lib/hooks/usePreferences";
+import { ToastProvider } from "../../lib/toast";
+import { ToastContainer } from "../ui/ToastContainer";
 
 import { UserMenu } from "./UserMenu";
 
@@ -24,25 +25,35 @@ const user = {
   schema_name: "user_test",
 };
 
-describe("UserMenu — cloud save validation", () => {
+const cloudPrefs = {
+  llm_mode: "cloud" as const,
+  llm_api_key: "",
+  llm_base_url: "https://api.anthropic.com/v1",
+  llm_model: "claude-3-5-haiku-latest",
+  confidence_threshold: 0.9,
+};
+
+let mutate: ReturnType<typeof vi.fn>;
+
+/** Render the menu inside the real toast providers so toasts can be asserted. */
+function renderMenu() {
+  return render(
+    <ToastProvider>
+      <UserMenu user={user as unknown as never} />
+      <ToastContainer />
+    </ToastProvider>,
+  );
+}
+
+describe("UserMenu — feedback & persistence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mutate = vi.fn().mockResolvedValue(cloudPrefs);
     (usePreferences as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      prefs: {
-        llm_mode: "cloud",
-        llm_api_key: "",
-        llm_base_url: "https://api.anthropic.com/v1",
-        llm_model: "claude-3-5-haiku-latest",
-        confidence_threshold: 0.9,
-      },
+      prefs: cloudPrefs,
+      loading: false,
       reload: vi.fn(),
-    });
-    (updatePreferences as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      llm_mode: "cloud",
-      llm_api_key: "****abcd",
-      llm_base_url: "https://api.anthropic.com/v1",
-      llm_model: "claude-3-5-haiku-latest",
-      confidence_threshold: 0.9,
+      mutate,
     });
   });
 
@@ -52,7 +63,7 @@ describe("UserMenu — cloud save validation", () => {
       message: "model: claude-3-5-haiku-latest not found",
     });
 
-    render(<UserMenu user={user as unknown as never} />);
+    renderMenu();
     fireEvent.click(screen.getByLabelText("Open settings"));
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
@@ -61,7 +72,7 @@ describe("UserMenu — cloud save validation", () => {
         screen.getByText(/claude-3-5-haiku-latest not found/),
       ).toBeInTheDocument(),
     );
-    expect(updatePreferences).toHaveBeenCalled();
+    expect(mutate).toHaveBeenCalled();
     expect(testLlmConnection).toHaveBeenCalled();
   });
 
@@ -71,12 +82,54 @@ describe("UserMenu — cloud save validation", () => {
       message: "Connection successful.",
     });
 
-    render(<UserMenu user={user as unknown as never} />);
+    renderMenu();
     fireEvent.click(screen.getByLabelText("Open settings"));
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/Connection successful/i)).toBeInTheDocument(),
     );
+  });
+
+  it("fires a success toast after saving cloud settings (no reload needed)", async () => {
+    (testLlmConnection as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      message: "Connection successful.",
+    });
+
+    renderMenu();
+    fireEvent.click(screen.getByLabelText("Open settings"));
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Cloud summary settings saved")).toBeInTheDocument(),
+    );
+  });
+
+  it("toasts and persists when the summaries engine is toggled", async () => {
+    renderMenu();
+    fireEvent.click(screen.getByLabelText("Open settings"));
+    fireEvent.click(screen.getByRole("button", { name: "On-device" }));
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ llm_mode: "edge" })),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Summaries: on-device")).toBeInTheDocument(),
+    );
+  });
+
+  it("holds the dragged confidence value optimistically (no snap-back)", () => {
+    renderMenu();
+    fireEvent.click(screen.getByLabelText("Open settings"));
+    // Starts at the persisted 90%.
+    expect(screen.getByText("90%")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Confidence threshold"), {
+      target: { value: "0.7" },
+    });
+
+    // The label reflects the drag immediately, before any round-trip resolves.
+    expect(screen.getByText("70%")).toBeInTheDocument();
   });
 });

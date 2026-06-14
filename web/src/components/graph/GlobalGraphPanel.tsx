@@ -23,6 +23,7 @@ interface GlobalGraphPanelProps {
   onRetry: () => void;
   onFiltersChange: (next: GlobalGraphFilters) => void;
   onOpenNote: (noteId: string) => void;
+  onCreateNote?: () => void;
 }
 
 export function GlobalGraphPanel({
@@ -36,6 +37,7 @@ export function GlobalGraphPanel({
   onRetry,
   onFiltersChange,
   onOpenNote,
+  onCreateNote,
 }: GlobalGraphPanelProps) {
   const [insightNode, setInsightNode] = useState<LocalGraphNode | null>(null);
   const [nodeSearch, setNodeSearch] = useState("");
@@ -78,7 +80,7 @@ export function GlobalGraphPanel({
   return (
     <div className="global-graph-view" aria-label="Global graph view">
       <aside className="global-graph-sidebar">
-        <h2>Knowledge Graph</h2>
+        <h2 className="global-graph-title">Knowledge Graph</h2>
         <input
           className="notes-filter-input"
           type="text"
@@ -88,7 +90,7 @@ export function GlobalGraphPanel({
           onChange={(e) => setNodeSearch(e.target.value)}
         />
 
-        <div className="local-graph-filters">
+        <div className="notes-filters">
           <label className="notes-filter-label">
             Subject
             <select
@@ -124,9 +126,15 @@ export function GlobalGraphPanel({
           </label>
         </div>
 
-        <div className="local-graph-summary">
-          <p>{nodeCount} nodes</p>
-          <p>{edgeCount} edges</p>
+        <div className="workspace-stat-grid global-graph-stats">
+          <div className="workspace-stat-card">
+            <span className="workspace-stat-label">Nodes</span>
+            <span className="workspace-stat-value">{nodeCount}</span>
+          </div>
+          <div className="workspace-stat-card">
+            <span className="workspace-stat-label">Edges</span>
+            <span className="workspace-stat-value">{edgeCount}</span>
+          </div>
         </div>
         {graph?.meta.truncated && (
           <p className="global-graph-truncated-note">
@@ -145,6 +153,8 @@ export function GlobalGraphPanel({
             icon="🕸️"
             title="No notes yet"
             description="Start creating notes to see your knowledge graph."
+            actionLabel={onCreateNote ? "Create note" : undefined}
+            onAction={onCreateNote}
           />
         ) : (
           <D3GraphCanvas

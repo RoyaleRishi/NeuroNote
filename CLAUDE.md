@@ -76,7 +76,8 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 - `POST /v1/preferences/test-connection` validates a cloud-mode API key by making a test completion call.
 
 #### LLM dual-mode architecture
-- **Edge mode** (default): Gemma 4 E4B runs in-browser via WebGPU using `@mlc-ai/web-llm`. The deterministic concept-extraction pipeline runs server-side regardless of mode; edge mode skips the cloud LLM for per-note summaries and concept insights. Server is purely a data layer for these users — no LLM cost.
+- **`llm_mode` (`edge`|`cloud`) only controls the *generative* LLM** used for per-note **summaries and concept insights** — NOT the knowledge graph. Concept extraction (kbir-inspec + YAKE) and the cross-note **embedding model** always run server-side, identically in both modes. **UI copy must reflect this**: the toggle is labelled "Summaries & Insights" with options **"On-device"** / **"Cloud"** (not "Edge AI / Cloud AI" / "AI Mode"); the header badge reads "Summaries: on-device / cloud"; the consent dialog never claims notes "stay on this device" (in edge mode they still reach the server for the graph — the accurate claim is "not sent to an outside AI provider"). The stored value remains `edge`/`cloud`. Surfaces sharing this vocabulary: `UserMenu`, `EdgeConsentDialog`, `ModelStatusIndicator`, `EdgeCrashBanner`, `WebGPUCheck`.
+- **Edge (on-device) mode** (default): Gemma 4 E4B runs in-browser via WebGPU using `@mlc-ai/web-llm`. Edge mode skips the cloud LLM for per-note summaries and concept insights. Server is purely a data layer for these users — no LLM cost.
 - **Cloud mode**: User's `llm_api_key` is read from `user_preferences` and passed to `NoteProcessingService` / `ConceptInsightService` (via `_load_user_llm_config` helpers). Existing `POST /v1/process-note` flow is reused. Falls back to env-var key if user hasn't configured one.
 - Frontend orchestration lives in `web/src/lib/orchestration/{note-lifecycle,process-polling}.ts`. Edge-mode LLM inference is driven from the editor via the `useEdgeLLM` hook and `web/src/lib/edge-llm/model-manager.ts`; `NoteEditor.startProcessing` branches on `llmMode` prop.
 - Edge LLM lifecycle managed by `useEdgeLLM(enabled, retryToken)` hook — handles WebGPU detection, model download progress, ready state.
@@ -147,10 +148,11 @@ Migration files go in `api/alembic/versions/` — naming convention: `YYYYMMDD_N
 Both sides must stay in sync. When you change `shared/contracts/python/v1/graph.py`, update `shared/contracts/ts/v1/graph.ts` in the same commit. Fields that the backend always returns (even as `null`) must be **required-nullable** on the TS side (`field: T | null`), not optional (`field?: T`) — see `SaveNoteResponse.content_hash` and `ProcessStatusResponse.error` / `.extraction_summary` for the canonical shape.
 
 ### CSS design tokens
-All tokens are defined in `web/src/styles/tokens.css`. All new CSS must reference tokens, not hardcoded values:
-- **Colors**: `var(--text-strong)`, `var(--accent)`, `var(--accent-strong)`, `var(--accent-soft)`, `var(--panel-bg)`, `var(--panel-border)`, `var(--danger)`, `var(--info)`/`--info-text`, `var(--warning)`/`--warning-text`, `var(--success)`/`--success-text`
-- **Text on filled backgrounds**: `var(--text-on-accent)` for white-on-accent buttons/banners (do not write `#fff`)
-- **Overlay scrim**: `var(--overlay-scrim)` for modal/dialog backdrops (do not write `rgba(0,0,0,...)`)
+The app uses a **warm "aged-paper" theme** — parchment/cream surfaces with a warm olive-green accent. The temperature lives entirely in the `:root` primitive block at the top of `web/src/app/globals.css` (`--workspace-bg`, `--panel-bg`, `--text-strong`, `--accent`, etc.); re-toning those primitives propagates app-wide. All tokens are defined in `web/src/styles/tokens.css`. All new CSS must reference tokens, not hardcoded values:
+- **Colors**: `var(--text-strong)`, `var(--accent)`, `var(--accent-strong)`, `var(--accent-soft)`, `var(--panel-bg)`, `var(--panel-border)`, `var(--panel-border-strong)`, `var(--border-light)`, `var(--accent-subtle)`, `var(--danger)`, `var(--info)`/`--info-text`, `var(--warning)`/`--warning-text`, `var(--success)`/`--success-text`
+- **Text on filled backgrounds**: `var(--text-on-accent)` for text-on-accent buttons/banners (do not write `#fff` or `white`)
+- **Overlay scrim**: `var(--overlay-scrim)` (warm sepia-dark) for modal/dialog backdrops (do not write `rgba(0,0,0,...)`)
+- **Fonts**: `var(--font-family-body)` (sans UI chrome), `var(--font-family-serif)` (note editor body only — Newsreader via `next/font`, injected as `--font-serif-next` in `layout.tsx`), `var(--font-family-mono)`. The serif is scoped to `.tiptap-editor .ProseMirror`; never apply it to UI chrome.
 - **Font sizes**: `var(--text-xs)` (0.75rem) … `var(--text-4xl)` (2.25rem)
 - **Spacing**: `var(--space-1)` (4px) … `var(--space-20)` (80px)
 - **Z-indices**: `var(--z-dropdown)`, `var(--z-sticky)`, `var(--z-modal)`, `var(--z-toast)` — never write raw `1000`, `9000`, etc.
@@ -176,7 +178,8 @@ Complex state slices and cross-component behaviour extracted into composable hoo
 - `useSelectionMode()` — multi-select state + bulk dialog toggles
 - `useDismissable(containerRef, enabled, onDismiss)` — single source of truth for Escape-key + outside-mousedown dismissal of dropdowns/menus/panels. Replaces hand-rolled `useEffect` pairs (`UserMenu`, `ConceptInsightPanel`). Always prefer this hook over inline event listeners.
 - `useEdgeLLM(enabled, retryToken)` — WebGPU detection + edge model lifecycle
-- `useAuth`, `usePreferences` — server state for auth/preferences
+- `useAuth` — server state for auth
+- `usePreferences()` — reads the **app-wide `PreferencesProvider`** (`web/src/lib/preferences/PreferencesProvider.tsx`, mounted in `layout.tsx`). Returns `{ prefs, loading, reload, mutate }`. `mutate(payload)` PUTs and adopts the server-canonical response so **every** consumer (header `UserMenu` + workspace editor) reflects the change in the same tick — no reload. Outside a provider it transparently falls back to a local instance (for isolated unit tests). Surface user feedback via `useOptionalToast()` (`web/src/lib/toast.tsx`), which no-ops when no `ToastProvider` is present.
 
 ### Shared frontend UI utilities (`web/src/lib/ui/`)
 - `error-toast.ts` → `reportUserError(scope, err)` — single seam for surfacing component errors. Logs as `[neuronote:<scope>] <message>` in non-prod only. Replace any `console.error(...)` in components with this.
@@ -186,7 +189,7 @@ Complex state slices and cross-component behaviour extracted into composable hoo
 - `NoteContextMenu` (`web/src/components/workspace/NoteContextMenu.tsx`) — right-click menu extracted from `NotesWorkspace`. Self-contained keyboard a11y: auto-focuses first item, Arrow/Home/End navigation, Enter/Space activation (jsdom doesn't synthesise click from keydown — handled explicitly), Escape close. Outside-click is owned by the parent via a `display: contents` ref wrapper.
 
 ### Graph constants (`web/src/components/graph/graph-constants.ts`)
-All D3 graph rendering magic numbers (forces, sizes, animation timing) are defined here. D3GraphCanvas reads colors from CSS custom properties at render time.
+All D3 graph rendering magic numbers (forces, sizes, animation timing) are defined here. D3GraphCanvas reads colors from CSS custom properties at render time. `GRAPH_FORCES.centeringStrength` applies weak `forceX`/`forceY` toward the canvas centre so disconnected components can't drift off-screen (which used to make fit-to-view shrink everything into the corners). The global graph (`GlobalGraphPanel`) and its canvas share the app's rounded-card aesthetic.
 
 ### File import (`api/src/app/import_/`)
 - `markdown_parser.py` — line-by-line regex parser that converts markdown/text to TipTap JSON

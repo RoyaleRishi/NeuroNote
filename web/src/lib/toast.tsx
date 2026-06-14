@@ -27,6 +27,23 @@ export function useToast() {
   return context;
 }
 
+/** Stable no-op used when a component is rendered outside a ToastProvider. */
+const NOOP_TOAST: ToastContextValue = {
+  toasts: [],
+  showToast: () => {},
+  removeToast: () => {},
+};
+
+/**
+ * Like {@link useToast} but never throws when no provider is present — it
+ * returns a no-op instead. Use this in components that may legitimately render
+ * outside a ToastProvider (e.g. isolated unit tests) but still want to surface
+ * a toast when one is available.
+ */
+export function useOptionalToast(): ToastContextValue {
+  return useContext(ToastContext) ?? NOOP_TOAST;
+}
+
 interface ToastProviderProps {
   children: ReactNode;
 }

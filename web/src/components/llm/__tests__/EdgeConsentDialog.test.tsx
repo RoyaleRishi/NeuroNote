@@ -13,7 +13,7 @@ describe("EdgeConsentDialog", () => {
         onDismiss={vi.fn()}
       />,
     );
-    expect(screen.queryByText(/Choose how AI runs/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Choose how note summaries are written/i)).not.toBeInTheDocument();
   });
 
   it("renders both options when isOpen=true", () => {
@@ -25,12 +25,12 @@ describe("EdgeConsentDialog", () => {
         onDismiss={vi.fn()}
       />,
     );
-    expect(screen.getByText(/Choose how AI runs/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Use Edge AI/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Use Cloud AI/i })).toBeInTheDocument();
+    expect(screen.getByText(/Choose how note summaries are written/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Use on-device/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Use cloud/i })).toBeInTheDocument();
   });
 
-  it("calls onAccept when 'Use Edge AI' is clicked", () => {
+  it("calls onAccept when 'Use on-device' is clicked", () => {
     const onAccept = vi.fn();
     render(
       <EdgeConsentDialog
@@ -40,11 +40,11 @@ describe("EdgeConsentDialog", () => {
         onDismiss={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Use Edge AI/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Use on-device/i }));
     expect(onAccept).toHaveBeenCalledTimes(1);
   });
 
-  it("calls onDecline when 'Use Cloud AI' is clicked", () => {
+  it("calls onDecline when 'Use cloud' is clicked", () => {
     const onDecline = vi.fn();
     render(
       <EdgeConsentDialog
@@ -54,7 +54,7 @@ describe("EdgeConsentDialog", () => {
         onDismiss={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Use Cloud AI/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Use cloud/i }));
     expect(onDecline).toHaveBeenCalledTimes(1);
   });
 

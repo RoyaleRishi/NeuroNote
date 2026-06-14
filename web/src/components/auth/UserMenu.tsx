@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { logoutUser, testLlmConnection, updatePreferences } from "../../lib/api-client";
+import { logoutUser, testLlmConnection } from "../../lib/api-client";
 import { useDismissable } from "../../lib/hooks/useDismissable";
 import { usePreferences } from "../../lib/hooks/usePreferences";
+import { useOptionalToast } from "../../lib/toast";
 import type { UserProfile } from "../../../../shared/contracts/ts/v1/auth";
 
 interface UserMenuProps {
@@ -54,7 +55,7 @@ function AvatarCircle({
         height: `${size}px`,
         borderRadius: "50%",
         background: "var(--accent)",
-        color: "white",
+        color: "var(--text-on-accent)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -73,7 +74,8 @@ function AvatarCircle({
  * Handles AI mode toggling, cloud LLM config, confidence threshold, and sign-out.
  */
 export function UserMenu({ user }: UserMenuProps) {
-  const { prefs, reload } = usePreferences();
+  const { prefs, mutate } = usePreferences();
+  const { showToast } = useOptionalToast();
   const [isOpen, setIsOpen] = useState(false);
   const [cloudDraft, setCloudDraft] = useState({
     llm_api_key: "",
@@ -87,8 +89,16 @@ export function UserMenu({ user }: UserMenuProps) {
   const [testStatus, setTestStatus] = useState<
     { ok: boolean; message: string } | null
   >(null);
+  // Optimistic confidence value: the slider is driven by local state so it
+  // never snaps back to the persisted value during the debounce + round-trip.
+  const [localConfidence, setLocalConfidence] = useState(0.9);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const confidenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* Keep the optimistic slider in sync with persisted prefs */
+  useEffect(() => {
+    if (prefs) setLocalConfidence(prefs.confidence_threshold);
+  }, [prefs]);
 
   /* Sync cloud draft from prefs when dropdown opens */
   useEffect(() => {
@@ -105,22 +115,26 @@ export function UserMenu({ user }: UserMenuProps) {
 
   const handleModeChange = useCallback(
     async (mode: "edge" | "cloud") => {
-      await updatePreferences({ llm_mode: mode });
-      void reload();
+      try {
+        await mutate({ llm_mode: mode });
+        showToast(`Summaries: ${mode === "edge" ? "on-device" : "cloud"}`, "success");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Could not update AI mode.", "error");
+      }
     },
-    [reload],
+    [mutate, showToast],
   );
 
   const handleCloudSave = useCallback(async () => {
     setSaving(true);
     setTestStatus(null);
     try {
-      await updatePreferences({
+      await mutate({
         llm_api_key: cloudDraft.llm_api_key || undefined,
         llm_base_url: cloudDraft.llm_base_url,
         llm_model: cloudDraft.llm_model,
       });
-      void reload();
+      showToast("Cloud summary settings saved", "success");
       // Validate the just-saved config end-to-end.  We save first because
       // /v1/preferences/test-connection reads from the persisted prefs;
       // if validation fails the user keeps the bad config but is told why,
@@ -134,19 +148,31 @@ export function UserMenu({ user }: UserMenuProps) {
           message: exc instanceof Error ? exc.message : "Could not validate connection.",
         });
       }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not save settings.", "error");
     } finally {
       setSaving(false);
     }
-  }, [cloudDraft, reload]);
+  }, [cloudDraft, mutate, showToast]);
 
   const handleConfidenceChange = useCallback(
     (value: number) => {
+      setLocalConfidence(value); // optimistic — hold the dragged position
       if (confidenceTimerRef.current) clearTimeout(confidenceTimerRef.current);
       confidenceTimerRef.current = setTimeout(() => {
-        void updatePreferences({ confidence_threshold: value }).then(() => reload());
+        void mutate({ confidence_threshold: value })
+          .then(() => showToast("Confidence threshold updated", "success"))
+          .catch((err: unknown) => {
+            showToast(
+              err instanceof Error ? err.message : "Could not save threshold.",
+              "error",
+            );
+            // Revert the optimistic value to the last persisted one.
+            if (prefs) setLocalConfidence(prefs.confidence_threshold);
+          });
       }, 500);
     },
-    [reload],
+    [mutate, showToast, prefs],
   );
 
   const handleLogout = useCallback(async () => {
@@ -159,7 +185,6 @@ export function UserMenu({ user }: UserMenuProps) {
   const initials = getInitials(user.display_name, user.email);
   const label = user.display_name || user.email;
   const llmMode = prefs?.llm_mode ?? "edge";
-  const confidenceThreshold = prefs?.confidence_threshold ?? 0.9;
 
   return (
     <div className="user-menu-wrapper" ref={wrapperRef}>
@@ -186,9 +211,11 @@ export function UserMenu({ user }: UserMenuProps) {
             </div>
           </div>
 
-          {/* AI Mode toggle */}
+          {/* Summaries & insights engine — this only controls the generative
+              LLM used for note summaries and concept insights. Concept
+              extraction + the knowledge graph always run on the server. */}
           <div className="user-menu-section">
-            <span className="user-menu-label">AI Mode</span>
+            <span className="user-menu-label">Summaries &amp; Insights</span>
             <div className="user-menu-mode-toggle">
               <button
                 type="button"
@@ -196,7 +223,7 @@ export function UserMenu({ user }: UserMenuProps) {
                 onClick={() => void handleModeChange("edge")}
                 aria-pressed={llmMode === "edge"}
               >
-                Edge AI
+                On-device
               </button>
               <button
                 type="button"
@@ -204,15 +231,20 @@ export function UserMenu({ user }: UserMenuProps) {
                 onClick={() => void handleModeChange("cloud")}
                 aria-pressed={llmMode === "cloud"}
               >
-                Cloud AI
+                Cloud
               </button>
             </div>
 
             {llmMode === "edge" && (
               <p className="user-menu-mode-hint">
-                Runs locally in your browser · no API key needed
+                Written in your browser (Gemma) · not sent to any AI provider
               </p>
             )}
+
+            <p className="user-menu-mode-note">
+              Your concepts &amp; knowledge graph are always built on your
+              NeuroNote server — no setup, in either mode.
+            </p>
 
             {llmMode === "cloud" && (
               <div className="user-menu-cloud-fields">
@@ -273,7 +305,7 @@ export function UserMenu({ user }: UserMenuProps) {
             <div className="user-menu-confidence-row">
               <span className="user-menu-label">Confidence Threshold</span>
               <span className="user-menu-confidence-value">
-                {Math.round(confidenceThreshold * 100)}%
+                {Math.round(localConfidence * 100)}%
               </span>
             </div>
             <input
@@ -282,7 +314,7 @@ export function UserMenu({ user }: UserMenuProps) {
               min={0.5}
               max={1}
               step={0.05}
-              value={confidenceThreshold}
+              value={localConfidence}
               onChange={(e) => handleConfidenceChange(Number(e.target.value))}
               aria-label="Confidence threshold"
             />

@@ -90,4 +90,22 @@ test.describe("preferences round-trip", () => {
       timeout: 10_000,
     });
   });
+
+  test("saving cloud settings shows an immediate success toast (no reload)", async ({ page }) => {
+    // Regression guard for the "no feedback until reload" bug: a preference
+    // mutation must surface a toast in the same session, with no navigation.
+    await page.request.put(`${API_BASE_URL}/v1/preferences`, {
+      data: { llm_mode: "cloud" },
+    });
+    await page.reload();
+    await page.waitForSelector('[data-testid="notes-workspace"]', { state: "visible" });
+
+    await page.getByRole("button", { name: "Open settings" }).click();
+    const modelInput = page.getByRole("textbox", { name: "Model" });
+    await expect(modelInput).toBeVisible({ timeout: 5_000 });
+    await modelInput.fill("gpt-4o-mini");
+    await page.getByRole("button", { name: /^Save$/ }).click();
+
+    await expect(page.getByText("Cloud summary settings saved")).toBeVisible({ timeout: 10_000 });
+  });
 });

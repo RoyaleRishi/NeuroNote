@@ -3,15 +3,22 @@
 export const GRAPH_FORCES = {
   linkDistance: 90,
   chargeStrength: -200,
-  collideRadius: 20,
+  collideRadius: 22,
+  /**
+   * Weak pull toward the canvas centre on both axes. Without it, disconnected
+   * components fly apart under charge repulsion (nothing links them back),
+   * which inflates the bounding box so fit-to-view shrinks everything into the
+   * corners. A gentle centering force keeps the graph compact and framed.
+   */
+  centeringStrength: 0.06,
 } as const;
 
 export const GRAPH_SIZES = {
-  nodeRadius: 8,
-  rootRadius: 12,
-  highlightRadius: 14,
+  nodeRadius: 11,
+  rootRadius: 14,
+  highlightRadius: 16,
   maxRenderNodes: 300,
-  fitPadding: 48,
+  fitPadding: 56,
   labelMaxChars: 24,
   curveOffset: 15,
 } as const;

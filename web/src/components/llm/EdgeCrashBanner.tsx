@@ -22,7 +22,7 @@ export function EdgeCrashBanner({ isOpen, onAcknowledge }: EdgeCrashBannerProps)
   return (
     <div role="status" aria-live="polite" className="edge-crash-banner">
       <span className="edge-crash-banner-message">
-        <strong>⚠ Edge AI didn't finish loading last time.</strong>{" "}
+        <strong>⚠ On-device summaries didn&apos;t finish loading last time.</strong>{" "}
         This usually means the device ran out of memory.
       </span>
       <button
@@ -30,14 +30,14 @@ export function EdgeCrashBanner({ isOpen, onAcknowledge }: EdgeCrashBannerProps)
         onClick={() => onAcknowledge("switchToCloud")}
         className="btn btn-sm btn-primary"
       >
-        Switch to Cloud AI
+        Switch to cloud
       </button>
       <button
         type="button"
         onClick={() => onAcknowledge("retry")}
         className="btn btn-sm btn-secondary"
       >
-        Try Edge AI again
+        Try on-device again
       </button>
       <button
         type="button"

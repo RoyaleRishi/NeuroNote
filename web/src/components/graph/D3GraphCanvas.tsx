@@ -179,7 +179,7 @@ export function D3GraphCanvas({
         .attr("pointer-events", "none")
         .text(
           d.label.length > GRAPH_SIZES.labelMaxChars
-            ? d.label.slice(0, GRAPH_SIZES.labelMaxChars)
+            ? `${d.label.slice(0, GRAPH_SIZES.labelMaxChars - 1)}…`
             : d.label,
         );
     });
@@ -243,6 +243,8 @@ export function D3GraphCanvas({
       )
       .force("charge", d3.forceManyBody<SimNode>().strength(GRAPH_FORCES.chargeStrength))
       .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("x", d3.forceX<SimNode>(width / 2).strength(GRAPH_FORCES.centeringStrength))
+      .force("y", d3.forceY<SimNode>(height / 2).strength(GRAPH_FORCES.centeringStrength))
       .force("collide", d3.forceCollide<SimNode>(GRAPH_FORCES.collideRadius));
 
     simulation.on("tick", () => {

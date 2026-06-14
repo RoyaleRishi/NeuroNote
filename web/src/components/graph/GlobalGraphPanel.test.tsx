@@ -77,6 +77,59 @@ describe("GlobalGraphPanel", () => {
     expect(onFiltersChange).toHaveBeenCalledWith({ tag: "lecture" });
   });
 
+  it("renders node/edge counts as stat chips", () => {
+    const graph = {
+      nodes: [
+        { id: "a", label: "A", type: "note", metadata: {} },
+        { id: "b", label: "B", type: "entity", metadata: {} },
+        { id: "c", label: "C", type: "entity", metadata: {} },
+      ],
+      edges: [{ source: "a", target: "b" }],
+      meta: emptyGraph.meta,
+    } as unknown as Parameters<typeof GlobalGraphPanel>[0]["graph"];
+    render(
+      <GlobalGraphPanel
+        baseUrl="http://localhost:8000"
+        graph={graph}
+        filters={{}}
+        isLoading={false}
+        errorMessage={null}
+        availableSubjects={[]}
+        availableTags={[]}
+        onRetry={() => {}}
+        onFiltersChange={() => {}}
+        onOpenNote={() => {}}
+      />,
+    );
+    // Stat chips carry the labels and computed counts.
+    expect(screen.getByText("Nodes")).toBeInTheDocument();
+    expect(screen.getByText("Edges")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+  });
+
+  it("offers a create action in the empty state when onCreateNote is provided", () => {
+    const onCreateNote = vi.fn();
+    render(
+      <GlobalGraphPanel
+        baseUrl="http://localhost:8000"
+        graph={emptyGraph}
+        filters={{}}
+        isLoading={false}
+        errorMessage={null}
+        availableSubjects={[]}
+        availableTags={[]}
+        onRetry={() => {}}
+        onFiltersChange={() => {}}
+        onOpenNote={() => {}}
+        onCreateNote={onCreateNote}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Create note" });
+    fireEvent.click(button);
+    expect(onCreateNote).toHaveBeenCalledTimes(1);
+  });
+
   it("does not render confidence slider or type checkboxes", () => {
     render(
       <GlobalGraphPanel

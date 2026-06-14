@@ -5,7 +5,7 @@
  * cloud AI (server with their API key). Shown once per browser, the
  * first time edge mode is selected, before any model download starts.
  *
- * Accepts via the "Use Edge AI" button. Declines via "Use Cloud AI"
+ * Accepts via the "Use on-device" button. Declines via "Use cloud"
  * (caller is responsible for flipping `llm_mode` to "cloud").
  * Closing without choosing (Esc) leaves consent absent — the dialog
  * re-shows on next reload.
@@ -49,7 +49,7 @@ export function EdgeConsentDialog({
         className="edge-consent-panel"
       >
         <h2 id="edge-consent-title" className="edge-consent-title">
-          Choose how AI runs
+          Choose how note summaries are written
         </h2>
         <p className="edge-consent-subtitle">
           You can change this later in settings.
@@ -58,24 +58,29 @@ export function EdgeConsentDialog({
         <div className="edge-consent-options">
           <div className="edge-consent-option">
             <strong className="edge-consent-option-title">
-              🖥️ Edge AI (in your browser)
+              🖥️ On-device (in your browser)
             </strong>
             <p className="edge-consent-option-desc">
-              Your notes never leave this device. Uses ~2GB of memory while you
-              work. Processing takes ~30s for long notes.
+              Summaries are written in your browser with Gemma — never sent to
+              an outside AI provider. Uses ~2GB of memory; ~30s for long notes.
             </p>
           </div>
 
           <div className="edge-consent-option">
             <strong className="edge-consent-option-title">
-              ☁️ Cloud AI (your API key)
+              ☁️ Cloud (your API key)
             </strong>
             <p className="edge-consent-option-desc">
-              Faster. Works on any device. Requires an API key from
-              OpenAI/Anthropic.
+              Faster summaries on any device, using your OpenAI/Anthropic API
+              key.
             </p>
           </div>
         </div>
+
+        <p className="edge-consent-footnote">
+          Either way, your concepts &amp; knowledge graph are built on your
+          NeuroNote server.
+        </p>
 
         <div className="edge-consent-actions">
           <button
@@ -83,14 +88,14 @@ export function EdgeConsentDialog({
             onClick={onDecline}
             className="btn btn-sm btn-secondary"
           >
-            Use Cloud AI
+            Use cloud
           </button>
           <button
             type="button"
             onClick={onAccept}
             className="btn btn-sm btn-primary"
           >
-            Use Edge AI
+            Use on-device
           </button>
         </div>
       </div>

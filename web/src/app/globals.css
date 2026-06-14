@@ -1,25 +1,30 @@
 :root {
-  /* App-specific palette (referenced by tokens.css semantic aliases) */
-  --workspace-bg: #eff2f0;
-  --workspace-surface: #f8faf8;
-  --panel-bg: #ffffff;
-  --panel-border: #d7ddd7;
-  --panel-border-strong: #bec8be;
-  --text-strong: #152316;
-  --text-muted: #526456;
-  --accent: #125f44;
-  --accent-strong: #0f4e39;
-  --accent-soft: #e6f2ec;
-  --accent-ink: #144c3a;
-  --danger: #a4232f;
-  --shadow-soft: 0 12px 36px rgb(15 23 42 / 10%);
-  --shadow-panel: 0 18px 42px rgb(18 35 22 / 9%);
+  /* App-specific palette — warm "aged paper" theme (parchment + olive accent).
+     Referenced by tokens.css semantic aliases. */
+  --workspace-bg: #ece0c8;        /* parchment outer */
+  --workspace-surface: #f4ecda;   /* lighter paper surface */
+  --panel-bg: #faf4e6;            /* cream panel */
+  --panel-border: #d8c9a8;        /* soft tan */
+  --panel-border-strong: #c4b288; /* stronger tan */
+  --text-strong: #2e2519;         /* espresso ink */
+  --text-muted: #6f6450;          /* walnut */
+  --accent: #3f6b3a;              /* warm olive-green */
+  --accent-strong: #335a30;
+  --accent-soft: #e6ead2;         /* pale warm olive */
+  --accent-ink: #2f5a2c;
+  --danger: #a4232f;              /* reads fine on warm surfaces */
+  --shadow-soft: 0 12px 36px rgb(60 45 20 / 12%);
+  --shadow-panel: 0 18px 42px rgb(60 45 20 / 12%);
 
   /* Derived utility tokens */
   --input-border: var(--panel-border);
   --input-focus-outline: var(--accent);
   --surface-subtle: var(--accent-soft);
   --surface-subtle-border: color-mix(in srgb, var(--accent) 25%, transparent);
+  /* Previously referenced but undefined — see extraction-summary-badge /
+     extraction-entity-pill. Define here so those components style correctly. */
+  --border-light: color-mix(in srgb, var(--panel-border) 60%, transparent);
+  --accent-subtle: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 *,
@@ -58,11 +63,11 @@ body {
 
 body {
   background:
-    radial-gradient(circle at -5% -20%, #fbfff5 0%, transparent 40%),
-    radial-gradient(circle at 110% 0%, #e9f4ef 0%, transparent 42%),
+    radial-gradient(circle at -5% -20%, #f7efdc 0%, transparent 40%),
+    radial-gradient(circle at 110% 0%, #efe4cb 0%, transparent 42%),
     linear-gradient(170deg, var(--workspace-surface) 0%, var(--workspace-bg) 100%);
   color: var(--text-strong);
-  font-family: "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+  font-family: var(--font-family-body);
 }
 
 .sr-only {
@@ -197,7 +202,7 @@ body {
   top: calc(100% + 4px);
   right: 0;
   z-index: var(--z-dropdown);
-  background: #fff;
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   box-shadow: var(--shadow-soft);
@@ -230,7 +235,7 @@ body {
 
 .workspace-stat-card {
   border: 1px solid var(--panel-border);
-  background: linear-gradient(155deg, #fff, #f3f8f4);
+  background: linear-gradient(155deg, var(--panel-bg), #f0e7d0);
   border-radius: 14px;
   padding: 10px 10px 8px;
   display: grid;
@@ -272,7 +277,7 @@ body {
   border-radius: 10px;
   padding: 8px 11px;
   font-size: var(--text-sm);
-  background: #fff;
+  background: var(--panel-bg);
 }
 
 .notes-filter-input:focus {
@@ -328,7 +333,7 @@ body {
   left: 0;
   right: 0;
   z-index: var(--z-dropdown);
-  background: #fff;
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 10px;
   box-shadow: var(--shadow-soft);
@@ -406,7 +411,7 @@ body {
   width: 100%;
   text-align: left;
   border: 1px solid var(--input-border);
-  background: linear-gradient(160deg, #ffffff, var(--workspace-surface));
+  background: linear-gradient(160deg, var(--panel-bg), var(--workspace-surface));
   border-radius: 14px;
   padding: 11px 12px 10px;
   cursor: pointer;
@@ -416,18 +421,18 @@ body {
 }
 
 .note-list-button:hover {
-  border-color: #b8c8bb;
-  background: #fff;
+  border-color: var(--panel-border-strong);
+  background: var(--panel-bg);
   transform: translateY(-1px);
 }
 
 .note-list-button.selected {
   border-color: var(--accent-strong);
-  background: linear-gradient(160deg, #edf6f1, #e4f1ea);
+  background: linear-gradient(160deg, #efe3c4, #e7d9b6);
 }
 
 .note-list-button.highlighted {
-  box-shadow: 0 0 0 2px #c7e2d5 inset;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent) inset;
 }
 
 .note-list-title {
@@ -494,7 +499,7 @@ body {
 
 .notes-chip {
   border: 1px solid var(--input-border);
-  background: #fff;
+  background: var(--panel-bg);
   border-radius: 999px;
   padding: 5px 11px;
   font-size: var(--text-sm);
@@ -617,24 +622,6 @@ body {
   font-size: var(--text-xs);
 }
 
-.local-graph-filters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.local-graph-filters label {
-  display: grid;
-  gap: 4px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-}
-
-.local-graph-filters select,
-.local-graph-filters input[type="range"] {
-  width: 100%;
-}
-
 .local-graph-type-filters {
   margin: 0;
   border: 1px solid var(--input-border);
@@ -675,7 +662,7 @@ body {
   background:
     radial-gradient(circle at 20% 20%, var(--accent-soft) 0%, transparent 48%),
     radial-gradient(circle at 80% 70%, var(--workspace-surface) 0%, transparent 44%),
-    #fff;
+    var(--panel-bg);
 }
 
 .local-graph-canvas-fallback {
@@ -701,7 +688,7 @@ body {
   width: 100%;
   border: 1px solid var(--input-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel-bg);
   padding: 7px 8px;
   display: flex;
   justify-content: space-between;
@@ -843,7 +830,7 @@ body {
   right: 0;
   z-index: var(--z-dropdown);
   width: 280px;
-  background: #fff;
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 14px;
   box-shadow: var(--shadow-soft);
@@ -973,7 +960,7 @@ body {
   border-radius: 11px;
   padding: 10px 12px;
   font-size: var(--text-base);
-  background: #fff;
+  background: var(--panel-bg);
 }
 
 .note-editor-title {
@@ -995,7 +982,7 @@ body {
 
 .editor-command-button {
   border: 1px solid var(--panel-border);
-  background: #fff;
+  background: var(--panel-bg);
   color: var(--accent-ink);
   border-radius: 999px;
   padding: 6px 11px;
@@ -1013,7 +1000,7 @@ body {
 .editor-palette {
   border: 1px solid var(--panel-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--panel-bg);
   box-shadow: var(--shadow-soft);
   padding: 9px;
 }
@@ -1070,7 +1057,12 @@ body {
 .tiptap-editor-shell {
   border: 1px solid var(--panel-border);
   border-radius: 18px;
-  background: linear-gradient(180deg, #fff, #fbfcfb);
+  /* Warm paper surface with a faint inline-SVG grain (top layer, ~4.5%
+     opacity) composited over the cream→ecru gradient. No external asset. */
+  background-color: var(--panel-bg);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, var(--panel-bg), #f6eeda);
   min-height: 420px;
 }
 
@@ -1081,9 +1073,12 @@ body {
   outline: none;
   white-space: pre-wrap;
   color: var(--text-strong);
+  /* Warm serif for the note reading/writing surface only — UI chrome stays
+     on the sans body stack. */
+  font-family: var(--font-family-serif);
   line-height: 1.72;
   overflow-wrap: anywhere;
-  font-size: 1rem;
+  font-size: 1.05rem;
   margin: 0 auto;
 }
 
@@ -1177,27 +1172,27 @@ body {
   display: block;
   margin: 10px 0;
   padding: 10px 12px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: #fbfcff;
+  background: var(--panel-bg);
   overflow-x: auto;
 }
 
 .math-inline-node.invalid,
 .math-block-node.invalid {
-  border-color: #e9b7bd;
-  background: #fff6f7;
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, var(--panel-bg));
 }
 
 .math-render-fallback {
   color: var(--danger);
-  font-family: "SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-family: var(--font-family-mono);
 }
 
 .editor-image-node {
   max-width: 100%;
   border-radius: 10px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--panel-border);
 }
 
 .note-context-menu {
@@ -1208,7 +1203,7 @@ body {
   z-index: var(--z-dropdown);
   border: 1px solid var(--panel-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--panel-bg);
   box-shadow: var(--shadow-soft);
   min-width: 180px;
 }
@@ -1240,7 +1235,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background: rgb(10 16 12 / 26%);
+  background: var(--overlay-scrim);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -1284,7 +1279,7 @@ body {
 .quick-switch-item {
   width: 100%;
   border: 1px solid var(--input-border);
-  background: linear-gradient(160deg, #ffffff, var(--workspace-surface));
+  background: linear-gradient(160deg, var(--panel-bg), var(--workspace-surface));
   border-radius: 10px;
   text-align: left;
   padding: 8px 10px;
@@ -1296,7 +1291,7 @@ body {
 .quick-switch-item:hover,
 .quick-switch-item.selected {
   border-color: var(--accent-strong);
-  background: linear-gradient(160deg, #edf6f1, #e4f1ea);
+  background: linear-gradient(160deg, #efe3c4, #e7d9b6);
 }
 
 .quick-switch-item-title {
@@ -1321,7 +1316,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background: rgb(10 16 12 / 30%);
+  background: var(--overlay-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1355,7 +1350,7 @@ body {
 
 .backlinks-close-button {
   border: 1px solid var(--panel-border);
-  background: #fff;
+  background: var(--panel-bg);
   color: var(--text-strong);
   border-radius: 999px;
   padding: 5px 10px;
@@ -1375,7 +1370,7 @@ body {
   width: 100%;
   border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel-bg);
   text-align: left;
   padding: 8px 10px;
   cursor: pointer;
@@ -1403,10 +1398,6 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 
-  .local-graph-filters {
-    grid-template-columns: 1fr;
-  }
-
   .local-graph-node-list {
     grid-template-columns: 1fr;
   }
@@ -1419,7 +1410,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1649,7 +1640,7 @@ body {
 }
 
 .modal-actions button.danger:hover {
-  background: #8a1c26;
+  background: color-mix(in srgb, var(--danger) 82%, black);
   box-shadow: 0 2px 8px rgba(164, 35, 47, 0.3);
 }
 
@@ -2257,7 +2248,7 @@ body {
   height: 36px;
   border-radius: 50%;
   border: 1px solid var(--panel-border);
-  background: #fff;
+  background: var(--panel-bg);
   color: var(--text-muted);
   font-size: var(--text-base);
   font-weight: 700;
@@ -2290,7 +2281,7 @@ body {
   pointer-events: all;
   width: 380px;
   max-height: 70vh;
-  background: #fff;
+  background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.12);
@@ -2590,25 +2581,46 @@ select:focus-visible {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  gap: 24px;
+  padding: 24px;
 }
 
+/* Mirror the Notes sidebar card so the graph view reads as the same app. */
 .global-graph-sidebar {
-  width: 240px;
+  width: 280px;
   flex-shrink: 0;
   overflow-y: auto;
-  padding: 16px;
-  border-right: 1px solid var(--panel-border);
+  padding: 20px;
   background: var(--panel-bg);
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 24px;
+  box-shadow: var(--shadow-panel);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
+.global-graph-title {
+  font-size: 1.55rem;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.global-graph-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* The canvas sits in its own rounded panel, matching the editor surface. */
 .global-graph-canvas-area {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: stretch;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border-strong);
+  border-radius: 24px;
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
 }
 
 .global-graph-truncated-note {
@@ -2702,7 +2714,7 @@ select:focus-visible {
   left: 0;
   right: 0;
   z-index: var(--z-dropdown);
-  background: #fff;
+  background: var(--panel-bg);
   border: 1px solid var(--input-border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.10);
@@ -2745,7 +2757,7 @@ select:focus-visible {
   border: 1px solid var(--input-border);
   border-radius: 11px;
   padding: 6px 12px;
-  background: #fff;
+  background: var(--panel-bg);
   cursor: text;
   transition: border-color 0.12s, outline 0.12s;
 }
@@ -2822,6 +2834,14 @@ select:focus-visible {
 .user-menu-identity-name  { font-size: var(--text-xs); font-weight: 700; color: var(--text-strong); }
 .user-menu-identity-email { font-size: var(--text-xs); color: var(--text-muted); }
 .user-menu-mode-hint      { margin: 6px 0 0; font-size: var(--text-xs); color: var(--text-muted); }
+.user-menu-mode-note {
+  margin: 8px 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-muted);
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
 .user-menu-cloud-input    { font-size: var(--text-xs); }
 .user-menu-cloud-input-row { display: flex; gap: 6px; }
 .user-menu-cloud-input-row .user-menu-cloud-input { flex: 1; }
@@ -2939,7 +2959,7 @@ select:focus-visible {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background: rgba(10 16 12 / 40%);
+  background: var(--overlay-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3130,7 +3150,7 @@ select:focus-visible {
 }
 
 .concept-insight-no-llm code {
-  font-family: "SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-family: var(--font-family-mono);
   font-size: 0.9em;
   background: var(--accent-soft);
   color: var(--accent-ink);
@@ -3402,6 +3422,15 @@ select:focus-visible {
   font-size: var(--text-sm);
   color: var(--text-muted);
   line-height: var(--leading-normal);
+}
+
+.edge-consent-footnote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-light);
 }
 
 .edge-consent-actions {

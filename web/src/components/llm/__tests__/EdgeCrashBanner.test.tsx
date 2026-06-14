@@ -12,22 +12,22 @@ describe("EdgeCrashBanner", () => {
   it("renders all three actions when isOpen=true", () => {
     render(<EdgeCrashBanner isOpen onAcknowledge={vi.fn()} />);
     expect(screen.getByText(/didn't finish loading/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Switch to Cloud AI/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Try Edge AI again/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Switch to cloud/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Try on-device again/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Dismiss/i })).toBeInTheDocument();
   });
 
-  it("calls onAcknowledge('switchToCloud') when 'Switch to Cloud AI' clicked", () => {
+  it("calls onAcknowledge('switchToCloud') when 'Switch to cloud' clicked", () => {
     const onAcknowledge = vi.fn();
     render(<EdgeCrashBanner isOpen onAcknowledge={onAcknowledge} />);
-    fireEvent.click(screen.getByRole("button", { name: /Switch to Cloud AI/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Switch to cloud/i }));
     expect(onAcknowledge).toHaveBeenCalledWith("switchToCloud");
   });
 
-  it("calls onAcknowledge('retry') when 'Try Edge AI again' clicked", () => {
+  it("calls onAcknowledge('retry') when 'Try on-device again' clicked", () => {
     const onAcknowledge = vi.fn();
     render(<EdgeCrashBanner isOpen onAcknowledge={onAcknowledge} />);
-    fireEvent.click(screen.getByRole("button", { name: /Try Edge AI again/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Try on-device again/i }));
     expect(onAcknowledge).toHaveBeenCalledWith("retry");
   });
 

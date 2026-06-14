@@ -64,17 +64,17 @@ describe("UserMenu", () => {
     await waitFor(() => expect(screen.queryByText("test@example.com")).not.toBeInTheDocument());
   });
 
-  it("calls updatePreferences with llm_mode cloud when Cloud AI pill clicked", async () => {
+  it("calls updatePreferences with llm_mode cloud when the Cloud pill clicked", async () => {
     render(<UserMenu user={mockUser} />);
     fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
-    await waitFor(() => screen.getByRole("button", { name: "Cloud AI" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cloud AI" }));
+    await waitFor(() => screen.getByRole("button", { name: "Cloud" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cloud" }));
     await waitFor(() =>
       expect(updatePreferences).toHaveBeenCalledWith(expect.objectContaining({ llm_mode: "cloud" }))
     );
   });
 
-  it("shows cloud config fields when Cloud AI mode is active", async () => {
+  it("shows cloud config fields when cloud summaries mode is active", async () => {
     const { fetchPreferences } = await import("../../../lib/api-client");
     vi.mocked(fetchPreferences).mockResolvedValue({
       llm_mode: "cloud",

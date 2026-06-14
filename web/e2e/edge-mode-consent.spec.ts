@@ -47,17 +47,17 @@ test.describe("edge mode consent", () => {
 
     // One of two dialogs renders depending on whether headless Chromium
     // exposes WebGPU:
-    //   * EdgeConsentDialog ("Choose how AI runs") when WebGPU is supported.
+    //   * EdgeConsentDialog ("Choose how note summaries are written") when WebGPU is supported.
     //   * WebGPUCheck modal ("WebGPU not supported") when it isn't.
     // Either outcome proves the edge-mode path is gated.  We accept whichever
     // shows and dismiss back to cloud.
-    const consentDialog = page.getByRole("dialog", { name: /Choose how AI runs/i });
+    const consentDialog = page.getByRole("dialog", { name: /Choose how note summaries are written/i });
     const unsupportedDialog = page.getByRole("dialog", { name: /WebGPU/i });
 
     await expect(consentDialog.or(unsupportedDialog)).toBeVisible({ timeout: 15_000 });
 
     if (await consentDialog.isVisible()) {
-      await consentDialog.getByRole("button", { name: "Use Cloud AI" }).click();
+      await consentDialog.getByRole("button", { name: "Use cloud" }).click();
     } else {
       // WebGPUCheck offers an "Open settings" affordance that flips back to
       // cloud via the onOpenSettings callback.  Title varies, so fall back

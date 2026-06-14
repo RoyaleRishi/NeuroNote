@@ -1,10 +1,29 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Newsreader } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "../styles/tokens.css";
 import "./globals.css";
 import { ToastProvider } from "../lib/toast";
 import { ToastContainer } from "../components/ui/ToastContainer";
+import { PreferencesProvider } from "../lib/preferences/PreferencesProvider";
+
+/**
+ * Warm serif used exclusively for the note editor surface (see
+ * `--font-family-serif` in tokens.css). UI chrome stays on the sans body
+ * stack. Exposed as the `--font-serif-next` CSS variable.
+ */
+const serif = Newsreader({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-serif-next",
+  display: "swap",
+  // Newsreader has no entry in Next's font-metrics table, which logs a noisy
+  // "Failed to find font override values" warning. Skip the synthetic fallback
+  // adjustment; `display: swap` already handles the load gracefully.
+  adjustFontFallback: false,
+});
 
 export const metadata: Metadata = {
   title: {
@@ -58,11 +77,13 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en">
+    <html lang="en" className={serif.variable}>
       <body>
         <ToastProvider>
-          {children}
-          <ToastContainer />
+          <PreferencesProvider>
+            {children}
+            <ToastContainer />
+          </PreferencesProvider>
         </ToastProvider>
       </body>
     </html>
