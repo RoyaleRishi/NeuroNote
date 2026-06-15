@@ -3,7 +3,7 @@
 Startup sequence:
   1. DB initialisation + required-extension validation (AGE, pgvector).
   2. Mark any jobs that were in-flight when the process last died as failed.
-  3. Prewarm NLP extraction models (kbir-inspec transformer + YAKE).
+  3. Prewarm the deterministic NLP pipeline (spaCy noun-chunker).
   4. Launch startup backfill to reprocess notes that have never been extracted.
 
 Middleware stack (inner to outer):
@@ -95,6 +95,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     backfill_service: StartupBackfillService | None = None
     settings = get_database_settings()
     if settings.database_url.startswith("postgresql"):
+        # Load the spaCy model once up front so the first note doesn't pay the
+        # model-load latency mid-request. Run it on a daemon thread so the ~1-2s
+        # load never blocks the async event loop / health checks at startup.
+        import threading
+
+        from app.nlp.extraction import prewarm as prewarm_nlp
+
+        threading.Thread(target=prewarm_nlp, name="nlp-prewarm", daemon=True).start()
         backfill_service = StartupBackfillService()
         backfill_service.run_async(backfill_service.run_note_reprocessing_backfill)
 

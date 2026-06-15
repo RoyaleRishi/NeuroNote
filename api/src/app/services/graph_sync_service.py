@@ -28,6 +28,18 @@ _STRUCTURAL_RELATIONS: frozenset[str] = frozenset({
     "REFERENCES",
 })
 
+# Durable concept-meta relations carry NO ``source_note_id``, so the note-scoped
+# delete-and-replace sync (``delete_concept_relation_edges`` matches on
+# ``source_note_id``) never removes them. Semantic IS_A hierarchy and SYNONYM_OF
+# links therefore accrete across note edits instead of being rebuilt each save.
+_DURABLE_RELATIONS: frozenset[str] = frozenset({
+    "IS_A",
+    "SYNONYM_OF",
+})
+
+# Every concept→concept predicate the deterministic pipeline may emit.
+_CONCEPT_RELATIONS: frozenset[str] = _STRUCTURAL_RELATIONS | _DURABLE_RELATIONS
+
 
 @dataclass(frozen=True, slots=True)
 class CanonicalEntityMapping:
@@ -325,7 +337,7 @@ class GraphSyncService:
         # predicate group emits a single UNWIND round-trip.
         accepted: list[ExtractedRelation] = []
         for relation in payload.relations:
-            if relation.predicate not in _STRUCTURAL_RELATIONS:
+            if relation.predicate not in _CONCEPT_RELATIONS:
                 _LOG.warning(
                     "Skipping relation with unknown predicate: note_id=%s predicate=%s",
                     payload.note_id, relation.predicate,
@@ -360,16 +372,21 @@ class GraphSyncService:
 
         edges_by_predicate: dict[str, list[dict[str, object]]] = {}
         for relation in accepted:
+            properties: dict[str, object] = {
+                "confidence": float(relation.confidence),
+                "predicate": relation.predicate,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+            # Durable meta edges intentionally omit source_note_id so they survive
+            # the note-scoped delete-and-replace. Each predicate is bucketed
+            # separately, so per-batch property keys stay homogeneous.
+            if relation.predicate not in _DURABLE_RELATIONS:
+                properties["source_note_id"] = payload.note_id
             edges_by_predicate.setdefault(relation.predicate, []).append({
                 "source_id": relation.subject_id,
                 "target_id": relation.object_id,
-                "properties": {
-                    "source_note_id": payload.note_id,
-                    "confidence": float(relation.confidence),
-                    "predicate": relation.predicate,
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                },
+                "properties": properties,
             })
 
         for predicate, edges in edges_by_predicate.items():

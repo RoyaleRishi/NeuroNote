@@ -78,6 +78,9 @@ def import_note(
         content_text=plain_text,
         updated_at=now_iso,
     )
+    # Commit unconditionally so the note persists regardless of whether a
+    # new job is created below (the existing-job path would otherwise roll back).
+    session.commit()
 
     # Queue NLP processing in background
     from app.core.job_store import create_or_get_job, mark_job_running

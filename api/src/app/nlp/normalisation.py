@@ -15,14 +15,14 @@ round-trip that dominated this hot path.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import Callable, Iterable
+from typing import Callable
 
 from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
 from app.nlp.extraction import ConceptSpan
+from app.nlp.resolution.embedding import cosine_similarity
 
 DEFAULT_COSINE_THRESHOLD = 0.88
 
@@ -47,17 +47,6 @@ class NormalisationResult:
     synonym_edges: list[SynonymEdge]
 
 
-def _cosine(a: Iterable[float], b: Iterable[float]) -> float:
-    aa = list(a)
-    bb = list(b)
-    dot = sum(x * y for x, y in zip(aa, bb))
-    na = math.sqrt(sum(x * x for x in aa))
-    nb = math.sqrt(sum(x * x for x in bb))
-    if na == 0 or nb == 0:
-        return 0.0
-    return dot / (na * nb)
-
-
 def _to_vector(raw: object) -> list[float]:
     """Coerce a pgvector column value to a list[float].
 
@@ -79,10 +68,12 @@ def _is_postgres_session(session: Session) -> bool:
     bind = session.get_bind()
     if bind is None:
         return False
-    try:
-        return str(bind.url).startswith("postgresql")
-    except Exception:
+    # ``get_bind()`` may return a ``Connection`` (no ``.url``); resolve to engine first.
+    engine = getattr(bind, "engine", bind)
+    url = getattr(engine, "url", None)
+    if url is None:
         return False
+    return str(url).startswith("postgresql")
 
 
 def _vector_literal(embedding: list[float]) -> str:
@@ -217,7 +208,7 @@ def _normalise_python(
         best_text: str | None = None
         best_sim = 0.0
         for ex_text, ex_emb in existing:
-            sim = _cosine(emb, ex_emb)
+            sim = cosine_similarity(emb, ex_emb)
             if sim > best_sim:
                 best_sim = sim
                 best_text = ex_text

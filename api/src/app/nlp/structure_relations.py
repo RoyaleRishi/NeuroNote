@@ -123,7 +123,7 @@ def derive_relations(
     """Walk TipTap blocks and emit typed structure edges between concepts.
 
     Matching is done against each concept's ``surface`` (the verbatim
-    span found by kbir/YAKE in this document), while edges are keyed by
+    noun phrase found in this document), while edges are keyed by
     ``canonical`` (the cross-note normalised identity). Two surfaces
     that share the same canonical are treated as the same logical concept
     and will not produce a self-pair MENTIONED_TOGETHER.

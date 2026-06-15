@@ -90,6 +90,40 @@ def test_structural_predicates_persist_with_their_own_label(predicate: str) -> N
     )
 
 
+@pytest.mark.parametrize("predicate", ["IS_A", "SYNONYM_OF"])
+def test_durable_predicates_persist_without_source_note_id(predicate: str) -> None:
+    """Durable concept-meta edges must omit source_note_id so the note-scoped
+    delete-and-replace never wipes them."""
+    repo = _FakeGraphRepository(session=None)
+    svc = _make_service(repo)
+    svc._upsert_relations(payload=_make_payload(predicate), now_iso="2026-05-09T00:00:00Z")
+
+    concept_calls = [
+        c for c in repo.upsert_typed_edge.call_args_list
+        if c.kwargs.get("relation_type") == predicate
+    ]
+    assert concept_calls, f"expected a {predicate!r} edge to be emitted"
+    for call in concept_calls:
+        props = call.kwargs.get("properties") or {}
+        assert "source_note_id" not in props, (
+            f"{predicate} is durable and must not carry source_note_id"
+        )
+
+
+def test_structural_predicate_carries_source_note_id() -> None:
+    """Structural edges remain note-scoped (carry source_note_id) so they are
+    rebuilt on each save."""
+    repo = _FakeGraphRepository(session=None)
+    svc = _make_service(repo)
+    svc._upsert_relations(payload=_make_payload("MENTIONED_TOGETHER"), now_iso="2026-05-09T00:00:00Z")
+    calls = [
+        c for c in repo.upsert_typed_edge.call_args_list
+        if c.kwargs.get("relation_type") == "MENTIONED_TOGETHER"
+    ]
+    assert calls
+    assert all("source_note_id" in (c.kwargs.get("properties") or {}) for c in calls)
+
+
 def test_unknown_predicate_is_skipped_and_warns(caplog: pytest.LogCaptureFixture) -> None:
     repo = _FakeGraphRepository(session=None)
     svc = _make_service(repo)

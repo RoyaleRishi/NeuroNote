@@ -11,6 +11,7 @@ import {
 
 import { fetchPreferences, updatePreferences } from "../api-client";
 import type { UserPreferences, UpdatePreferencesRequest } from "../api-client";
+import { useOptionalToast } from "../toast";
 
 /**
  * Single source of truth for the user's preferences (LLM mode, cloud config,
@@ -46,6 +47,7 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 export function usePreferencesState(active: boolean): PreferencesContextValue {
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
   const [loading, setLoading] = useState(active);
+  const { showToast } = useOptionalToast();
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -58,11 +60,23 @@ export function usePreferencesState(active: boolean): PreferencesContextValue {
     }
   }, []);
 
-  const mutate = useCallback(async (payload: UpdatePreferencesRequest) => {
-    const updated = await updatePreferences(payload);
-    setPrefs(updated);
-    return updated;
-  }, []);
+  const mutate = useCallback(
+    async (payload: UpdatePreferencesRequest) => {
+      try {
+        const updated = await updatePreferences(payload);
+        setPrefs(updated);
+        return updated;
+      } catch (err) {
+        // Surface the failure; leave existing `prefs` untouched so the UI
+        // doesn't silently reflect a change that never persisted.
+        const message =
+          err instanceof Error ? err.message : "Failed to save preferences";
+        showToast(message, "error");
+        throw err;
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     if (active) void reload();

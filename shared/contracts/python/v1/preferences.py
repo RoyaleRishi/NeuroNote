@@ -12,6 +12,9 @@ class UserPreferences(BaseModel):
     llm_base_url: str = Field(default="https://api.openai.com/v1")
     llm_model: str = Field(default="gpt-4o-mini")
     confidence_threshold: float = Field(default=0.9, ge=0.5, le=1.0)
+    # True when PREF_ENCRYPTION_KEY is set but the stored key can't be decrypted
+    # (e.g. after key rotation).  UI should prompt the user to re-enter their key.
+    llm_api_key_invalid: bool = Field(default=False)
 
 
 class UpdatePreferencesRequest(BaseModel):

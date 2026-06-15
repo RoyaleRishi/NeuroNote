@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from typing import cast
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -263,7 +264,7 @@ class GraphRepository:
                 target_label=target_label,
                 target_id=str(row["target_id"]),
                 relation_type=relation_type,
-                properties=dict(row.get("properties") or {}),  # type: ignore[arg-type]
+                properties=dict(cast("dict[str, object]", row.get("properties") or {})),
                 graph_name=graph_name,
             )
             return
@@ -279,7 +280,7 @@ class GraphRepository:
         # this by flattening properties into the row literal and emitting an
         # explicit `SET r.<key> = row.<key>` chain — same shape AGE accepts for
         # `upsert_nodes_batch` (which sets `n += row` against a flat row).
-        first_props = dict(edges[0].get("properties") or {})  # type: ignore[arg-type]
+        first_props = dict(cast("dict[str, object]", edges[0].get("properties") or {}))
         property_keys = list(first_props.keys())
 
         # Defense in depth: property keys are substituted into raw Cypher as
@@ -293,7 +294,7 @@ class GraphRepository:
         # validate so future regressions surface loudly.
         expected_keys = set(property_keys)
         for idx, row in enumerate(edges):
-            row_keys = set((row.get("properties") or {}).keys())  # type: ignore[union-attr]
+            row_keys = set(cast("dict[str, object]", row.get("properties") or {}).keys())
             if row_keys != expected_keys:
                 raise ValueError(
                     "upsert_typed_edges_batch: heterogeneous property keys in "
@@ -486,7 +487,10 @@ class GraphRepository:
 
         Runs two Cypher queries:
           1. Note→Entity MENTIONS (note-level aggregate edges)
-          2. Concept→Concept typed edges whose source_note_id is in note_ids
+          2. Concept→Concept edges in one pass — note-scoped structural edges
+             (filtered by source_note_id) OR durable meta edges (IS_A / SYNONYM_OF,
+             no source_note_id) between concepts these notes mention, so the
+             semantic hierarchy renders alongside the note-scoped structure.
         """
         if not note_ids or not self._is_postgresql():
             return GraphFetchResult()
@@ -513,10 +517,19 @@ class GraphRepository:
                 confidence=float(d.get("confidence", 0.0)),
             ))
 
-        # Query 2: Concept→Concept typed relation edges sourced from these notes
+        # Query 2: Concept→Concept edges — in ONE round-trip, both the note-scoped
+        # structural edges AND the durable meta edges (IS_A / SYNONYM_OF). Durable
+        # edges carry no source_note_id, so they're matched by concept membership
+        # (both endpoints mentioned by these notes); without them the semantic
+        # hierarchy would be persisted but never rendered.
+        mentioned_ids = sorted({m.entity_id for m in mentions if m.entity_id})
+        ids_json = json.dumps(mentioned_ids)
         relations_query = (
             f"MATCH (c1:Concept)-[r]->(c2:Concept) "
-            f"WHERE r.source_note_id IN {note_ids_json} "
+            f"WHERE (r.source_note_id IN {note_ids_json}) "
+            f"OR (r.source_note_id IS NULL "
+            f"AND c1.id IN {ids_json} AND c2.id IN {ids_json} "
+            f"AND r.confidence >= {min_conf_json}) "
             f"RETURN {{source_id: c1.id, target_id: c2.id, type: type(r), "
             f"confidence: r.confidence, source_note_id: r.source_note_id}}"
         )
@@ -528,7 +541,7 @@ class GraphRepository:
                 target_id=str(d.get("target_id", "")),
                 edge_type=str(d.get("type", "RELATED_TO")),
                 confidence=float(d.get("confidence", 0.0)),
-                source_note_id=str(d.get("source_note_id", "")),
+                source_note_id=str(d.get("source_note_id") or ""),
             ))
 
         return GraphFetchResult(mentions=mentions, relations=relations)

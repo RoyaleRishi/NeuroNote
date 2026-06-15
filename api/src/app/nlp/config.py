@@ -23,6 +23,12 @@ def _as_int(raw_value: str | None, *, default: int) -> int:
     return int(raw_value)
 
 
+def _as_float(raw_value: str | None, *, default: float) -> float:
+    if raw_value is None:
+        return default
+    return float(raw_value)
+
+
 @dataclass(frozen=True, slots=True)
 class NlpSettings:
     enable_embeddings: bool
@@ -34,6 +40,10 @@ class NlpSettings:
     llm_base_url: str = "https://api.anthropic.com/v1/"
     llm_timeout_ms: int = 8000
     use_semantic_embeddings: bool = False
+    # Deterministic concept-extraction tuning.
+    enable_yake_fallback: bool = False
+    salience_threshold_delta: float = 0.30
+    salience_redundancy_threshold: float = 0.86
 
 
 def get_nlp_settings() -> NlpSettings:
@@ -47,6 +57,15 @@ def get_nlp_settings() -> NlpSettings:
         llm_timeout_ms=_as_int(os.getenv("NLP_LLM_TIMEOUT_MS"), default=8000),
         use_semantic_embeddings=_as_bool(
             os.getenv("NLP_USE_SEMANTIC_EMBEDDINGS"), default=False
+        ),
+        enable_yake_fallback=_as_bool(
+            os.getenv("NLP_ENABLE_YAKE_FALLBACK"), default=False
+        ),
+        salience_threshold_delta=_as_float(
+            os.getenv("NLP_SALIENCE_THRESHOLD_DELTA"), default=0.30
+        ),
+        salience_redundancy_threshold=_as_float(
+            os.getenv("NLP_SALIENCE_REDUNDANCY_THRESHOLD"), default=0.86
         ),
     )
 
@@ -80,10 +99,24 @@ def resolve_user_llm_settings(session: Session) -> NlpSettings | None:
         return None
 
     base = get_nlp_settings()
+    user_base_url = prefs.get("llm_base_url", base.llm_base_url)
+
+    # Validate the user-supplied base URL before using it for outbound calls.
+    # On failure, log a warning and fall back to None (env-default settings).
+    from app.core.url_guard import validate_outbound_url
+
+    try:
+        validate_outbound_url(user_base_url)
+    except ValueError as exc:
+        _LOG.warning(
+            "Skipping cloud mode: stored llm_base_url is unsafe: %s", exc
+        )
+        return None
+
     return _dataclass_replace(
         base,
         llm_api_key=api_key,
-        llm_base_url=prefs.get("llm_base_url", base.llm_base_url),
+        llm_base_url=user_base_url,
         llm_model=prefs.get("llm_model", base.llm_model),
     )
 

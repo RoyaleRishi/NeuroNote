@@ -5,6 +5,9 @@ export interface UserPreferences {
   llm_base_url: string;
   llm_model: string;
   confidence_threshold: number;
+  /** True when PREF_ENCRYPTION_KEY is set but the stored key can't be decrypted
+   * (e.g. after key rotation). UI should prompt the user to re-enter their key. */
+  llm_api_key_invalid: boolean;
 }
 
 /** Partial update — only provided fields are written. */

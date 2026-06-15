@@ -75,8 +75,20 @@ def test_test_connection_with_key_success(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When the LLM client returns a response, test-connection succeeds."""
+    import socket
+
     # Store an API key first.
     client.put("/v1/preferences", json={"llm_api_key": "sk-test-key-1234"})
+
+    # The default llm_base_url (api.openai.com) may not resolve in the
+    # container — monkeypatch so URL validation passes without real DNS.
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("104.18.7.192", 0))
+        ],
+    )
 
     # Patch AsyncLLMClient.complete to return a canned response.
     async def _fake_complete(self: object, **kwargs: object) -> str:
@@ -96,7 +108,17 @@ def test_test_connection_with_key_llm_returns_none(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When the LLM returns None (e.g. bad model), test-connection returns failure."""
+    import socket
+
     client.put("/v1/preferences", json={"llm_api_key": "sk-test-key-1234"})
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("104.18.7.192", 0))
+        ],
+    )
 
     async def _fake_complete_none(self: object, **kwargs: object) -> None:
         return None
@@ -123,9 +145,21 @@ def test_load_user_llm_config_returns_none_for_edge_mode(client: TestClient) -> 
     assert result is None
 
 
-def test_load_user_llm_config_returns_settings_for_cloud(client: TestClient) -> None:
+def test_load_user_llm_config_returns_settings_for_cloud(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Cloud mode with API key returns overridden NlpSettings."""
+    import socket
     from app.routes.process import _load_user_llm_config
+
+    # Make the test hermetic: api.example.com resolves to a public IP in this env.
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("104.18.7.192", 0))
+        ],
+    )
 
     client.put(
         "/v1/preferences",
@@ -189,10 +223,21 @@ def test_resolve_llm_settings_edge_mode(db_session: "Session") -> None:
 
 
 def test_resolve_llm_settings_cloud_mode(
-    client: TestClient, db_session: "Session"
+    client: TestClient, db_session: "Session", monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Cloud mode with API key returns overridden NlpSettings."""
+    import socket
     from app.nlp.config import resolve_user_llm_settings as _resolve_llm_settings
+
+    # The default llm_base_url (api.openai.com) may not resolve inside the
+    # container — monkeypatch so the test is hermetic and doesn't need DNS.
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("104.18.7.192", 0))
+        ],
+    )
 
     client.put(
         "/v1/preferences",
@@ -234,3 +279,183 @@ def test_put_preferences_api_key_round_trips(
     client.put("/v1/preferences", json={"llm_api_key": "sk-real-key-abc123"})
     prefs = _load_preferences(db_session)
     assert prefs["llm_api_key"] == "sk-real-key-abc123"
+
+
+# ── crypto-failure surfacing ────────────────────────────────────────────────
+
+
+def test_load_preferences_sets_invalid_flag_on_bad_ciphertext(
+    client: TestClient, db_session: "Session", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When PREF_ENCRYPTION_KEY is set and stored ciphertext is invalid,
+    _load_preferences must set llm_api_key_invalid=True and NOT leak the raw value."""
+    from cryptography.fernet import Fernet
+    from sqlalchemy import text as sa_text
+    from app.routes.preferences import _load_preferences
+
+    # Write a ciphertext that is valid Fernet-looking bytes but was encrypted
+    # under a *different* key — so decryption will raise InvalidToken.
+    other_key = Fernet.generate_key()
+    bad_ciphertext = Fernet(other_key).encrypt(b"sk-secret").decode()
+
+    db_session.execute(
+        sa_text(
+            "INSERT INTO user_preferences (key, value, updated_at) "
+            "VALUES ('llm_api_key', :v, CURRENT_TIMESTAMP) "
+            "ON CONFLICT (key) DO UPDATE SET value = :v, updated_at = CURRENT_TIMESTAMP"
+        ),
+        {"v": bad_ciphertext},
+    )
+    db_session.commit()
+
+    result = _load_preferences(db_session)
+
+    # Key must be blank — not the raw ciphertext or plaintext.
+    assert result["llm_api_key"] == "", "raw/plaintext key must not be exposed"
+    # The invalid flag must be set so callers can surface an actionable error.
+    assert result.get("llm_api_key_invalid") is True, "llm_api_key_invalid must be True"
+
+
+def test_get_preferences_exposes_invalid_flag_in_response(
+    client: TestClient, db_session: "Session", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /v1/preferences must include llm_api_key_invalid=True when decryption fails."""
+    from cryptography.fernet import Fernet
+    from sqlalchemy import text as sa_text
+
+    other_key = Fernet.generate_key()
+    bad_ciphertext = Fernet(other_key).encrypt(b"sk-secret").decode()
+
+    db_session.execute(
+        sa_text(
+            "INSERT INTO user_preferences (key, value, updated_at) "
+            "VALUES ('llm_api_key', :v, CURRENT_TIMESTAMP) "
+            "ON CONFLICT (key) DO UPDATE SET value = :v, updated_at = CURRENT_TIMESTAMP"
+        ),
+        {"v": bad_ciphertext},
+    )
+    db_session.commit()
+
+    resp = client.get("/v1/preferences")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["llm_api_key_invalid"] is True
+    assert body["llm_api_key"] == ""
+
+
+def test_test_connection_returns_failure_on_bad_ciphertext(
+    client: TestClient, db_session: "Session"
+) -> None:
+    """test-connection must return success=False (not crash) when the stored
+    API key can't be decrypted, with a message telling the user to re-enter it."""
+    from cryptography.fernet import Fernet
+    from sqlalchemy import text as sa_text
+
+    other_key = Fernet.generate_key()
+    bad_ciphertext = Fernet(other_key).encrypt(b"sk-secret").decode()
+
+    db_session.execute(
+        sa_text(
+            "INSERT INTO user_preferences (key, value, updated_at) "
+            "VALUES ('llm_api_key', :v, CURRENT_TIMESTAMP) "
+            "ON CONFLICT (key) DO UPDATE SET value = :v, updated_at = CURRENT_TIMESTAMP"
+        ),
+        {"v": bad_ciphertext},
+    )
+    db_session.commit()
+
+    resp = client.post("/v1/preferences/test-connection")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is False
+    # Message must guide the user to re-enter their key.
+    assert "re-enter" in body["message"].lower() or "re-save" in body["message"].lower()
+
+
+# ── SSRF: url validation in test-connection ─────────────────────────────────
+
+
+def test_test_connection_rejects_private_base_url(
+    client: TestClient, db_session: "Session", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """test-connection must return success=False for a private/loopback base URL."""
+    import socket
+
+    # Store a valid-looking API key and a private base URL.
+    client.put(
+        "/v1/preferences",
+        json={
+            "llm_api_key": "sk-test-key-1234",
+            "llm_base_url": "https://169.254.169.254/v1",
+        },
+    )
+
+    # Make the metadata IP resolve to itself (it already is an IP literal, but
+    # monkeypatch anyway so the test is hermetic).
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("169.254.169.254", 0))
+        ],
+    )
+
+    resp = client.post("/v1/preferences/test-connection")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is False
+    # Message must mention the URL is invalid / not allowed.
+    assert any(
+        kw in body["message"].lower()
+        for kw in ("private", "loopback", "reserved", "non-public", "unsafe", "invalid")
+    )
+
+
+def test_test_connection_rejects_http_base_url(
+    client: TestClient,
+) -> None:
+    """test-connection must reject http:// base URLs (require https)."""
+    client.put(
+        "/v1/preferences",
+        json={
+            "llm_api_key": "sk-test-key-1234",
+            "llm_base_url": "http://api.openai.com/v1",
+        },
+    )
+    resp = client.post("/v1/preferences/test-connection")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is False
+    assert "https" in body["message"].lower() or "invalid" in body["message"].lower()
+
+
+# ── SSRF: url validation in resolve_user_llm_settings ────────────────────────
+
+
+def test_resolve_llm_settings_skips_cloud_mode_on_private_url(
+    client: TestClient, db_session: "Session", monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """resolve_user_llm_settings must return None (fall back to env default)
+    when the stored llm_base_url is a private/unsafe address."""
+    import socket
+    from app.nlp.config import resolve_user_llm_settings
+
+    client.put(
+        "/v1/preferences",
+        json={
+            "llm_mode": "cloud",
+            "llm_api_key": "sk-cloud-key",
+            "llm_base_url": "https://10.0.0.1/v1",
+        },
+    )
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, *a, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("10.0.0.1", 0))
+        ],
+    )
+
+    result = resolve_user_llm_settings(db_session)
+    assert result is None, "private base URL must cause fallback to None"

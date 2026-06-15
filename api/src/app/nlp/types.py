@@ -27,7 +27,7 @@ class ConceptSurface:
     """A concept with both its in-document surface form and its canonical identity.
 
     The matcher uses ``surface`` against the document text (guaranteed
-    to appear because kbir/YAKE extracted it from there). Edges are
+    to appear because the noun-chunker extracted it from there). Edges are
     emitted keyed by ``canonical`` so cross-note normalisation holds.
     """
 

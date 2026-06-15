@@ -10,6 +10,7 @@ import pytest
 from app.core.auth import (
     ACCESS_COOKIE_NAME,
     JWT_ALGORITHM,
+    JWT_AUDIENCE,
     UserContext,
     create_access_token,
     create_refresh_token,
@@ -38,7 +39,7 @@ def _set_jwt_secret(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_create_access_token_produces_valid_jwt() -> None:
     token = create_access_token("uid-1", "a@b.com", "user_abc")
-    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM])
+    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM], audience=JWT_AUDIENCE)
 
     assert claims["sub"] == "uid-1"
     assert claims["email"] == "a@b.com"
@@ -50,7 +51,7 @@ def test_create_access_token_produces_valid_jwt() -> None:
 
 def test_create_access_token_expiry_is_15_minutes() -> None:
     token = create_access_token("uid-1", "a@b.com", "user_abc")
-    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM])
+    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM], audience=JWT_AUDIENCE)
     # exp - iat should be 900 seconds (15 minutes)
     assert claims["exp"] - claims["iat"] == 900
 
@@ -62,7 +63,7 @@ def test_create_access_token_expiry_is_15_minutes() -> None:
 
 def test_create_refresh_token_produces_valid_jwt() -> None:
     token = create_refresh_token("uid-1")
-    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM])
+    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM], audience=JWT_AUDIENCE)
 
     assert claims["sub"] == "uid-1"
     assert claims["type"] == "refresh"
@@ -72,7 +73,7 @@ def test_create_refresh_token_produces_valid_jwt() -> None:
 
 def test_create_refresh_token_expiry_is_7_days() -> None:
     token = create_refresh_token("uid-1")
-    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM])
+    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM], audience=JWT_AUDIENCE)
     assert claims["exp"] - claims["iat"] == 7 * 24 * 3600
 
 
@@ -140,6 +141,62 @@ def test_decode_token_accepts_refresh_when_expected() -> None:
 
 
 # ---------------------------------------------------------------------------
+# H1 — JWT audience claim
+# ---------------------------------------------------------------------------
+
+
+def test_access_token_carries_audience_claim() -> None:
+    """Access tokens must embed aud == JWT_AUDIENCE."""
+    token = create_access_token("uid-aud", "aud@test.com", "user_aud")
+    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM], audience=JWT_AUDIENCE)
+    assert claims["aud"] == JWT_AUDIENCE
+
+
+def test_refresh_token_carries_audience_claim() -> None:
+    """Refresh tokens must embed aud == JWT_AUDIENCE."""
+    token = create_refresh_token("uid-aud-r")
+    claims = jwt.decode(token, TEST_SECRET, algorithms=[JWT_ALGORITHM], audience=JWT_AUDIENCE)
+    assert claims["aud"] == JWT_AUDIENCE
+
+
+def test_decode_token_rejects_wrong_audience() -> None:
+    """A token with a different audience must be rejected with 401."""
+    now = int(time.time())
+    payload = {
+        "sub": "uid-bad-aud",
+        "type": "access",
+        "aud": "other-service",
+        "exp": now + 900,
+        "iat": now,
+    }
+    token = jwt.encode(payload, TEST_SECRET, algorithm=JWT_ALGORITHM)
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        decode_token(token)
+    assert exc_info.value.status_code == 401
+
+
+def test_decode_token_rejects_missing_audience() -> None:
+    """A token without an aud claim must be rejected with 401."""
+    now = int(time.time())
+    payload = {
+        "sub": "uid-no-aud",
+        "type": "access",
+        "exp": now + 900,
+        "iat": now,
+    }
+    token = jwt.encode(payload, TEST_SECRET, algorithm=JWT_ALGORITHM)
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        decode_token(token)
+    assert exc_info.value.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # get_current_user
 # ---------------------------------------------------------------------------
 
@@ -183,15 +240,25 @@ def test_get_current_user_rejects_refresh_token() -> None:
 
 
 def test_get_current_user_rejects_malformed_access_token() -> None:
-    """An access token missing required claims must return 401."""
+    """An access token missing required identity claims must return 401.
+
+    The token is minted via ``create_access_token`` (so it carries a valid
+    ``aud``) but with minimal claims so ``KeyError`` is triggered inside
+    ``get_current_user`` after JWT decode succeeds.
+    """
+    # Use create_access_token so aud/type are present; override to strip identity claims.
+    import jwt as _jwt
+
+    now = int(time.time())
     payload = {
         "sub": "uid-9",
         "type": "access",
-        "exp": int(time.time()) + 900,
-        "iat": int(time.time()),
-        # email and schema_name intentionally missing
+        "aud": JWT_AUDIENCE,
+        "exp": now + 900,
+        "iat": now,
+        # email and schema_name intentionally missing — triggers KeyError
     }
-    token = jwt.encode(payload, TEST_SECRET, algorithm=JWT_ALGORITHM)
+    token = _jwt.encode(payload, TEST_SECRET, algorithm=JWT_ALGORITHM)
     request = MagicMock()
     request.cookies = {ACCESS_COOKIE_NAME: token}
 

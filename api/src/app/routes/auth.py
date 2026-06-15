@@ -21,6 +21,7 @@ from app.core.auth import (
     get_current_user,
 )
 from app.core.oauth_config import OAuthSettings, get_oauth_settings
+from app.core.rate_limiter import limiter
 from app.db.models.user import User
 from app.db.session import get_db_session
 from app.db.tenant import create_user_schema, mint_schema_name
@@ -116,7 +117,9 @@ def _is_dev_mode() -> bool:
 # ---------------------------------------------------------------------------
 
 @router.post("/auth/dev/login")
+@limiter.limit("10/minute")
 def dev_login(
+    request: Request,
     session: Session = Depends(get_db_session),
 ) -> JSONResponse:
     """Auto-create a dev user and issue tokens. Only when no providers are configured."""
@@ -160,6 +163,7 @@ def dev_status() -> dict:
 # ---------------------------------------------------------------------------
 
 @router.get("/auth/{provider}/login")
+@limiter.limit("10/minute")
 async def oauth_login(provider: str, request: Request) -> RedirectResponse:
     """Redirect the user to the OAuth provider's authorization page."""
     if provider not in _SUPPORTED_PROVIDERS:
@@ -189,6 +193,7 @@ def _assert_provider_configured(provider: str, settings: OAuthSettings) -> None:
 # ---------------------------------------------------------------------------
 
 @router.get("/auth/{provider}/callback")
+@limiter.limit("10/minute")
 async def oauth_callback(
     provider: str,
     request: Request,

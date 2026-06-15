@@ -216,3 +216,42 @@ def test_google_login_redirect(client: TestClient) -> None:
         client.get("/v1/auth/google/login", follow_redirects=False)
 
     mock_client.authorize_redirect.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# H2 — Rate-limit markers on auth endpoints
+# ---------------------------------------------------------------------------
+
+
+def test_auth_endpoints_carry_rate_limit_marker() -> None:
+    """dev_login, oauth_login, and oauth_callback must be registered in slowapi's route limits.
+
+    Hammering for a 429 via TestClient is flaky because limiter state persists
+    across tests and the in-memory store depends on the client IP key.  Instead
+    we inspect ``limiter._route_limits`` — a dict keyed by ``module.funcname``
+    that slowapi populates when ``@limiter.limit()`` is applied.  This is a
+    stable structural assertion that the decorator was applied correctly.
+    """
+    from app.core.rate_limiter import limiter
+
+    # Importing auth triggers registration of limits in the limiter.
+    import app.routes.auth  # noqa: F401
+
+    registered = limiter._route_limits
+    for qualified_name in (
+        "app.routes.auth.dev_login",
+        "app.routes.auth.oauth_login",
+        "app.routes.auth.oauth_callback",
+    ):
+        assert qualified_name in registered, (
+            f"{qualified_name} must be registered in limiter._route_limits"
+        )
+        assert len(registered[qualified_name]) >= 1, (
+            f"{qualified_name} has no rate-limit rules"
+        )
+
+    # Spot-check that dev_login carries a "10/minute" style limit string.
+    dev_limit_strings = [str(rl.limit) for rl in registered["app.routes.auth.dev_login"]]
+    assert any("10" in s for s in dev_limit_strings), (
+        f"Expected '10/minute' limit on dev_login, got: {dev_limit_strings}"
+    )

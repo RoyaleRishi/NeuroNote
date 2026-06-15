@@ -12,6 +12,8 @@ ACCESS_TOKEN_EXPIRY = timedelta(minutes=15)
 REFRESH_TOKEN_EXPIRY = timedelta(days=7)
 
 JWT_ALGORITHM = "HS256"
+# Audience claim — prevents token reuse across services sharing the same secret.
+JWT_AUDIENCE = "neuronote"
 
 # Cookie names — shared constants to prevent mismatches.
 ACCESS_COOKIE_NAME = "neuronote_access"
@@ -42,6 +44,7 @@ def create_access_token(user_id: str, email: str, schema_name: str) -> str:
         "email": email,
         "schema_name": schema_name,
         "type": "access",
+        "aud": JWT_AUDIENCE,
         "exp": now + ACCESS_TOKEN_EXPIRY,
         "iat": now,
     }
@@ -54,6 +57,7 @@ def create_refresh_token(user_id: str) -> str:
     payload = {
         "sub": user_id,
         "type": "refresh",
+        "aud": JWT_AUDIENCE,
         "exp": now + REFRESH_TOKEN_EXPIRY,
         "iat": now,
     }
@@ -67,7 +71,11 @@ def decode_token(token: str, *, expected_type: str = "access") -> dict:
     tokens from being used where access tokens are expected (and vice versa).
     """
     try:
-        claims = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        # audience= enforces the aud claim; InvalidAudienceError (a subclass of
+        # InvalidTokenError) is caught by the handler below → 401.
+        claims = jwt.decode(
+            token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM], audience=JWT_AUDIENCE
+        )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:

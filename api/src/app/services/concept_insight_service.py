@@ -211,22 +211,29 @@ class ConceptInsightService:
     def _find_notes(self, label: str, limit: int) -> list[Note]:
         """Find notes mentioning *label*.
 
-        Phase 1 — case-insensitive LIKE search on title + content (fast,
-        covers verbatim matches).
+        Phase 1 — case-insensitive **whole-word** search on title + content
+        (fast, covers verbatim matches without false hits like "art" inside
+        "smart"). On PostgreSQL this uses a word-boundary regex (``~*`` with
+        ``\\y``); on the SQLite test fallback it degrades to a substring LIKE.
         Phase 2 — query the AGE graph for MENTIONS edges (direct match) plus
         SYNONYM_OF and SUBTOPIC_OF traversal, catching concepts that were
         normalised during extraction (e.g. note says "ML" but concept is
         "machine learning") or are subtopics of the searched concept.
         """
-        like = f"%{label.lower()}%"
+        bind = self._session.bind
+        if bind is not None and bind.dialect.name == "postgresql":
+            # \y = word boundary in Postgres POSIX regex; ~* = case-insensitive.
+            pattern = rf"\y{re.escape(label)}\y"
+            title_match = Note.note_title.op("~*")(pattern)
+            content_match = Note.content_text.op("~*")(pattern)
+        else:
+            like = f"%{label.lower()}%"
+            title_match = func.lower(Note.note_title).like(like)
+            content_match = func.lower(Note.content_text).like(like)
+
         rows = self._session.execute(
             select(Note)
-            .where(
-                or_(
-                    func.lower(Note.note_title).like(like),
-                    func.lower(Note.content_text).like(like),
-                )
-            )
+            .where(or_(title_match, content_match))
             .order_by(Note.updated_at.desc())
             .limit(limit)
         ).scalars().all()

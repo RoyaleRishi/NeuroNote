@@ -18,11 +18,11 @@ COPY api/pyproject.toml api/pyproject.toml
 COPY api/uv.lock api/uv.lock
 RUN uv sync --project api --group dev --frozen
 
-# Pre-download the deterministic-extraction transformer + the
-# semantic-embedding model into HF_HOME so they're available even when
-# HF_HUB_OFFLINE=1 at runtime. Done in its own layer so source edits
-# don't bust the cached weights.
-RUN uv run --project api --no-sync python -c "import os; from transformers import AutoTokenizer, AutoModelForTokenClassification; m='ml6team/keyphrase-extraction-kbir-inspec'; AutoTokenizer.from_pretrained(m); AutoModelForTokenClassification.from_pretrained(m); from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+# Pre-download the semantic-embedding model into HF_HOME so it's available even
+# when HF_HUB_OFFLINE=1 at runtime. Done in its own layer so source edits don't
+# bust the cached weights. (Concept extraction now uses spaCy noun chunks — the
+# en_core_web_sm model is installed as a wheel via the dependency lock above.)
+RUN uv run --project api --no-sync python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 
 COPY infra/scripts/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
 RUN chmod +x /usr/local/bin/api-entrypoint.sh

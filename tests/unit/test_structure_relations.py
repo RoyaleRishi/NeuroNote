@@ -149,7 +149,7 @@ def test_matches_surface_but_emits_canonical_endpoints() -> None:
             "content": [{"type": "text", "text": "Variables hold data values."}],
         }],
     }
-    # The kbir surface is "Variables"; the cross-note canonical is "python variables".
+    # The extracted surface is "Variables"; the cross-note canonical is "python variables".
     # The matcher must find the word "Variables" (it's in the text) and emit edges
     # keyed by "python variables" (it's not in the text but is the canonical id).
     concepts = [

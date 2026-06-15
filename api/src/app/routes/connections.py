@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,7 @@ from app.db.tenant_session import get_tenant_session
 from app.nlp.semantic_linker import SemanticLinkerService
 from shared.contracts.python.v1.connections import NoteConnectionsResponse
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -25,6 +28,7 @@ def get_note_connections(
             min_strength=min_strength,
         )
     except Exception:
+        log.exception("Failed to compute connections for note_id=%s", note_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to compute connections",

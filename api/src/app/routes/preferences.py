@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.crypto import decrypt_api_key, encrypt_api_key, InvalidToken
+from app.core.url_guard import validate_outbound_url
 from app.db.tenant_session import get_tenant_session
 from shared.contracts.python.v1.preferences import (
     TestConnectionResponse,
@@ -28,19 +29,30 @@ _DEFAULTS: dict[str, str] = {
 }
 
 
-def _load_preferences(session: Session) -> dict[str, str]:
-    """Load all preference rows, merge with defaults, and decrypt llm_api_key."""
+def _load_preferences(session: Session) -> dict[str, object]:
+    """Load all preference rows, merge with defaults, and decrypt llm_api_key.
+
+    When decryption fails (e.g. after key rotation), the raw ciphertext is
+    discarded and ``llm_api_key_invalid`` is set to ``True`` so callers can
+    surface an actionable error instead of silently masking the failure.
+    """
     rows = session.execute(
         text("SELECT key, value FROM user_preferences")
     ).all()
     stored = {str(row[0]): str(row[1]) for row in rows}
-    prefs = {**_DEFAULTS, **stored}
+    prefs: dict[str, object] = {**_DEFAULTS, **stored}
+    prefs.setdefault("llm_api_key_invalid", False)
+
     if prefs.get("llm_api_key"):
         try:
-            prefs["llm_api_key"] = decrypt_api_key(prefs["llm_api_key"])
+            prefs["llm_api_key"] = decrypt_api_key(str(prefs["llm_api_key"]))
         except InvalidToken:
-            _LOG.warning("llm_api_key could not be decrypted (wrong key or plaintext); clearing.")
+            _LOG.warning(
+                "llm_api_key could not be decrypted (wrong key or tampered ciphertext); "
+                "clearing and flagging as invalid."
+            )
             prefs["llm_api_key"] = ""
+            prefs["llm_api_key_invalid"] = True
     return prefs
 
 
@@ -51,7 +63,7 @@ def get_preferences(
     """Return all user preferences with defaults for unset keys."""
     prefs = _load_preferences(session)
     # Mask the API key — only show last 4 chars.
-    api_key = prefs.get("llm_api_key", "")
+    api_key = str(prefs.get("llm_api_key", ""))
     if len(api_key) > 4:
         prefs["llm_api_key"] = "****" + api_key[-4:]
     return UserPreferences.model_validate(prefs)
@@ -88,7 +100,7 @@ def update_preferences(
     session.commit()
 
     # Mask API key in response (use in-memory prefs, not a second DB read).
-    api_key = prefs.get("llm_api_key", "")
+    api_key = str(prefs.get("llm_api_key", ""))
     if len(api_key) > 4:
         prefs["llm_api_key"] = "****" + api_key[-4:]
     return UserPreferences.model_validate(prefs)
@@ -106,15 +118,30 @@ async def test_connection(
     """
     prefs = _load_preferences(session)
 
-    api_key = prefs.get("llm_api_key", "")
+    # Surface decryption failures explicitly rather than treating them as "no key".
+    if prefs.get("llm_api_key_invalid"):
+        return TestConnectionResponse(
+            success=False,
+            message=(
+                "Stored API key could not be decrypted — please re-enter it in preferences."
+            ),
+        )
+
+    api_key = str(prefs.get("llm_api_key", ""))
     if not api_key:
         return TestConnectionResponse(
             success=False,
             message="No API key configured. Save an API key in preferences first.",
         )
 
-    base_url = prefs.get("llm_base_url", "https://api.openai.com/v1")
-    model = prefs.get("llm_model", "gpt-4o-mini")
+    base_url = str(prefs.get("llm_base_url", "https://api.openai.com/v1"))
+    model = str(prefs.get("llm_model", "gpt-4o-mini"))
+
+    # Validate before making any outbound request — prevent SSRF.
+    try:
+        validate_outbound_url(base_url)
+    except ValueError as exc:
+        return TestConnectionResponse(success=False, message=str(exc))
 
     from app.nlp.llm_client import AsyncLLMClient
 

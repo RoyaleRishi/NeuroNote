@@ -69,7 +69,8 @@ def _graph_name(schema_name: str) -> str:
 
 def _pg_create_schema(session: Session, schema_name: str) -> None:
     """Create the tenant schema and all tables on Postgres."""
-    session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
+    validate_schema_name(schema_name)
+    session.execute(text('CREATE SCHEMA IF NOT EXISTS "' + schema_name + '"'))
 
     # Ensure pgvector extension exists (database-wide, idempotent).
     session.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -117,6 +118,7 @@ def _pg_create_schema(session: Session, schema_name: str) -> None:
 
 def _pg_drop_schema(session: Session, schema_name: str) -> None:
     """Drop tenant schema and AGE graph on Postgres."""
+    validate_schema_name(schema_name)
     gname = _graph_name(schema_name)
     try:
         session.execute(text("LOAD 'age'"))
@@ -130,7 +132,7 @@ def _pg_drop_schema(session: Session, schema_name: str) -> None:
     except Exception:
         logger.warning("AGE graph drop skipped for %s", gname)
 
-    session.execute(text(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE"))
+    session.execute(text('DROP SCHEMA IF EXISTS "' + schema_name + '" CASCADE'))
     logger.info("Dropped tenant schema %s", schema_name)
 
 
