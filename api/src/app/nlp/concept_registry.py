@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import bindparam, text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -123,7 +124,7 @@ def prune_registry_rows(session: Session, entity_ids: list[str]) -> int:
     ids = [i for i in entity_ids if i]
     if not ids:
         return 0
-    result = session.execute(
+    result: CursorResult = session.execute(  # type: ignore[assignment]
         text("DELETE FROM concept_registry WHERE entity_id IN :ids").bindparams(
             bindparam("ids", expanding=True)
         ),
