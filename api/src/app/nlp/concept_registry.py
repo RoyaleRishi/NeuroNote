@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -110,9 +110,47 @@ def registry_size(session: Session) -> int:
     return int(row) if row else 0
 
 
+def prune_registry_rows(session: Session, entity_ids: list[str]) -> int:
+    """Delete concept_registry rows for the given entity ids (full forget).
+
+    Best-effort: returns the number of rows deleted, 0 on empty input or DB error.
+    """
+    ids = [i for i in entity_ids if i]
+    if not ids:
+        return 0
+    try:
+        result = session.execute(
+            text("DELETE FROM concept_registry WHERE entity_id IN :ids").bindparams(
+                bindparam("ids", expanding=True)
+            ),
+            {"ids": ids},
+        )
+        return int(result.rowcount or 0)
+    except SQLAlchemyError as exc:
+        _log.warning("prune_registry_rows failed: %s", exc, exc_info=True)
+        return 0
+
+
+def prune_orphan_registry_rows(session: Session, live_entity_ids: set[str]) -> int:
+    """Delete concept_registry rows whose entity_id is not in the live set.
+
+    Catch-all used by the reconcile backstop to clean drift where the graph node
+    was already removed. Best-effort.
+    """
+    try:
+        rows = session.execute(text("SELECT entity_id FROM concept_registry")).all()
+        stale = [str(r[0]) for r in rows if str(r[0]) not in live_entity_ids]
+        return prune_registry_rows(session, stale)
+    except SQLAlchemyError as exc:
+        _log.warning("prune_orphan_registry_rows failed: %s", exc, exc_info=True)
+        return 0
+
+
 __all__ = [
     "register_concepts",
     "register_concepts_with_embeddings",
     "get_known_concepts",
     "registry_size",
+    "prune_registry_rows",
+    "prune_orphan_registry_rows",
 ]
