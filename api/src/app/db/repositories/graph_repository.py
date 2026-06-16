@@ -334,6 +334,8 @@ class GraphRepository:
         source_note_id: str,
         graph_name: str = "neuronote",
     ) -> None:
+        if not self._is_postgresql():
+            return
         self.ensure_graph_exists(graph_name=graph_name)
         source_json = json.dumps(source_note_id)
 

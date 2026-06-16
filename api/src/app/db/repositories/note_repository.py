@@ -403,6 +403,13 @@ class NoteRepository:
         ).all()
         return [str(row[0]) for row in rows]
 
+    def list_live_subject_ids(self) -> list[str]:
+        """Distinct subject_ids across all live notes (drives Subject orphan GC)."""
+        rows = self._session.execute(
+            select(Note.subject_id).distinct()
+        ).all()
+        return [str(r[0]) for r in rows if r[0]]
+
     def delete_note(self, note_id: str) -> bool:
         existing = self._session.get(Note, note_id)
         if existing is None:

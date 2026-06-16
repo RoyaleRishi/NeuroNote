@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import UserContext, get_current_user
 from app.db.repositories.note_repository import NoteRepository, NoteTitleConflictError
 from app.db.tenant_session import get_tenant_session
+from app.services.graph_reconciliation_service import GraphReconciliationService
 from app.services.note_asset_service import reconcile_note_assets_for_note
 from shared.contracts.python.v1.note import (
     GetNoteResponse,
@@ -141,9 +143,17 @@ def list_notes(
 def delete_note(
     note_id: str,
     session: Session = Depends(get_tenant_session),
+    user: UserContext = Depends(get_current_user),
 ) -> Response:
+    graph_name = f"nn_{user.schema_name}"
+    repo = NoteRepository(session)
     with session.begin_nested():
-        deleted = NoteRepository(session).delete_note(note_id)
+        deleted = repo.delete_note(note_id)
+        if deleted:
+            live_subject_ids = repo.list_live_subject_ids()
+            GraphReconciliationService(
+                session=session, graph_name=graph_name
+            ).delete_note_graph(note_id=note_id, live_subject_ids=live_subject_ids)
     session.commit()
 
     if not deleted:

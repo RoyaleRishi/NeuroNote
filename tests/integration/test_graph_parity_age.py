@@ -85,3 +85,33 @@ def test_delete_orphan_concept_nodes_removes_unmentioned_entity_and_concept(db_s
     assert "p-keep" not in deleted
     live = repo.fetch_live_mentioned_ids(graph_name=_GRAPH)
     assert "p-keep" in live
+
+
+def test_two_notes_share_concept_delete_one_keeps_it_delete_both_forgets(db_session):
+    _require_pg(db_session)
+    from app.db.repositories.graph_repository import GraphRepository
+    from app.services.graph_reconciliation_service import GraphReconciliationService
+
+    repo = GraphRepository(db_session)
+    _seed_mention(repo, note_id="pp-n1", entity_id="p-shared", graph=_GRAPH)
+    repo.upsert_typed_edge(
+        source_label="Note", source_id="pp-n2", target_label="Entity",
+        target_id="p-shared", relation_type="MENTIONS",
+        properties={"source_note_id": "pp-n2", "confidence": 0.5}, graph_name=_GRAPH,
+    )
+    repo.upsert_node(label="Note", node_id="pp-n2",
+                     properties={"id": "pp-n2", "name": "n2", "source_note_id": "pp-n2"},
+                     graph_name=_GRAPH)
+    _seed_mention(repo, note_id="pp-n1b", entity_id="p-solo", graph=_GRAPH)
+    db_session.commit()
+
+    svc = GraphReconciliationService(session=db_session, graph_name=_GRAPH)
+    svc.delete_note_graph(note_id="pp-n1", live_subject_ids=[])
+    db_session.commit()
+    assert "p-shared" in repo.fetch_live_mentioned_ids(graph_name=_GRAPH)
+
+    svc.delete_note_graph(note_id="pp-n2", live_subject_ids=[])
+    svc.delete_note_graph(note_id="pp-n1b", live_subject_ids=[])
+    db_session.commit()
+    live = repo.fetch_live_mentioned_ids(graph_name=_GRAPH)
+    assert "p-shared" not in live and "p-solo" not in live
