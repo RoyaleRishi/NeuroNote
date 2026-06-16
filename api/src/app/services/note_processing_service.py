@@ -159,6 +159,18 @@ class NoteProcessingService:
                     )
                 )
 
+                # Parity: a save that dropped a concept can orphan its shared
+                # Entity/Concept nodes — sweep them in the same transaction.
+                from app.db.repositories.note_repository import NoteRepository
+                from app.services.graph_reconciliation_service import (
+                    GraphReconciliationService,
+                )
+
+                live_subject_ids = NoteRepository(session).list_live_subject_ids()
+                GraphReconciliationService(
+                    session=session, graph_name=self._graph_name
+                )._sweep_orphans(live_subject_ids=live_subject_ids)
+
         return ExtractionSummary(
             entity_count=len(result.entities),
             relation_count=len(result.relations),

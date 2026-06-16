@@ -115,3 +115,25 @@ def test_two_notes_share_concept_delete_one_keeps_it_delete_both_forgets(db_sess
     db_session.commit()
     live = repo.fetch_live_mentioned_ids(graph_name=_GRAPH)
     assert "p-shared" not in live and "p-solo" not in live
+
+
+def test_orphan_sweep_is_idempotent(db_session):
+    _require_pg(db_session)
+    from app.db.repositories.graph_repository import GraphRepository
+    from app.services.graph_reconciliation_service import GraphReconciliationService
+
+    repo = GraphRepository(db_session)
+    _seed_mention(repo, note_id="idem-n1", entity_id="idem-keep", graph=_GRAPH)
+    repo.upsert_node(label="Entity", node_id="idem-orphan",
+                     properties={"id": "idem-orphan", "name": "o", "kind": "concept"},
+                     graph_name=_GRAPH)
+    db_session.commit()
+
+    svc = GraphReconciliationService(session=db_session, graph_name=_GRAPH)
+    first = svc._sweep_orphans(live_subject_ids=[])
+    db_session.commit()
+    assert first[0] >= 1  # idem-orphan removed
+
+    second = svc._sweep_orphans(live_subject_ids=[])
+    db_session.commit()
+    assert second == (0, 0, 0)  # nothing left to prune — idempotent
