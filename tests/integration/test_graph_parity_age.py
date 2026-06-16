@@ -137,3 +137,40 @@ def test_orphan_sweep_is_idempotent(db_session):
     second = svc._sweep_orphans(live_subject_ids=[])
     db_session.commit()
     assert second == (0, 0, 0)  # nothing left to prune — idempotent
+
+
+def test_reconcile_converges_and_is_idempotent(db_session):
+    _require_pg(db_session)
+    from sqlalchemy import text as sa_text
+    from app.db.repositories.graph_repository import GraphRepository
+    from app.services.graph_reconciliation_service import GraphReconciliationService
+
+    # Use an isolated graph so leftover nodes from other tests don't pollute counts.
+    _ISOLATED = "nn_user_rc_idem01"
+
+    repo = GraphRepository(db_session)
+    # Ensure a clean slate (drop if leftover from a prior failed run).
+    db_session.execute(sa_text("LOAD 'age'"))
+    db_session.execute(sa_text('SET search_path = ag_catalog, "$user", public'))
+    exists = db_session.execute(
+        sa_text("SELECT 1 FROM ag_catalog.ag_graph WHERE name = :n"), {"n": _ISOLATED}
+    ).first()
+    if exists:
+        db_session.execute(sa_text(f"SELECT ag_catalog.drop_graph('{_ISOLATED}', true)"))
+        db_session.commit()
+
+    # Seed drift: a stale Note (no SQL row) + its orphan entity.
+    _seed_mention(repo, note_id="rc-stale", entity_id="rc-orphan", graph=_ISOLATED)
+    db_session.commit()
+
+    svc = GraphReconciliationService(session=db_session, graph_name=_ISOLATED)
+    first = svc.reconcile(live_note_ids=[], live_subject_ids=[])
+    db_session.commit()
+    assert first.pruned_note_artifacts >= 1
+
+    second = svc.reconcile(live_note_ids=[], live_subject_ids=[])
+    db_session.commit()
+    assert second.model_dump() == {
+        "pruned_note_artifacts": 0, "pruned_concept_nodes": 0,
+        "pruned_subject_nodes": 0, "pruned_registry_rows": 0, "reprocessed_notes": 0,
+    }

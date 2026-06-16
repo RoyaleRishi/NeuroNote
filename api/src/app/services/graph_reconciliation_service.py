@@ -44,6 +44,35 @@ class GraphReconciliationService:
         self._repository.delete_dangling_edges(graph_name=self._graph_name)
         return len(orphan_ids), len(pruned_subjects), pruned_registry
 
+    def reconcile(
+        self, *, live_note_ids: list[str], live_subject_ids: list[str]
+    ) -> GraphParityReport:
+        """Backstop: make AGE match SQL by reverse-pruning stale artifacts.
+
+        Idempotent — a converged tenant yields an all-zero report.
+        """
+        live_notes = set(live_note_ids)
+        age_note_ids = self._repository.fetch_age_note_ids(graph_name=self._graph_name)
+        stale = [nid for nid in age_note_ids if nid not in live_notes]
+        for nid in stale:
+            self._repository.delete_source_artifacts(
+                source_note_id=nid, graph_name=self._graph_name
+            )
+
+        concepts, subjects, registry = self._sweep_orphans(live_subject_ids=live_subject_ids)
+
+        # Catch-all: registry rows whose entity_id no longer maps to a live mention
+        # (drift where the graph node was already gone).
+        live_ids = self._repository.fetch_live_mentioned_ids(graph_name=self._graph_name)
+        registry += prune_orphan_registry_rows(self._session, live_ids)
+
+        return GraphParityReport(
+            pruned_note_artifacts=len(stale),
+            pruned_concept_nodes=concepts,
+            pruned_subject_nodes=subjects,
+            pruned_registry_rows=registry,
+        )
+
     def delete_note_graph(
         self, *, note_id: str, live_subject_ids: list[str]
     ) -> GraphParityReport:

@@ -45,3 +45,29 @@ def test_delete_note_graph_prunes_source_then_orphans_and_registry():
     assert report.pruned_registry_rows == 1
     remaining = {r[0] for r in session.execute(text("SELECT entity_id FROM concept_registry")).all()}
     assert remaining == {"id-keep"}
+
+
+class _ReconcileFakeRepo(_FakeRepo):
+    def __init__(self, _session):
+        super().__init__(_session)
+        self.age_note_ids = ["live-1", "stale-2"]
+
+    def fetch_age_note_ids(self, *, graph_name):
+        return list(self.age_note_ids)
+
+    def fetch_live_mentioned_ids(self, *, graph_name):
+        return {"id-keep"}
+
+
+def test_reconcile_reverse_prunes_notes_absent_from_sql():
+    session = _session()
+    repo = _ReconcileFakeRepo(session)
+    service = GraphReconciliationService(session=session, graph_name="nn_x", repository=repo)
+
+    report = service.reconcile(live_note_ids=["live-1"], live_subject_ids=["s1"])
+
+    assert "stale-2" in repo.deleted_sources
+    assert "live-1" not in repo.deleted_sources
+    assert report.pruned_note_artifacts == 1
+    remaining = {r[0] for r in session.execute(text("SELECT entity_id FROM concept_registry")).all()}
+    assert remaining == {"id-keep"}
