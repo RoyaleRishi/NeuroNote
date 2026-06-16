@@ -314,6 +314,9 @@ class StartupBackfillService:
                         live_note_ids=live_note_ids,
                         live_subject_ids=live_subject_ids,
                     )
+                    # Persist the prune: without this commit the session closes
+                    # and rolls back every AGE/registry mutation.
+                    session.commit()
                     _LOGGER.info(
                         "graph reconcile schema=%s graph=%s "
                         "pruned_note_artifacts=%d pruned_concept_nodes=%d "

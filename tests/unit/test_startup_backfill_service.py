@@ -77,3 +77,42 @@ def test_run_graph_reconcile_iterates_tenants(monkeypatch):
     svc.run_graph_reconcile()  # should not raise
     assert isinstance(calls, list)
 
+
+def test_run_graph_reconcile_commits_each_tenant(monkeypatch):
+    """Regression: the per-tenant reconcile session MUST be committed.
+
+    Without an explicit commit the ``with session_factory() as session`` block
+    closes and rolls back every AGE/registry mutation — the graph never changes.
+    """
+    from app.services import startup_backfill_service as mod
+
+    session = MagicMock()
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    factory = MagicMock(return_value=session)
+
+    note_repo = MagicMock()
+    note_repo.list_note_ids.return_value = []
+    note_repo.list_live_subject_ids.return_value = []
+
+    class _StubService:
+        def __init__(self, *, session, graph_name):
+            pass
+
+        def reconcile(self, *, live_note_ids, live_subject_ids):
+            from shared.contracts.python.v1.parity import GraphParityReport
+            return GraphParityReport()
+
+    monkeypatch.setattr(mod, "get_session_factory", lambda: factory)
+    monkeypatch.setattr(mod, "NoteRepository", lambda _s: note_repo)
+    monkeypatch.setattr(mod, "GraphReconciliationService", _StubService, raising=False)
+    monkeypatch.setattr(
+        mod.StartupBackfillService,
+        "_list_tenant_schemas",
+        staticmethod(lambda: ["user_abc123"]),
+    )
+
+    mod.StartupBackfillService().run_graph_reconcile()
+
+    session.commit.assert_called_once()
+
