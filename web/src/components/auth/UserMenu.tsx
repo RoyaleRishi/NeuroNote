@@ -89,15 +89,20 @@ export function UserMenu({ user }: UserMenuProps) {
   const [testStatus, setTestStatus] = useState<
     { ok: boolean; message: string } | null
   >(null);
-  // Optimistic confidence value: the slider is driven by local state so it
-  // never snaps back to the persisted value during the debounce + round-trip.
-  const [localConfidence, setLocalConfidence] = useState(0.9);
+  // Optimistic slider values: driven by local state so they never snap back to
+  // the persisted value during the debounce + round-trip. Two decoupled graph
+  // filters — concept relevance (node salience) and relationship strength.
+  const [localNodeSalience, setLocalNodeSalience] = useState(0.5);
+  const [localRelConfidence, setLocalRelConfidence] = useState(0.5);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const confidenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const thresholdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* Keep the optimistic slider in sync with persisted prefs */
+  /* Keep the optimistic sliders in sync with persisted prefs */
   useEffect(() => {
-    if (prefs) setLocalConfidence(prefs.confidence_threshold);
+    if (prefs) {
+      setLocalNodeSalience(prefs.node_salience_threshold);
+      setLocalRelConfidence(prefs.relationship_confidence_threshold);
+    }
   }, [prefs]);
 
   /* Sync cloud draft from prefs when dropdown opens */
@@ -155,20 +160,27 @@ export function UserMenu({ user }: UserMenuProps) {
     }
   }, [cloudDraft, mutate, showToast]);
 
-  const handleConfidenceChange = useCallback(
-    (value: number) => {
-      setLocalConfidence(value); // optimistic — hold the dragged position
-      if (confidenceTimerRef.current) clearTimeout(confidenceTimerRef.current);
-      confidenceTimerRef.current = setTimeout(() => {
-        void mutate({ confidence_threshold: value })
-          .then(() => showToast("Confidence threshold updated", "success"))
+  const handleThresholdChange = useCallback(
+    (
+      key: "node_salience_threshold" | "relationship_confidence_threshold",
+      value: number,
+      setLocal: (v: number) => void,
+    ) => {
+      setLocal(value); // optimistic — hold the dragged position
+      if (thresholdTimerRef.current) clearTimeout(thresholdTimerRef.current);
+      thresholdTimerRef.current = setTimeout(() => {
+        void mutate({ [key]: value })
+          .then(() => showToast("Graph filter updated", "success"))
           .catch((err: unknown) => {
             showToast(
-              err instanceof Error ? err.message : "Could not save threshold.",
+              err instanceof Error ? err.message : "Could not save filter.",
               "error",
             );
             // Revert the optimistic value to the last persisted one.
-            if (prefs) setLocalConfidence(prefs.confidence_threshold);
+            if (prefs) {
+              setLocalNodeSalience(prefs.node_salience_threshold);
+              setLocalRelConfidence(prefs.relationship_confidence_threshold);
+            }
           });
       }, 500);
     },
@@ -300,27 +312,62 @@ export function UserMenu({ user }: UserMenuProps) {
             )}
           </div>
 
-          {/* Confidence threshold */}
+          {/* Graph filters — two decoupled thresholds */}
           <div className="user-menu-section">
+            {/* Concept relevance (node salience) */}
             <div className="user-menu-confidence-row">
-              <span className="user-menu-label">Confidence Threshold</span>
+              <span className="user-menu-label">Concept relevance</span>
               <span className="user-menu-confidence-value">
-                {Math.round(localConfidence * 100)}%
+                {Math.round(localNodeSalience * 100)}%
               </span>
             </div>
             <input
               type="range"
               className="user-menu-confidence-slider"
-              min={0.5}
+              min={0}
               max={1}
               step={0.05}
-              value={localConfidence}
-              onChange={(e) => handleConfidenceChange(Number(e.target.value))}
-              aria-label="Confidence threshold"
+              value={localNodeSalience}
+              onChange={(e) =>
+                handleThresholdChange(
+                  "node_salience_threshold",
+                  Number(e.target.value),
+                  setLocalNodeSalience,
+                )
+              }
+              aria-label="Concept relevance threshold"
             />
             <div className="user-menu-confidence-bounds">
-              <span>50%</span>
-              <span>100%</span>
+              <span>Show all</span>
+              <span>Most relevant</span>
+            </div>
+
+            {/* Relationship strength (edge confidence) */}
+            <div className="user-menu-confidence-row">
+              <span className="user-menu-label">Relationship strength</span>
+              <span className="user-menu-confidence-value">
+                {Math.round(localRelConfidence * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              className="user-menu-confidence-slider"
+              min={0}
+              max={1}
+              step={0.05}
+              value={localRelConfidence}
+              onChange={(e) =>
+                handleThresholdChange(
+                  "relationship_confidence_threshold",
+                  Number(e.target.value),
+                  setLocalRelConfidence,
+                )
+              }
+              aria-label="Relationship strength threshold"
+            />
+            <div className="user-menu-confidence-bounds">
+              <span>All links</span>
+              <span>Strongest</span>
             </div>
           </div>
 

@@ -1,7 +1,8 @@
 export interface LocalGraphFilters {
   max_hops: number;
   limit_nodes: number;
-  min_confidence: number;
+  node_salience_threshold: number;
+  relationship_confidence_threshold: number;
   include_types: string[];
 }
 
@@ -37,7 +38,8 @@ export interface LocalGraphResponse {
 
 export interface GlobalGraphFilters {
   limit_nodes: number;
-  min_confidence: number;
+  node_salience_threshold: number;
+  relationship_confidence_threshold: number;
   include_types: string[];
   subject_id?: string;
   tag?: string;

@@ -34,7 +34,8 @@ def test_local_graph_response_contract_shape() -> None:
             "applied_filters": {
                 "max_hops": 1,
                 "limit_nodes": 80,
-                "min_confidence": 0.35,
+                "node_salience_threshold": 0.5,
+                "relationship_confidence_threshold": 0.5,
                 "include_types": ["note", "entity", "relation"],
             },
             "truncated": False,

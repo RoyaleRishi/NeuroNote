@@ -61,7 +61,7 @@ def test_fetch_graph_for_notes_returns_empty_when_no_data(db_session) -> None:
     repo = GraphRepository(db_session)
     result = repo.fetch_graph_for_notes(
         note_ids=["no-such-note"],
-        min_confidence=0.0,
+        relation_min_confidence=0.0,
         graph_name=_GRAPH,
     )
     assert result.mentions == []
@@ -153,7 +153,7 @@ def test_fetch_graph_for_notes_returns_mentions_and_relations(db_session) -> Non
 
     result = repo.fetch_graph_for_notes(
         note_ids=["fetch-note1"],
-        min_confidence=0.0,
+        relation_min_confidence=0.0,
         graph_name=_GRAPH,
     )
 
@@ -162,6 +162,61 @@ def test_fetch_graph_for_notes_returns_mentions_and_relations(db_session) -> Non
 
     rel_keys = {(r.source_id, r.target_id, r.edge_type) for r in result.relations}
     assert ("concept-python", "concept-django", "USES") in rel_keys
+
+
+def test_fetch_graph_for_notes_no_mentions_does_not_crash_age(db_session) -> None:
+    """Empty ``mentioned_ids`` must not emit an ``IN []`` list literal.
+
+    Regression guard for the global-graph 500: when a requested note has no
+    entity mentions at/above the confidence threshold, ``mentioned_ids`` is
+    empty. The durable-edge branch previously rendered ``c1.id IN []`` into the
+    Cypher, and Apache AGE crashes on an empty array literal with
+    "cache lookup failed for type 0" (its element type resolves to OID 0).
+
+    The bug only fires once the graph contains Concept→Concept edges (so the
+    MATCH produces rows for the predicate to evaluate) — which is why it stayed
+    latent until graphs accumulated relations. We therefore seed a concept edge
+    first, then request a note with no mentions.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    if sa_inspect(db_session.bind).dialect.name != "postgresql":
+        pytest.skip("PostgreSQL + AGE required")
+
+    from app.db.repositories.graph_repository import GraphRepository
+
+    repo = GraphRepository(db_session)
+
+    # Seed two Concepts + a Concept→Concept edge so the relations MATCH yields
+    # rows (the precondition that surfaced the empty-IN crash).
+    for cid, name in (("empty-in-a", "Alpha"), ("empty-in-b", "Beta")):
+        repo.upsert_node(
+            label="Concept",
+            node_id=cid,
+            properties={"id": cid, "name": name, "updated_at": "2026-06-15T00:00:00Z"},
+            graph_name=_GRAPH,
+        )
+    repo.upsert_typed_edge(
+        source_label="Concept",
+        source_id="empty-in-a",
+        target_label="Concept",
+        target_id="empty-in-b",
+        relation_type="IS_A",
+        properties={"confidence": 0.99, "created_at": "2026-06-15T00:00:00Z"},
+        graph_name=_GRAPH,
+    )
+    db_session.commit()
+
+    # A note with no MENTIONS edges -> mentions == [] -> mentioned_ids == [].
+    # Before the fix this raised InternalError("cache lookup failed for type 0").
+    result = repo.fetch_graph_for_notes(
+        note_ids=["note-with-no-mentions"],
+        relation_min_confidence=0.95,
+        graph_name=_GRAPH,
+    )
+    assert result.mentions == []
+    # Durable IS_A edge is not returned (no concepts mentioned), and crucially
+    # the call completes without raising.
+    assert isinstance(result.relations, list)
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +286,7 @@ def test_upsert_typed_edges_batch_writes_against_real_age(db_session) -> None:
 
     result = repo.fetch_graph_for_notes(
         note_ids=[note_id],
-        min_confidence=0.0,
+        relation_min_confidence=0.0,
         graph_name=_GRAPH,
     )
     fetched_ids = {m.entity_id for m in result.mentions}

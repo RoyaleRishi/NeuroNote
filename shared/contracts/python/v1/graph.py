@@ -6,7 +6,10 @@ from pydantic import BaseModel, Field
 class LocalGraphFilters(BaseModel):
     max_hops: int = Field(ge=1, le=2)
     limit_nodes: int = Field(ge=1, le=150)
-    min_confidence: float = Field(ge=0.0, le=1.0)
+    # Decoupled thresholds: node_salience gates which concepts appear (against the
+    # normalized 0–1 salience); relationship_confidence gates concept→concept edges.
+    node_salience_threshold: float = Field(ge=0.0, le=1.0)
+    relationship_confidence_threshold: float = Field(ge=0.0, le=1.0)
     include_types: list[str] = Field(default_factory=list)
 
 
@@ -42,7 +45,10 @@ class LocalGraphResponse(BaseModel):
 
 class GlobalGraphFilters(BaseModel):
     limit_nodes: int = Field(ge=1, le=2000)
-    min_confidence: float = Field(ge=0.0, le=1.0)
+    # Decoupled thresholds: node_salience gates which concepts appear (against the
+    # normalized 0–1 salience); relationship_confidence gates concept→concept edges.
+    node_salience_threshold: float = Field(ge=0.0, le=1.0)
+    relationship_confidence_threshold: float = Field(ge=0.0, le=1.0)
     include_types: list[str] = Field(default_factory=list)
     subject_id: str | None = None
     tag: str | None = None

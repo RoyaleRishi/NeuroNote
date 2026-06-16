@@ -124,6 +124,26 @@
   --graph-label-default:         #6f6450;  /* walnut */
   --graph-label-highlight:       #7a3d0a;
 
+  /* Node widgets — soft tinted fills (legible dark text) with a typed border.
+     "strong" variants are used for hierarchy parents (deeper fill + border). */
+  --graph-node-note-fill:          #e9efe2;  /* pale olive parchment */
+  --graph-node-note-fill-strong:   #d6e2c9;
+  --graph-node-note-strong:        #335a30;  /* deep olive border */
+  --graph-node-entity-fill:        #f1e6d4;  /* pale bronze parchment */
+  --graph-node-entity-fill-strong: #e6d3b4;
+  --graph-node-entity-strong:      #7a5326;  /* deep bronze border */
+  --graph-node-other-fill:         #ece7dd;
+  --graph-node-other-fill-strong:  #ded6c6;
+  --graph-node-other-strong:       #5f574a;
+  --graph-node-highlight-fill:     #fbe6c9;  /* pale amber */
+  --graph-widget-text:             #3a3122;  /* walnut-strong, on tinted fills */
+
+  /* Edge colours by relationship family (form carries the rest of the meaning). */
+  --graph-edge-hierarchy:    #335a30;  /* deep olive — structural backbone */
+  --graph-edge-equivalence:  #9a6b34;  /* bronze — synonym links */
+  --graph-edge-link:         #5b6f8a;  /* warm slate — note linkage */
+  --graph-edge-label:        #6f6450;  /* walnut — edge name labels */
+
   /* Overlay scrim used for modal/dialog backgrounds — warm sepia-dark. */
   --overlay-scrim: rgba(40, 30, 15, 0.45);
 

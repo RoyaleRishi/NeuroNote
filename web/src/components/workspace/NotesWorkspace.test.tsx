@@ -113,7 +113,9 @@ describe("NotesWorkspace", () => {
       llm_api_key: "",
       llm_base_url: "https://api.openai.com/v1",
       llm_model: "gpt-4o-mini",
-      confidence_threshold: 0.9,
+      node_salience_threshold: 0.5,
+      relationship_confidence_threshold: 0.5,
+      llm_api_key_invalid: false,
     });
     vi.mocked(fetchLocalGraph).mockResolvedValue({
       nodes: [],
@@ -123,7 +125,7 @@ describe("NotesWorkspace", () => {
         applied_filters: {
           max_hops: 1,
           limit_nodes: 80,
-          min_confidence: 0.35,
+          node_salience_threshold: 0.5, relationship_confidence_threshold: 0.5,
           include_types: ["note", "entity", "relation"],
         },
         truncated: false,

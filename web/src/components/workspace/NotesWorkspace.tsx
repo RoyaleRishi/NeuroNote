@@ -254,7 +254,11 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   // ── Extracted hooks ──
   const qs = useQuickSwitch(notes, selectedNoteId);
   const backlinks = useBacklinks(baseUrl);
-  const globalGraph = useGlobalGraph(baseUrl, prefs?.confidence_threshold ?? 0.9);
+  const globalGraph = useGlobalGraph(
+    baseUrl,
+    prefs?.node_salience_threshold ?? 0.5,
+    prefs?.relationship_confidence_threshold ?? 0.5,
+  );
   const selection = useSelectionMode();
 
   const filters: WorkspaceFilters = useMemo(
@@ -1331,7 +1335,8 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
               setSelectedNoteId(nextNoteId);
               setHighlightedNoteId(nextNoteId);
             }}
-            confidenceThreshold={prefs?.confidence_threshold ?? 0.9}
+            nodeSalienceThreshold={prefs?.node_salience_threshold ?? 0.5}
+            relationshipConfidenceThreshold={prefs?.relationship_confidence_threshold ?? 0.5}
             onShowBacklinks={selectedNoteId ? () => backlinks.open(selectedNoteId) : undefined}
           />
         ) : (

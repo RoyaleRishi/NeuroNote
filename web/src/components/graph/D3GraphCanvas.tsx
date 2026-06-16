@@ -11,6 +11,14 @@ import {
   GRAPH_THRESHOLDS,
   GRAPH_CSS_VARS,
 } from "./graph-constants";
+import {
+  computeHierarchy,
+  getEdgeStyle,
+  nodeWidgetMetrics,
+  wrapLabel,
+  type EdgeGroupId,
+  type HierarchyInfo,
+} from "./graph-styling";
 
 interface D3GraphCanvasProps {
   nodes: LocalGraphNode[];
@@ -21,12 +29,20 @@ interface D3GraphCanvasProps {
   width?: number;
   height: number;
   ariaLabel?: string;
+  /** Edge types to hide entirely (driven by the legend). */
+  hiddenEdgeTypes?: Set<string>;
+  /** Edge types to emphasise; when non-empty, others dim (driven by the legend). */
+  highlightedEdgeTypes?: Set<string>;
 }
 
-type SimNode = LocalGraphNode & d3.SimulationNodeDatum;
+type SimNode = LocalGraphNode &
+  d3.SimulationNodeDatum & { w: number; h: number; r: number };
 
 type SimEdge = Omit<LocalGraphEdge, "source" | "target"> &
   d3.SimulationLinkDatum<SimNode>;
+
+const BASE_EDGE_OPACITY = 0.72;
+const EMPTY_SET: Set<string> = new Set();
 
 /** Read a CSS custom property from :root, falling back to a default. */
 function getCssVar(name: string, fallback: string): string {
@@ -34,25 +50,13 @@ function getCssVar(name: string, fallback: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
-/** Build a color function that reads from tokens at render time. */
-function makeNodeColorFn(): (type: string, subjectId?: string) => string {
-  const noteColor = getCssVar(GRAPH_CSS_VARS.nodeNote, "#1d6d4f");
-  const entityColor = getCssVar(GRAPH_CSS_VARS.nodeEntity, "#4568a6");
-  const otherColor = getCssVar(GRAPH_CSS_VARS.nodeOther, "#6c6f75");
-  const subjectScale = d3.scaleOrdinal(d3.schemeTableau10);
-
-  return (type: string, subjectId?: string) => {
-    if (type === "note" && subjectId) return subjectScale(subjectId);
-    if (type === "note") return noteColor;
-    if (type === "entity") return entityColor;
-    return otherColor;
-  };
-}
-
-/** Compute a quadratic bezier control point offset perpendicular to source→target. */
+/**
+ * Quadratic-bezier path between two points, plus the curve's midpoint (t=0.5)
+ * for placing an edge label.
+ */
 function curvedPath(
   sx: number, sy: number, tx: number, ty: number, offset: number,
-): string {
+): { d: string; lx: number; ly: number } {
   const mx = (sx + tx) / 2;
   const my = (sy + ty) / 2;
   const dx = tx - sx;
@@ -60,7 +64,17 @@ function curvedPath(
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const cx = mx - (dy / len) * offset;
   const cy = my + (dx / len) * offset;
-  return `M${sx},${sy} Q${cx},${cy} ${tx},${ty}`;
+  const lx = 0.25 * sx + 0.5 * cx + 0.25 * tx;
+  const ly = 0.25 * sy + 0.5 * cy + 0.25 * ty;
+  return { d: `M${sx},${sy} Q${cx},${cy} ${tx},${ty}`, lx, ly };
+}
+
+/** Pull an endpoint in toward the line by `gap` so an arrowhead clears the widget. */
+function trim(px: number, py: number, qx: number, qy: number, gap: number): [number, number] {
+  const dx = qx - px;
+  const dy = qy - py;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  return [px + (dx / len) * gap, py + (dy / len) * gap];
 }
 
 export function D3GraphCanvas({
@@ -72,10 +86,17 @@ export function D3GraphCanvas({
   width: widthProp,
   height,
   ariaLabel,
+  hiddenEdgeTypes,
+  highlightedEdgeTypes,
 }: D3GraphCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const simNodesRef = useRef<SimNode[]>([]);
+  // Latest control sets + a re-styling function, so legend toggles restyle the
+  // existing canvas without rebuilding the force layout (positions stay put).
+  const hiddenRef = useRef<Set<string>>(hiddenEdgeTypes ?? EMPTY_SET);
+  const highlightedRef = useRef<Set<string>>(highlightedEdgeTypes ?? EMPTY_SET);
+  const applyControlsRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!svgRef.current) return;
@@ -83,7 +104,7 @@ export function D3GraphCanvas({
     const rect = svgRef.current.getBoundingClientRect();
     const width = widthProp ?? (rect.width > 0 ? rect.width : 800);
 
-    // Cap node count — retain highest-connected nodes
+    // Cap node count — retain highest-connected nodes.
     let renderNodes = nodes;
     let renderEdges = edges;
     if (nodes.length > GRAPH_SIZES.maxRenderNodes) {
@@ -99,7 +120,31 @@ export function D3GraphCanvas({
       renderEdges = edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target));
     }
 
-    const simNodes: SimNode[] = renderNodes.map((n) => ({ ...n }));
+    const hierarchy = computeHierarchy(renderNodes, renderEdges);
+
+    // Pre-compute widget geometry + wrapped label lines per node.
+    const layout = new Map<string, { w: number; h: number; lines: string[]; metrics: ReturnType<typeof nodeWidgetMetrics> }>();
+    for (const n of renderNodes) {
+      const info: HierarchyInfo = hierarchy.get(n.id) ?? { depth: 0, isParent: false };
+      const metrics = nodeWidgetMetrics(n, info);
+      // Widen the widget to fit its longest word so we never hard-break a
+      // single word ("backpropagatio n"); cap so pathological tokens still wrap.
+      const charW = metrics.fontSize * 0.58;
+      const longestWord = n.label.split(/\s+/).reduce((m, w) => Math.max(m, w.length), 1);
+      const w = Math.min(
+        GRAPH_SIZES.widgetMaxWidth,
+        Math.max(metrics.width, Math.ceil(longestWord * charW) + metrics.paddingX * 2),
+      );
+      const maxChars = Math.max(metrics.maxCharsPerLine, Math.floor((w - metrics.paddingX * 2) / charW));
+      const lines = wrapLabel(n.label, maxChars, metrics.maxLines);
+      const h = Math.max(metrics.minHeight, lines.length * metrics.lineHeight + metrics.paddingY * 2);
+      layout.set(n.id, { w, h, lines, metrics });
+    }
+
+    const simNodes: SimNode[] = renderNodes.map((n) => {
+      const l = layout.get(n.id)!;
+      return { ...n, w: l.w, h: l.h, r: Math.hypot(l.w, l.h) / 2 + GRAPH_SIZES.collidePadding };
+    });
     const simEdges: SimEdge[] = renderEdges.map((e) => ({ ...e }));
     simNodesRef.current = simNodes;
 
@@ -107,18 +152,55 @@ export function D3GraphCanvas({
     svg.selectAll("*").remove();
 
     const g = svg.append("g").attr("class", "graph-root");
-    const getNodeColor = makeNodeColorFn();
-    const edgeColor = getCssVar(GRAPH_CSS_VARS.edge, "#8ba296");
-    const highlightColor = getCssVar(GRAPH_CSS_VARS.nodeHighlight, "#e07b1a");
-    const edgeDimColor = getCssVar(GRAPH_CSS_VARS.edgeDim, "rgba(139,162,150,0.15)");
-    const nodeDimOpacity = parseFloat(getCssVar(GRAPH_CSS_VARS.nodeDimOpacity, "0.2")) || 0.2;
-    const strokeDefault = getCssVar(GRAPH_CSS_VARS.nodeStrokeDefault, "#ffffff");
-    const strokeRoot = getCssVar(GRAPH_CSS_VARS.nodeStrokeRoot, "#0f4e39");
-    const strokeHighlight = getCssVar(GRAPH_CSS_VARS.nodeStrokeHighlight, "#b85e10");
-    const labelDefault = getCssVar(GRAPH_CSS_VARS.labelDefault, "#6c6f75");
-    const labelHighlight = getCssVar(GRAPH_CSS_VARS.labelHighlight, "#7a3d0a");
 
-    // Build adjacency map for hover interaction
+    // ── Resolve palette from tokens at render time ──
+    const edgeColors: Record<EdgeGroupId, string> = {
+      hierarchy: getCssVar(GRAPH_CSS_VARS.edgeHierarchy, "#335a30"),
+      equivalence: getCssVar(GRAPH_CSS_VARS.edgeEquivalence, "#9a6b34"),
+      association: getCssVar(GRAPH_CSS_VARS.edge, "#b8a585"),
+      notes: getCssVar(GRAPH_CSS_VARS.edgeLink, "#5b6f8a"),
+    };
+    const edgeLabelColor = getCssVar(GRAPH_CSS_VARS.edgeLabel, "#6f6450");
+    const widgetText = getCssVar(GRAPH_CSS_VARS.widgetText, "#3a3122");
+    const highlightFill = getCssVar(GRAPH_CSS_VARS.nodeHighlightFill, "#fbe6c9");
+    const highlightStroke = getCssVar(GRAPH_CSS_VARS.nodeStrokeHighlight, "#b85e10");
+    const nodeDimOpacity = parseFloat(getCssVar(GRAPH_CSS_VARS.nodeDimOpacity, "0.2")) || 0.2;
+
+    const typeFill = (n: SimNode, info: HierarchyInfo): string => {
+      const strong = info.isParent;
+      if (n.type === "note") return getCssVar(strong ? GRAPH_CSS_VARS.nodeNoteFillStrong : GRAPH_CSS_VARS.nodeNoteFill, "#e9efe2");
+      if (n.type === "entity") return getCssVar(strong ? GRAPH_CSS_VARS.nodeEntityFillStrong : GRAPH_CSS_VARS.nodeEntityFill, "#f1e6d4");
+      return getCssVar(strong ? GRAPH_CSS_VARS.nodeOtherFillStrong : GRAPH_CSS_VARS.nodeOtherFill, "#ece7dd");
+    };
+    const typeStroke = (n: SimNode, info: HierarchyInfo): string => {
+      const strong = info.isParent;
+      if (n.type === "note") return getCssVar(strong ? GRAPH_CSS_VARS.nodeNoteStrong : GRAPH_CSS_VARS.nodeNote, "#3f6b3a");
+      if (n.type === "entity") return getCssVar(strong ? GRAPH_CSS_VARS.nodeEntityStrong : GRAPH_CSS_VARS.nodeEntity, "#9a6b34");
+      return getCssVar(strong ? GRAPH_CSS_VARS.nodeOtherStrong : GRAPH_CSS_VARS.nodeOther, "#7a6f5a");
+    };
+    const groupColor = (type: string): string => edgeColors[getEdgeStyle(type).group];
+
+    // ── Arrowhead markers, one per edge-group colour ──
+    const defs = g.append("defs");
+    (Object.keys(edgeColors) as EdgeGroupId[]).forEach((group) => {
+      defs
+        .append("marker")
+        .attr("id", `arrow-${group}`)
+        .attr("markerWidth", GRAPH_SIZES.arrowSize)
+        .attr("markerHeight", GRAPH_SIZES.arrowSize)
+        .attr("refX", GRAPH_SIZES.arrowSize - 1)
+        .attr("refY", GRAPH_SIZES.arrowSize / 2)
+        .attr("orient", "auto")
+        .attr("markerUnits", "userSpaceOnUse")
+        .append("path")
+        .attr(
+          "d",
+          `M0,0 L${GRAPH_SIZES.arrowSize},${GRAPH_SIZES.arrowSize / 2} L0,${GRAPH_SIZES.arrowSize} Z`,
+        )
+        .attr("fill", edgeColors[group]);
+    });
+
+    // Adjacency for hover focus.
     const adjacency = new Map<string, Set<string>>();
     for (const e of simEdges) {
       const sId = typeof e.source === "string" ? e.source : (e.source as SimNode).id;
@@ -129,20 +211,43 @@ export function D3GraphCanvas({
       adjacency.get(tId)!.add(sId);
     }
 
-    // ── Edges (curved paths) ──
-    const linkSelection = g
+    // ── Edges (typed curved paths) ──
+    const linkSel = g
       .selectAll<SVGPathElement, SimEdge>("path.graph-edge")
       .data(simEdges)
       .enter()
       .append("path")
       .attr("class", "graph-edge")
       .attr("fill", "none")
-      .attr("stroke", edgeColor)
-      .attr("stroke-width", 1.5)
-      .attr("opacity", 0);
+      .attr("stroke", (e) => groupColor(e.type))
+      .attr("stroke-width", (e) => getEdgeStyle(e.type).width)
+      .attr("stroke-dasharray", (e) => getEdgeStyle(e.type).dash || null)
+      .attr("stroke-linecap", "round")
+      .attr("marker-end", (e) =>
+        getEdgeStyle(e.type).directed ? `url(#arrow-${getEdgeStyle(e.type).group})` : null,
+      )
+      .attr("opacity", BASE_EDGE_OPACITY);
 
-    // ── Nodes ──
-    const nodeSelection = g
+    // ── Edge name labels (shown when a type is highlighted) ──
+    const edgeLabelSel = g
+      .selectAll<SVGTextElement, SimEdge>("text.graph-edge-label")
+      .data(simEdges)
+      .enter()
+      .append("text")
+      .attr("class", "graph-edge-label")
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "central")
+      .attr("font-size", GRAPH_SIZES.edgeLabelFontSize)
+      .attr("fill", edgeLabelColor)
+      .attr("paint-order", "stroke")
+      .attr("stroke", "var(--panel-bg)")
+      .attr("stroke-width", 3)
+      .attr("pointer-events", "none")
+      .style("display", "none")
+      .text((e) => getEdgeStyle(e.type).label);
+
+    // ── Nodes as widgets ──
+    const nodeSel = g
       .selectAll<SVGGElement, SimNode>("g.node")
       .data(simNodes)
       .enter()
@@ -151,82 +256,116 @@ export function D3GraphCanvas({
       .style("cursor", "pointer")
       .attr("opacity", 0);
 
-    nodeSelection.each(function (d) {
-      const isRoot = rootNodeId === d.id;
+    nodeSel.each(function (d) {
+      const l = layout.get(d.id)!;
+      const info: HierarchyInfo = hierarchy.get(d.id) ?? { depth: 0, isParent: false };
       const isHighlight = highlightNodeId === d.id;
-      const radius = isHighlight
-        ? GRAPH_SIZES.highlightRadius
-        : isRoot
-          ? GRAPH_SIZES.rootRadius
-          : GRAPH_SIZES.nodeRadius;
-      const subjectId = d.metadata?.subject_id as string | undefined;
-      const fillColor = isHighlight ? highlightColor : getNodeColor(d.type, subjectId);
+      const sel = d3.select(this);
 
-      d3.select(this)
-        .append("circle")
-        .attr("r", radius)
-        .attr("fill", fillColor)
-        .attr("stroke", isHighlight ? strokeHighlight : isRoot ? strokeRoot : strokeDefault)
-        .attr("stroke-width", isHighlight ? 3 : isRoot ? 2 : 1);
+      sel
+        .append("rect")
+        .attr("x", -l.w / 2)
+        .attr("y", -l.h / 2)
+        .attr("width", l.w)
+        .attr("height", l.h)
+        .attr("rx", Math.min(l.metrics.radius, l.h / 2))
+        .attr("fill", isHighlight ? highlightFill : typeFill(d, info))
+        .attr("stroke", isHighlight ? highlightStroke : typeStroke(d, info))
+        .attr("stroke-width", isHighlight ? 2.5 : info.isParent ? 2.4 : 1.4)
+        .attr("filter", "drop-shadow(0 1px 1.5px rgba(58,49,34,0.18))");
 
-      d3.select(this)
+      const text = sel
         .append("text")
-        .attr("dy", "0.35em")
-        .attr("x", radius + 4)
-        .attr("font-size", isHighlight ? "11" : "10")
-        .attr("font-weight", isHighlight ? "600" : "normal")
-        .attr("fill", isHighlight ? labelHighlight : labelDefault)
-        .attr("pointer-events", "none")
-        .text(
-          d.label.length > GRAPH_SIZES.labelMaxChars
-            ? `${d.label.slice(0, GRAPH_SIZES.labelMaxChars - 1)}…`
-            : d.label,
-        );
+        .attr("text-anchor", "middle")
+        .attr("fill", widgetText)
+        .attr("font-size", l.metrics.fontSize)
+        .attr("font-weight", info.isParent || isHighlight ? 600 : 500)
+        .attr("pointer-events", "none");
+
+      const startY = -((l.lines.length - 1) * l.metrics.lineHeight) / 2;
+      l.lines.forEach((line, i) => {
+        text
+          .append("tspan")
+          .attr("x", 0)
+          .attr("y", startY + i * l.metrics.lineHeight)
+          .attr("dominant-baseline", "central")
+          .text(line);
+      });
     });
 
-    // ── Hover interaction ──
-    nodeSelection
+    // ── Re-styling baseline driven by the legend control sets ──
+    const applyControls = () => {
+      const hidden = hiddenRef.current;
+      const highlighted = highlightedRef.current;
+      const anyHi = highlighted.size > 0;
+
+      const hiNodes = new Set<string>();
+      if (anyHi) {
+        for (const e of simEdges) {
+          if (!highlighted.has(e.type)) continue;
+          hiNodes.add((e.source as SimNode).id);
+          hiNodes.add((e.target as SimNode).id);
+        }
+      }
+
+      linkSel
+        .style("display", (e) => (hidden.has(e.type) ? "none" : null))
+        .attr("stroke", (e) => groupColor(e.type))
+        .attr("stroke-width", (e) => {
+          const base = getEdgeStyle(e.type).width;
+          return anyHi && highlighted.has(e.type) ? base + 1.2 : base;
+        })
+        .attr("opacity", (e) => {
+          if (hidden.has(e.type)) return 0;
+          if (!anyHi) return BASE_EDGE_OPACITY;
+          return highlighted.has(e.type) ? 1 : 0.1;
+        });
+
+      edgeLabelSel.style("display", (e) =>
+        !hidden.has(e.type) && anyHi && highlighted.has(e.type) ? null : "none",
+      );
+
+      nodeSel.attr("opacity", (n) => (anyHi && !hiNodes.has(n.id) ? nodeDimOpacity : 1));
+    };
+    applyControlsRef.current = applyControls;
+
+    // ── Hover focus (dims non-neighbours; restores to control baseline on leave) ──
+    nodeSel
       .on("mouseenter", (_event, d) => {
         const neighbors = adjacency.get(d.id) ?? new Set<string>();
-        nodeSelection.transition().duration(150).attr("opacity", (n) =>
-          n.id === d.id || neighbors.has(n.id) ? 1 : nodeDimOpacity,
-        );
-        linkSelection.transition().duration(150)
-          .attr("stroke", (e) => {
-            const sId = (e.source as SimNode).id;
-            const tId = (e.target as SimNode).id;
-            return sId === d.id || tId === d.id ? edgeColor : edgeDimColor;
-          })
+        nodeSel
+          .transition()
+          .duration(150)
+          .attr("opacity", (n) => (n.id === d.id || neighbors.has(n.id) ? 1 : nodeDimOpacity));
+        linkSel
+          .transition()
+          .duration(150)
           .attr("opacity", (e) => {
+            if (hiddenRef.current.has(e.type)) return 0;
             const sId = (e.source as SimNode).id;
             const tId = (e.target as SimNode).id;
-            return sId === d.id || tId === d.id ? 0.9 : 0.15;
+            return sId === d.id || tId === d.id ? 0.95 : 0.08;
           });
       })
       .on("mouseleave", () => {
-        nodeSelection.transition().duration(150).attr("opacity", 1);
-        linkSelection.transition().duration(150)
-          .attr("stroke", edgeColor)
-          .attr("opacity", 0.7);
+        nodeSel.interrupt();
+        linkSel.interrupt();
+        applyControls();
       });
 
-    nodeSelection.on("click", (_event, d) => {
+    nodeSel.on("click", (_event, d) => {
       const original = nodes.find((n) => n.id === d.id);
       if (original) onNodeClick(original);
     });
 
-    // ── Entrance animations ──
-    linkSelection
-      .transition()
-      .duration(GRAPH_ANIMATION.entranceDuration)
-      .delay((_d, i) => i * 2)
-      .attr("opacity", 0.7);
-
-    nodeSelection
+    // ── Entrance ──
+    nodeSel
       .transition()
       .duration(GRAPH_ANIMATION.entranceDuration)
       .delay((_d, i) => i * 5)
       .attr("opacity", 1);
+
+    applyControls();
 
     // ── Force simulation ──
     const alphaDecay =
@@ -245,18 +384,23 @@ export function D3GraphCanvas({
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("x", d3.forceX<SimNode>(width / 2).strength(GRAPH_FORCES.centeringStrength))
       .force("y", d3.forceY<SimNode>(height / 2).strength(GRAPH_FORCES.centeringStrength))
-      .force("collide", d3.forceCollide<SimNode>(GRAPH_FORCES.collideRadius));
+      .force("collide", d3.forceCollide<SimNode>((d) => d.r));
 
     simulation.on("tick", () => {
-      linkSelection.attr("d", (d) => {
+      linkSel.attr("d", (d) => {
         const s = d.source as SimNode;
         const t = d.target as SimNode;
-        return curvedPath(
-          s.x ?? 0, s.y ?? 0, t.x ?? 0, t.y ?? 0,
-          GRAPH_SIZES.curveOffset,
-        );
+        const [sx, sy] = trim(s.x ?? 0, s.y ?? 0, t.x ?? 0, t.y ?? 0, s.r * 0.6);
+        const [tx, ty] = trim(t.x ?? 0, t.y ?? 0, s.x ?? 0, s.y ?? 0, t.r * 0.6);
+        return curvedPath(sx, sy, tx, ty, GRAPH_SIZES.curveOffset).d;
       });
-      nodeSelection.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+      edgeLabelSel.attr("transform", (d) => {
+        const s = d.source as SimNode;
+        const t = d.target as SimNode;
+        const { lx, ly } = curvedPath(s.x ?? 0, s.y ?? 0, t.x ?? 0, t.y ?? 0, GRAPH_SIZES.curveOffset);
+        return `translate(${lx},${ly})`;
+      });
+      nodeSel.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
     });
 
     const drag = d3
@@ -276,7 +420,7 @@ export function D3GraphCanvas({
         d.fy = null;
       });
 
-    nodeSelection.call(drag);
+    nodeSel.call(drag);
 
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
@@ -288,7 +432,6 @@ export function D3GraphCanvas({
     svg.call(zoom);
     zoomRef.current = zoom;
 
-    // Zoom to fit after simulation settles
     const fitAll = () => {
       if (simNodes.length === 0) return;
       const r = svgRef.current?.getBoundingClientRect();
@@ -299,10 +442,10 @@ export function D3GraphCanvas({
       for (const n of simNodes) {
         const x = n.x ?? 0;
         const y = n.y ?? 0;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+        if (x - n.w / 2 < minX) minX = x - n.w / 2;
+        if (x + n.w / 2 > maxX) maxX = x + n.w / 2;
+        if (y - n.h / 2 < minY) minY = y - n.h / 2;
+        if (y + n.h / 2 > maxY) maxY = y + n.h / 2;
       }
       const pad = GRAPH_SIZES.fitPadding;
       const boxW = maxX - minX + pad * 2;
@@ -321,10 +464,18 @@ export function D3GraphCanvas({
     return () => {
       simulation.stop();
       svg.on(".zoom", null);
+      applyControlsRef.current = null;
     };
   }, [nodes, edges, rootNodeId, highlightNodeId, onNodeClick, widthProp, height]);
 
-  // Pan to highlighted node
+  // Apply legend control changes without rebuilding the layout.
+  useEffect(() => {
+    hiddenRef.current = hiddenEdgeTypes ?? EMPTY_SET;
+    highlightedRef.current = highlightedEdgeTypes ?? EMPTY_SET;
+    applyControlsRef.current?.();
+  }, [hiddenEdgeTypes, highlightedEdgeTypes]);
+
+  // Pan to highlighted node.
   useEffect(() => {
     if (!highlightNodeId || !svgRef.current || !zoomRef.current) return;
     const node = simNodesRef.current.find((n) => n.id === highlightNodeId);

@@ -54,7 +54,8 @@ def test_local_graph_returns_entity_nodes_from_age(client: TestClient, db_sessio
     _process_and_wait(client, note_id, "machine learning improves computer vision", "Entity Test")
     resp = client.get(f"/v1/graph/local/{note_id}", params={
         "include_types": "note,entity,relation",
-        "min_confidence": 0.0,
+        "node_salience_threshold": 0.0,
+        "relationship_confidence_threshold": 0.0,
     })
     assert resp.status_code == 200
     body = resp.json()
@@ -73,7 +74,8 @@ def test_local_graph_returns_relation_edges_from_age(client: TestClient, db_sess
     _process_and_wait(client, note_id, "Python uses Django for web development", "Relation Test")
     resp = client.get(f"/v1/graph/local/{note_id}", params={
         "include_types": "note,entity,relation",
-        "min_confidence": 0.0,
+        "node_salience_threshold": 0.0,
+        "relationship_confidence_threshold": 0.0,
     })
     assert resp.status_code == 200
     body = resp.json()
@@ -117,7 +119,8 @@ def test_global_graph_returns_entity_nodes_from_age(client: TestClient, db_sessi
     )
     resp = client.get("/v1/graph/global", params={
         "include_types": "note,entity,relation",
-        "min_confidence": 0.0,
+        "node_salience_threshold": 0.0,
+        "relationship_confidence_threshold": 0.0,
     })
     assert resp.status_code == 200
     body = resp.json()

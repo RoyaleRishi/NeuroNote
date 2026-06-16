@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { D3GraphCanvas } from "./D3GraphCanvas";
+import { GraphLegend } from "./GraphLegend";
 import { ConceptInsightPanel } from "./ConceptInsightPanel";
 import type { GlobalGraphResponse, LocalGraphNode } from "../../../../shared/contracts/ts/v1/graph";
 import { SkeletonGraph } from "../ui/Skeleton";
 import { EmptyState } from "../ui/EmptyState";
 import { ErrorMessage } from "../ui/ErrorMessage";
 import type { GlobalGraphFilters } from "../../lib/hooks/useGlobalGraph";
+import { useGraphEdgeControls } from "../../lib/hooks/useGraphEdgeControls";
 
 export type { GlobalGraphFilters };
 
@@ -41,6 +43,7 @@ export function GlobalGraphPanel({
 }: GlobalGraphPanelProps) {
   const [insightNode, setInsightNode] = useState<LocalGraphNode | null>(null);
   const [nodeSearch, setNodeSearch] = useState("");
+  const edgeControls = useGraphEdgeControls();
   const [canvasWidth, setCanvasWidth] = useState(800);
   const [canvasHeight, setCanvasHeight] = useState(600);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
@@ -76,6 +79,7 @@ export function GlobalGraphPanel({
 
   const nodeCount = graph?.nodes.length ?? 0;
   const edgeCount = graph?.edges.length ?? 0;
+  const presentEdgeTypes = graph ? Array.from(new Set(graph.edges.map((e) => e.type))) : [];
 
   return (
     <div className="global-graph-view" aria-label="Global graph view">
@@ -141,6 +145,16 @@ export function GlobalGraphPanel({
             Showing top {graph.meta.applied_filters.limit_nodes} nodes
           </p>
         )}
+
+        {presentEdgeTypes.length > 0 && (
+          <GraphLegend
+            presentTypes={presentEdgeTypes}
+            hidden={edgeControls.hidden}
+            highlighted={edgeControls.highlighted}
+            onToggleHidden={edgeControls.toggleHidden}
+            onToggleHighlighted={edgeControls.toggleHighlighted}
+          />
+        )}
       </aside>
 
       <div className="global-graph-canvas-area" ref={canvasAreaRef}>
@@ -164,6 +178,8 @@ export function GlobalGraphPanel({
             width={canvasWidth}
             height={canvasHeight}
             onNodeClick={handleNodeClick}
+            hiddenEdgeTypes={edgeControls.hidden}
+            highlightedEdgeTypes={edgeControls.highlighted}
           />
         )}
       </div>

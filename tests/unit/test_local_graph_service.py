@@ -51,7 +51,8 @@ def test_local_graph_service_includes_second_hop_note_links(configured_db: None)
                 note_id="graph-hop-root",
                 max_hops=2,
                 limit_nodes=80,
-                min_confidence=0.0,
+                node_salience_threshold=0.0,
+                relationship_confidence_threshold=0.0,
                 include_types=["note", "relation"],
             )
         )
@@ -85,7 +86,8 @@ def test_local_graph_service_filters_to_note_type_only(configured_db: None) -> N
                 note_id="graph-note-only-root",
                 max_hops=1,
                 limit_nodes=80,
-                min_confidence=0.0,
+                node_salience_threshold=0.0,
+                relationship_confidence_threshold=0.0,
                 include_types=["note", "relation"],
             )
         )
@@ -113,7 +115,8 @@ def test_local_graph_service_returns_note_node_for_isolated_note(
                 note_id="graph-isolated-root",
                 max_hops=1,
                 limit_nodes=80,
-                min_confidence=0.35,
+                node_salience_threshold=0.5,
+                relationship_confidence_threshold=0.5,
                 include_types=["note", "relation"],
             )
         )
@@ -151,7 +154,8 @@ def test_local_graph_service_traverses_wiki_links_and_builds_links_to_edges(
                 note_id="graph-noise-root",
                 max_hops=1,
                 limit_nodes=80,
-                min_confidence=0.0,
+                node_salience_threshold=0.0,
+                relationship_confidence_threshold=0.0,
                 include_types=["note", "relation"],
             )
         )

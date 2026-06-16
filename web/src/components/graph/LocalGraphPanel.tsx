@@ -3,11 +3,13 @@
 import { useState } from "react";
 
 import { D3GraphCanvas } from "./D3GraphCanvas";
+import { GraphLegend } from "./GraphLegend";
 import { ConceptInsightPanel } from "./ConceptInsightPanel";
 import type { LocalGraphNode, LocalGraphResponse } from "../../../../shared/contracts/ts/v1/graph";
 import { SkeletonGraph } from "../ui/Skeleton";
 import { EmptyState } from "../ui/EmptyState";
 import { ErrorMessage } from "../ui/ErrorMessage";
+import { useGraphEdgeControls } from "../../lib/hooks/useGraphEdgeControls";
 
 interface LocalGraphPanelProps {
   noteId: string;
@@ -29,6 +31,7 @@ export function LocalGraphPanel({
   onOpenNote,
 }: LocalGraphPanelProps) {
   const [insightNode, setInsightNode] = useState<LocalGraphNode | null>(null);
+  const edgeControls = useGraphEdgeControls();
 
   function handleNodeClick(node: LocalGraphNode) {
     if (node.type === "note") {
@@ -40,6 +43,7 @@ export function LocalGraphPanel({
 
   const nodeCount = graph?.nodes.length ?? 0;
   const edgeCount = graph?.edges.length ?? 0;
+  const presentEdgeTypes = graph ? Array.from(new Set(graph.edges.map((e) => e.type))) : [];
 
   if (isLoading) {
     return <SkeletonGraph />;
@@ -70,14 +74,25 @@ export function LocalGraphPanel({
               description="Add wiki links or process this note to discover relationships."
             />
           ) : (
-            <D3GraphCanvas
-              nodes={graph.nodes}
-              edges={graph.edges}
-              rootNodeId={noteId}
-              height={400}
-              ariaLabel="Local graph canvas"
-              onNodeClick={handleNodeClick}
-            />
+            <>
+              <D3GraphCanvas
+                nodes={graph.nodes}
+                edges={graph.edges}
+                rootNodeId={noteId}
+                height={400}
+                ariaLabel="Local graph canvas"
+                onNodeClick={handleNodeClick}
+                hiddenEdgeTypes={edgeControls.hidden}
+                highlightedEdgeTypes={edgeControls.highlighted}
+              />
+              <GraphLegend
+                presentTypes={presentEdgeTypes}
+                hidden={edgeControls.hidden}
+                highlighted={edgeControls.highlighted}
+                onToggleHidden={edgeControls.toggleHidden}
+                onToggleHighlighted={edgeControls.toggleHighlighted}
+              />
+            </>
           )}
         </>
       )}

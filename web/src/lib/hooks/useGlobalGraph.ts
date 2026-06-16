@@ -23,7 +23,8 @@ export interface UseGlobalGraphActions {
 
 export function useGlobalGraph(
   baseUrl: string,
-  confidenceThreshold: number = 0.9,
+  nodeSalienceThreshold: number = 0.5,
+  relationshipConfidenceThreshold: number = 0.5,
 ): UseGlobalGraphState & UseGlobalGraphActions {
   const [graph, setGraph] = useState<GlobalGraphResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +39,8 @@ export function useGlobalGraph(
     setErrorMessage(null);
     try {
       const response = await fetchGlobalGraph(baseUrl, {
-        min_confidence: confidenceThreshold,
+        node_salience_threshold: nodeSalienceThreshold,
+        relationship_confidence_threshold: relationshipConfidenceThreshold,
         include_types: ["note", "entity", "relation"],
         subject_id: filters.subject_id,
         tag: filters.tag,
@@ -54,7 +56,7 @@ export function useGlobalGraph(
         setIsLoading(false);
       }
     }
-  }, [baseUrl, confidenceThreshold, filters]);
+  }, [baseUrl, nodeSalienceThreshold, relationshipConfidenceThreshold, filters]);
 
   return { graph, isLoading, errorMessage, filters, load, setFilters };
 }

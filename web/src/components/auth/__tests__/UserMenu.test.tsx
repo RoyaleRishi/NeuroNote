@@ -9,14 +9,18 @@ vi.mock("../../../lib/api-client", () => ({
     llm_api_key: "",
     llm_base_url: "https://api.openai.com/v1",
     llm_model: "gpt-4o-mini",
-    confidence_threshold: 0.9,
+    node_salience_threshold: 0.5,
+    relationship_confidence_threshold: 0.5,
+    llm_api_key_invalid: false,
   }),
   fetchPreferences: vi.fn().mockResolvedValue({
     llm_mode: "edge",
     llm_api_key: "",
     llm_base_url: "https://api.openai.com/v1",
     llm_model: "gpt-4o-mini",
-    confidence_threshold: 0.9,
+    node_salience_threshold: 0.5,
+    relationship_confidence_threshold: 0.5,
+    llm_api_key_invalid: false,
   }),
 }));
 
@@ -81,7 +85,9 @@ describe("UserMenu", () => {
       llm_api_key: "****abcd",
       llm_base_url: "https://api.openai.com/v1",
       llm_model: "gpt-4o-mini",
-      confidence_threshold: 0.9,
+      node_salience_threshold: 0.5,
+      relationship_confidence_threshold: 0.5,
+      llm_api_key_invalid: false,
     });
     render(<UserMenu user={mockUser} />);
     fireEvent.click(screen.getByRole("button", { name: "Open settings" }));

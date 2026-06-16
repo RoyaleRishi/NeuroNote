@@ -480,10 +480,19 @@ class GraphRepository:
         self,
         *,
         note_ids: list[str],
-        min_confidence: float = 0.0,
+        salience_floor: float = 0.0,
+        relation_min_confidence: float = 0.0,
         graph_name: str = "neuronote",
     ) -> GraphFetchResult:
         """Fetch entity mentions and concept relation edges for a set of notes.
+
+        The two confidence dimensions are **decoupled** (see
+        ``app/services/graph_confidence.py``):
+          * ``salience_floor`` gates Note→Entity ``MENTIONS`` edges by their raw
+            salience. Callers that normalize + threshold node salience themselves
+            should leave this at 0.0 so the full set is returned.
+          * ``relation_min_confidence`` gates Concept→Concept relationship edges
+            by their (already absolute) per-type confidence.
 
         Runs two Cypher queries:
           1. Note→Entity MENTIONS (note-level aggregate edges)
@@ -497,12 +506,13 @@ class GraphRepository:
 
         self.ensure_graph_exists(graph_name=graph_name)
         note_ids_json = json.dumps(note_ids)
-        min_conf_json = json.dumps(min_confidence)
+        salience_floor_json = json.dumps(salience_floor)
+        relation_min_json = json.dumps(relation_min_confidence)
 
         # Query 1: entity mentions via Note→Entity MENTIONS edges
         mentions_query = (
             f"MATCH (n:Note)-[r:MENTIONS]->(e:Entity) "
-            f"WHERE n.id IN {note_ids_json} AND r.confidence >= {min_conf_json} "
+            f"WHERE n.id IN {note_ids_json} AND r.confidence >= {salience_floor_json} "
             f"RETURN {{entity_id: e.id, name: e.name, kind: e.kind, "
             f"source_note_id: n.id, confidence: r.confidence}}"
         )
@@ -523,13 +533,27 @@ class GraphRepository:
         # (both endpoints mentioned by these notes); without them the semantic
         # hierarchy would be persisted but never rendered.
         mentioned_ids = sorted({m.entity_id for m in mentions if m.entity_id})
-        ids_json = json.dumps(mentioned_ids)
+
+        # The durable-edge branch (SYNONYM_OF / IS_A, which carry no
+        # source_note_id) is matched by concept membership. Only emit it when
+        # there are concepts to match: an empty ``IN []`` list literal crashes
+        # Apache AGE with "cache lookup failed for type 0" (an empty array has
+        # element-type OID 0), and the branch is a no-op anyway — nothing is
+        # ever a member of the empty set.
+        where = (
+            f"(r.source_note_id IN {note_ids_json} "
+            f"AND r.confidence >= {relation_min_json})"
+        )
+        if mentioned_ids:
+            ids_json = json.dumps(mentioned_ids)
+            where += (
+                f" OR (r.source_note_id IS NULL "
+                f"AND c1.id IN {ids_json} AND c2.id IN {ids_json} "
+                f"AND r.confidence >= {relation_min_json})"
+            )
         relations_query = (
             f"MATCH (c1:Concept)-[r]->(c2:Concept) "
-            f"WHERE (r.source_note_id IN {note_ids_json}) "
-            f"OR (r.source_note_id IS NULL "
-            f"AND c1.id IN {ids_json} AND c2.id IN {ids_json} "
-            f"AND r.confidence >= {min_conf_json}) "
+            f"WHERE {where} "
             f"RETURN {{source_id: c1.id, target_id: c2.id, type: type(r), "
             f"confidence: r.confidence, source_note_id: r.source_note_id}}"
         )

@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("../../lib/api-client", () => ({
@@ -30,7 +30,8 @@ const cloudPrefs = {
   llm_api_key: "",
   llm_base_url: "https://api.anthropic.com/v1",
   llm_model: "claude-3-5-haiku-latest",
-  confidence_threshold: 0.9,
+  node_salience_threshold: 0.5,
+  relationship_confidence_threshold: 0.5,
 };
 
 let mutate: ReturnType<typeof vi.fn>;
@@ -119,17 +120,37 @@ describe("UserMenu — feedback & persistence", () => {
     );
   });
 
-  it("holds the dragged confidence value optimistically (no snap-back)", () => {
-    renderMenu();
-    fireEvent.click(screen.getByLabelText("Open settings"));
-    // Starts at the persisted 90%.
-    expect(screen.getByText("90%")).toBeInTheDocument();
+  it("drives two decoupled sliders, holding each optimistically and persisting its own key", () => {
+    vi.useFakeTimers();
+    try {
+      renderMenu();
+      fireEvent.click(screen.getByLabelText("Open settings"));
 
-    fireEvent.change(screen.getByLabelText("Confidence threshold"), {
-      target: { value: "0.7" },
-    });
+      const nodeSlider = screen.getByLabelText(
+        "Concept relevance threshold",
+      ) as HTMLInputElement;
+      const relSlider = screen.getByLabelText(
+        "Relationship strength threshold",
+      ) as HTMLInputElement;
+      // Both start at the persisted 50%.
+      expect(nodeSlider.value).toBe("0.5");
+      expect(relSlider.value).toBe("0.5");
 
-    // The label reflects the drag immediately, before any round-trip resolves.
-    expect(screen.getByText("70%")).toBeInTheDocument();
+      // Drag concept-relevance: the value holds immediately (no snap-back) and
+      // persists under node_salience_threshold after the debounce.
+      fireEvent.change(nodeSlider, { target: { value: "0.7" } });
+      expect(nodeSlider.value).toBe("0.7");
+      expect(screen.getByText("70%")).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(600));
+      expect(mutate).toHaveBeenCalledWith({ node_salience_threshold: 0.7 });
+
+      // Drag relationship-strength: persists independently under its own key.
+      fireEvent.change(relSlider, { target: { value: "0.9" } });
+      expect(relSlider.value).toBe("0.9");
+      act(() => vi.advanceTimersByTime(600));
+      expect(mutate).toHaveBeenCalledWith({ relationship_confidence_threshold: 0.9 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

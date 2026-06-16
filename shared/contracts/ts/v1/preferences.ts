@@ -4,7 +4,10 @@ export interface UserPreferences {
   llm_api_key: string;
   llm_base_url: string;
   llm_model: string;
-  confidence_threshold: number;
+  /** Gates which concepts appear, against the normalized 0–1 salience. */
+  node_salience_threshold: number;
+  /** Gates which concept→concept relationship edges appear (raw 0–1 edge confidence). */
+  relationship_confidence_threshold: number;
   /** True when PREF_ENCRYPTION_KEY is set but the stored key can't be decrypted
    * (e.g. after key rotation). UI should prompt the user to re-enter their key. */
   llm_api_key_invalid: boolean;
@@ -16,7 +19,8 @@ export interface UpdatePreferencesRequest {
   llm_api_key?: string;
   llm_base_url?: string;
   llm_model?: string;
-  confidence_threshold?: number;
+  node_salience_threshold?: number;
+  relationship_confidence_threshold?: number;
 }
 
 /** Result of a test LLM connection attempt. */

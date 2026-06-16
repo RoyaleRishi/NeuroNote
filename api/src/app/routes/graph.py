@@ -17,7 +17,8 @@ router = APIRouter()
 @router.get("/graph/global", response_model=GlobalGraphResponse)
 def get_global_graph(
     limit_nodes: int = Query(default=500, ge=1, le=2000),
-    min_confidence: float = Query(default=0.0, ge=0.0, le=1.0),
+    node_salience_threshold: float = Query(default=0.5, ge=0.0, le=1.0),
+    relationship_confidence_threshold: float = Query(default=0.5, ge=0.0, le=1.0),
     include_types: str = Query(default="note,entity,relation"),
     subject_id: str | None = Query(default=None),
     tag: str | None = Query(default=None),
@@ -29,7 +30,8 @@ def get_global_graph(
     return GlobalGraphService(session, graph_name=graph_name).get_global_graph(
         GlobalGraphQuery(
             limit_nodes=limit_nodes,
-            min_confidence=min_confidence,
+            node_salience_threshold=node_salience_threshold,
+            relationship_confidence_threshold=relationship_confidence_threshold,
             include_types=include_type_values,
             subject_id=subject_id,
             tag=tag,
@@ -42,7 +44,8 @@ def get_local_graph(
     note_id: str,
     max_hops: int = Query(default=1, ge=1, le=2),
     limit_nodes: int = Query(default=80, ge=1, le=150),
-    min_confidence: float = Query(default=0.35, ge=0.0, le=1.0),
+    node_salience_threshold: float = Query(default=0.5, ge=0.0, le=1.0),
+    relationship_confidence_threshold: float = Query(default=0.5, ge=0.0, le=1.0),
     include_types: str = Query(default="note,entity,relation"),
     session: Session = Depends(get_tenant_session),
     user: UserContext = Depends(get_current_user),
@@ -55,7 +58,8 @@ def get_local_graph(
                 note_id=note_id,
                 max_hops=max_hops,
                 limit_nodes=limit_nodes,
-                min_confidence=min_confidence,
+                node_salience_threshold=node_salience_threshold,
+                relationship_confidence_threshold=relationship_confidence_threshold,
                 include_types=include_type_values,
             )
         )

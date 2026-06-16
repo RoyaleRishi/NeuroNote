@@ -55,11 +55,11 @@ test.describe("global graph", () => {
     // local-graph toggle).  Scope to the top-level "App view" tablist.
     await page.getByRole("tablist", { name: "App view" }).getByRole("tab", { name: "Graph" }).click();
 
-    // The D3GraphCanvas renders an <svg>; nodes are <circle> or <g> children.
-    // We only require *some* drawable child to confirm we left the loading
-    // / empty state — the exact node shape is implementation detail.
+    // The D3GraphCanvas renders an <svg>; nodes are widget <rect> elements
+    // inside <g.node> groups. We only require *some* node widget to confirm we
+    // left the loading / empty state — the exact styling is implementation detail.
     const svg = page.locator("svg").first();
     await expect(svg).toBeVisible({ timeout: 30_000 });
-    await expect(svg.locator("circle")).not.toHaveCount(0, { timeout: 15_000 });
+    await expect(svg.locator("g.node rect")).not.toHaveCount(0, { timeout: 15_000 });
   });
 });

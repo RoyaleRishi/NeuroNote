@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.graph_cache import get_cached, get_note_version, set_cached
 from app.db.models.note import Note
 from app.db.repositories.graph_repository import EntityMention, GraphRepository
+from app.services.graph_confidence import normalize_salience
 from app.utils.text import (
     extract_wiki_link_titles,
     normalize_include_types,
@@ -24,7 +25,8 @@ class LocalGraphQuery:
     note_id: str
     max_hops: int
     limit_nodes: int
-    min_confidence: float
+    node_salience_threshold: float
+    relationship_confidence_threshold: float
     include_types: list[str]
 
 
@@ -123,7 +125,8 @@ class LocalGraphService:
 
         note_version = get_note_version(self._session, query.note_id)
         cache_key = (
-            f"local:{query.note_id}:{query.max_hops}:{query.min_confidence}"
+            f"local:{query.note_id}:{query.max_hops}"
+            f":{query.node_salience_threshold}:{query.relationship_confidence_threshold}"
             f":{query.limit_nodes}:{'|'.join(sorted(include_types))}:{note_version}"
         )
         cached = get_cached(cache_key)
@@ -180,9 +183,13 @@ class LocalGraphService:
         # Entity nodes + relation edges (AGE graph)
         if "entity" in include_type_set:
             graph_repo = GraphRepository(self._session)
+            # MENTIONS fetched unfiltered (salience_floor=0): node inclusion is
+            # decided here, against the *normalized* salience. Relationship edges
+            # are gated in-query by the relationship-confidence threshold.
             graph_result = graph_repo.fetch_graph_for_notes(
                 note_ids=list(notes_by_id.keys()),
-                min_confidence=query.min_confidence,
+                salience_floor=0.0,
+                relation_min_confidence=query.relationship_confidence_threshold,
                 graph_name=self._graph_name,
             )
 
@@ -194,11 +201,16 @@ class LocalGraphService:
                     entity_best[mention.entity_id] = (mention.confidence, mention)
 
             for entity_id, (conf, mention) in entity_best.items():
+                # Normalize raw salience onto the global 0–1 scale, then gate the
+                # node on the node-salience threshold (decoupled from edges).
+                normalized = normalize_salience(conf)
+                if normalized < query.node_salience_threshold:
+                    continue
                 node_map[entity_id] = LocalGraphNode(
                     id=entity_id,
                     type="entity",
                     label=mention.entity_name,
-                    confidence=conf,
+                    confidence=normalized,
                     source_note_id=mention.source_note_id,
                     metadata={
                         "entity_id": entity_id,
@@ -270,7 +282,8 @@ class LocalGraphService:
                 applied_filters=LocalGraphFilters(
                     max_hops=query.max_hops,
                     limit_nodes=query.limit_nodes,
-                    min_confidence=query.min_confidence,
+                    node_salience_threshold=query.node_salience_threshold,
+                    relationship_confidence_threshold=query.relationship_confidence_threshold,
                     include_types=include_types,
                 ),
                 truncated=truncated,

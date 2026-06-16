@@ -273,7 +273,8 @@ describe("fetchLocalGraph", () => {
       applied_filters: {
         max_hops: 2,
         limit_nodes: 50,
-        min_confidence: 0.5,
+        node_salience_threshold: 0.5,
+        relationship_confidence_threshold: 0.5,
         include_types: ["note", "entity"],
       },
       truncated: false,
@@ -285,14 +286,16 @@ describe("fetchLocalGraph", () => {
     await fetchLocalGraph("http://localhost:8000", "note-1", {
       max_hops: 2,
       limit_nodes: 50,
-      min_confidence: 0.5,
+      node_salience_threshold: 0.5,
+      relationship_confidence_threshold: 0.7,
       include_types: ["note", "entity"],
     });
     const calledUrl = mockFetch.mock.calls[0]?.[0] as string;
     expect(calledUrl).toContain("include_types=note%2Centity");
     expect(calledUrl).toContain("max_hops=2");
     expect(calledUrl).toContain("limit_nodes=50");
-    expect(calledUrl).toContain("min_confidence=0.5");
+    expect(calledUrl).toContain("node_salience_threshold=0.5");
+    expect(calledUrl).toContain("relationship_confidence_threshold=0.7");
     expect(calledUrl).toContain("/v1/graph/local/note-1");
   });
 

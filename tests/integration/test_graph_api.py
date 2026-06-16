@@ -57,7 +57,8 @@ def test_local_graph_returns_note_neighbors_and_metadata(client: TestClient) -> 
         params={
             "max_hops": 1,
             "limit_nodes": 80,
-            "min_confidence": 0,
+            "node_salience_threshold": 0,
+            "relationship_confidence_threshold": 0,
             "include_types": "note,entity,relation",
         },
     )
@@ -69,7 +70,8 @@ def test_local_graph_returns_note_neighbors_and_metadata(client: TestClient) -> 
     assert payload["meta"]["applied_filters"] == {
         "max_hops": 1,
         "limit_nodes": 80,
-        "min_confidence": 0.0,
+        "node_salience_threshold": 0.0,
+        "relationship_confidence_threshold": 0.0,
         "include_types": ["note", "entity", "relation"],
     }
 
@@ -152,7 +154,8 @@ def test_local_graph_excludes_note_titles_and_link_targets_from_entities(
         params={
             "max_hops": 1,
             "limit_nodes": 80,
-            "min_confidence": 0,
+            "node_salience_threshold": 0,
+            "relationship_confidence_threshold": 0,
             "include_types": "note,entity,relation",
         },
     )

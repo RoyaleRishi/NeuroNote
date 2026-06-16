@@ -274,7 +274,8 @@ export async function searchBlocks(
 export interface LocalGraphQuery {
   max_hops?: number;
   limit_nodes?: number;
-  min_confidence?: number;
+  node_salience_threshold?: number;
+  relationship_confidence_threshold?: number;
   include_types?: string[];
 }
 
@@ -290,8 +291,11 @@ export async function fetchLocalGraph(
   if (query.limit_nodes !== undefined) {
     params.set("limit_nodes", String(query.limit_nodes));
   }
-  if (query.min_confidence !== undefined) {
-    params.set("min_confidence", String(query.min_confidence));
+  if (query.node_salience_threshold !== undefined) {
+    params.set("node_salience_threshold", String(query.node_salience_threshold));
+  }
+  if (query.relationship_confidence_threshold !== undefined) {
+    params.set("relationship_confidence_threshold", String(query.relationship_confidence_threshold));
   }
   if (query.include_types && query.include_types.length > 0) {
     params.set("include_types", query.include_types.join(","));
@@ -338,8 +342,11 @@ export async function importNote(
 
 interface GlobalGraphQuery {
   limit_nodes?: number;
-  min_confidence?: number;
+  node_salience_threshold?: number;
+  relationship_confidence_threshold?: number;
   include_types?: string[];
+  subject_id?: string;
+  tag?: string;
 }
 
 export async function fetchGlobalGraph(
@@ -348,7 +355,8 @@ export async function fetchGlobalGraph(
 ): Promise<GlobalGraphResponse> {
   const params = new URLSearchParams();
   if (query.limit_nodes !== undefined) params.set("limit_nodes", String(query.limit_nodes));
-  if (query.min_confidence !== undefined) params.set("min_confidence", String(query.min_confidence));
+  if (query.node_salience_threshold !== undefined) params.set("node_salience_threshold", String(query.node_salience_threshold));
+  if (query.relationship_confidence_threshold !== undefined) params.set("relationship_confidence_threshold", String(query.relationship_confidence_threshold));
   if (query.include_types && query.include_types.length > 0) params.set("include_types", query.include_types.join(","));
   const suffix = params.toString();
   const response = await apiFetch(

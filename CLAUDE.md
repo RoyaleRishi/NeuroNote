@@ -71,7 +71,7 @@ Web: `http://localhost:3000` · API: `http://localhost:8000`
 - Schema names must match `^user_[a-z0-9]{4,32}$`.
 
 #### User preferences (migration 0015)
-- `user_preferences` (per-tenant) — key-value store for per-user settings. Keys: `llm_mode` (`edge` | `cloud`), `llm_api_key`, `llm_base_url`, `llm_model`. Default is `edge`.
+- `user_preferences` (per-tenant) — key-value store for per-user settings. Keys: `llm_mode` (`edge` | `cloud`), `llm_api_key`, `llm_base_url`, `llm_model`, and the two **decoupled graph filters** `node_salience_threshold` / `relationship_confidence_threshold` (both `0.0–1.0`, default `0.5`). `llm_mode` default is `edge`. The store is a flexible KV table (`_DEFAULTS` in `routes/preferences.py`) — adding a pref key needs no migration, just a contract field + a default.
 - `GET /v1/preferences` returns all preferences with API key masked (`****abcd`). `PUT /v1/preferences` does partial updates.
 - `POST /v1/preferences/test-connection` validates a cloud-mode API key by making a test completion call.
 
@@ -109,10 +109,18 @@ Cross-restart caching is provided by `nlp_extraction_cache` (keyed by `content_h
 - Note discovery uses two phases: (1) case-insensitive LIKE search on title + content; (2) AGE graph traversal via `MENTIONS` edges with UNION clauses for `SYNONYM_OF` (1-hop, undirected) and `SUBTOPIC_OF` (finds notes mentioning a subtopic of the searched concept)
 - Results cached in `concept_insight_cache` keyed by `(concept_label, content_digest)`
 
+### Graph read services — decoupled confidence (`global_graph_service.py`, `local_graph_service.py`)
+- The graph has **two independent, global confidence dimensions** — never collapse them into one `min_confidence` (doing so made the graph look "sparse": a single 0.9 slider on the salience scale hid ~97% of concepts, and every concept→concept edge needs *both* endpoints present, so the loss was quadratic):
+  1. **`node_salience_threshold`** gates which concept/entity nodes appear. It is compared against the **normalized** salience — `MENTIONS` edge confidence is the raw `cosine(concept, note)` salience (~0.1–0.6), rescaled to an absolute 0–1 scale by `normalize_salience()` in `services/graph_confidence.py` (single global constant `SALIENCE_RESCALE_CEILING = 0.6`; same for every user/note). The emitted node `confidence` is this normalized value.
+  2. **`relationship_confidence_threshold`** gates concept→concept relationship edges, compared against their raw per-type confidence (MENTIONED_TOGETHER 0.7, IS_A 0.9, SYNONYM_OF 0.95, SIBLING_OF/SUBTOPIC_OF 1.0). Applied in Cypher by `GraphRepository.fetch_graph_for_notes(relation_min_confidence=...)`.
+- `fetch_graph_for_notes` fetches `MENTIONS` **unfiltered** (`salience_floor=0.0`) so the service can normalize over the full set; `MENTIONS` and `LINKS_TO` edges are **not** gated by the relationship slider (they render whenever both endpoints survive).
+- Frontend: two persisted sliders in `UserMenu` ("Concept relevance" / "Relationship strength"), 0–1, default 0.5; `NotesWorkspace` passes them to the global graph (`useGlobalGraph`) and the per-note local graph (`NoteEditor`).
+
 ### Frontend
 - **Next.js App Router** — all client components use `"use client"`
 - **TipTap** editor with custom extensions: `mathInline`, `mathBlock`, `wikiLink`, `blockRef`, `image`
-- **D3.js** for graph rendering (`D3GraphCanvas.tsx`) — force-directed simulation
+- **D3.js** for graph rendering (`D3GraphCanvas.tsx`) — force-directed simulation. Nodes render as **widgets** (rounded pill for concepts/entities, document card for notes) with the label *inside*, word-wrapped. Edge **types are distinguished by form** (stroke width + dash + arrowhead) and **colour by family** (hierarchy / equivalence / association / notes). Hierarchy (`IS_A`/`SUBTOPIC_OF`) is shown *within* the force layout via larger/darker parent widgets and directed child→parent arrowheads. All edge-form/sizing/hierarchy/label-wrap decision logic is pure + unit-tested in **`graph-styling.ts`** (D3 stays a thin renderer, mirroring `graph-constants.ts`). The canvas accepts `hiddenEdgeTypes` / `highlightedEdgeTypes` `Set<string>` props and restyles in a *separate* effect so legend toggles don't rebuild (or visually reset) the layout.
+- **Graph relationship legend** (`GraphLegend.tsx`) — grouped per-edge-type controls with a form swatch, name, a show/hide checkbox, and a highlight toggle (`aria-pressed`, keyboard-activatable). State lives in **`useGraphEdgeControls()`** (`hidden`/`highlighted` sets + `toggleHidden`/`toggleHighlighted`/`reset`); each graph surface (`LocalGraphPanel`, `GlobalGraphPanel`) owns its own instance and passes the sets to `D3GraphCanvas`.
 - **Autosave orchestration** (`web/src/lib/orchestration/`) — 800ms debounce for save, 3s for processing queue trigger
 - **API client** (`web/src/lib/api-client.ts`) — typed fetch wrappers using shared TS contracts
 - **Design tokens** — all colors, font sizes, z-indices, spacing use CSS custom properties from `web/src/styles/tokens.css` (single source of truth); utility classes live in `web/src/app/globals.css`. Never use hardcoded hex colors, `rgba()` literals, raw `zIndex` numbers, or bare `rem` values in new CSS — extend `tokens.css` instead.
@@ -158,6 +166,8 @@ The app uses a **warm "aged-paper" theme** — parchment/cream surfaces with a w
 - **Z-indices**: `var(--z-dropdown)`, `var(--z-sticky)`, `var(--z-modal)`, `var(--z-toast)` — never write raw `1000`, `9000`, etc.
 - **Radii**: `var(--radius-sm)` … `var(--radius-xl)`, `var(--radius-full)`
 - **Graph nodes/edges**: `var(--graph-node-note)`, `var(--graph-node-entity)`, `var(--graph-node-highlight)`, `var(--graph-edge)`, `var(--graph-edge-dim)`, `var(--graph-node-dim-opacity)`
+- **Graph widget fills** (soft tinted node backgrounds with legible dark text; `-fill-strong` + `-strong` border variants are used for hierarchy parents): `--graph-node-{note,entity,other}-fill`, `--graph-node-{note,entity,other}-fill-strong`, `--graph-node-{note,entity,other}-strong`, `--graph-node-highlight-fill`, `--graph-widget-text`
+- **Graph edge families** (form carries type; colour carries family): `--graph-edge-hierarchy`, `--graph-edge-equivalence`, `--graph-edge-link`, `--graph-edge-label`
 - **Graph strokes/labels**: `var(--graph-node-stroke-default)`, `--graph-node-stroke-root`, `--graph-node-stroke-highlight`, `--graph-label-default`, `--graph-label-highlight` (read by `D3GraphCanvas.tsx` via `getCssVar` — see `graph-constants.ts → GRAPH_CSS_VARS`)
 - **Tag chips**: 8 palette pairs `--tag-{blue,green,amber,pink,purple,red,sky,violet}-{bg,text}`; component code uses the `.tag-chip-<color>` utility classes from `globals.css` (border is auto-derived via `color-mix`). Use `getTagColorClass(tag)` from `web/src/lib/ui/tag-colors.ts` — never assign tag colors inline.
 - **Tinted borders/fills**: use `color-mix(in srgb, var(--X) N%, transparent)` rather than hex with alpha.

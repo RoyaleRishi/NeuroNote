@@ -46,8 +46,10 @@ interface NoteEditorProps {
   availableSubjects?: string[];
   availableTags?: string[];
   onOpenNote?: (noteId: string) => void;
-  /** Minimum confidence threshold applied when fetching the local graph. Defaults to 0.9. */
-  confidenceThreshold?: number;
+  /** Gates which concepts appear in the local graph (normalized 0–1 salience). Defaults to 0.5. */
+  nodeSalienceThreshold?: number;
+  /** Gates which concept→concept relationship edges appear (raw 0–1 confidence). Defaults to 0.5. */
+  relationshipConfidenceThreshold?: number;
   /** Opens the linked mentions (backlinks) modal for the current note. */
   onShowBacklinks?: () => void;
 }
@@ -235,7 +237,8 @@ export function NoteEditor({
   availableSubjects = [],
   availableTags = [],
   onOpenNote,
-  confidenceThreshold = 0.9,
+  nodeSalienceThreshold = 0.5,
+  relationshipConfidenceThreshold = 0.5,
   onShowBacklinks,
 }: NoteEditorProps) {
   const [documentJson, setDocumentJson] = useState<EditorDoc>(createEmptyEditorDoc());
@@ -657,7 +660,8 @@ export function NoteEditor({
       const result = await fetchLocalGraph(baseUrl, noteId, {
         max_hops: 1,
         limit_nodes: 80,
-        min_confidence: confidenceThreshold,
+        node_salience_threshold: nodeSalienceThreshold,
+        relationship_confidence_threshold: relationshipConfidenceThreshold,
         include_types: ["note", "entity", "relation"],
       });
       if (token !== localGraphRequestTokenRef.current) return;
@@ -670,7 +674,7 @@ export function NoteEditor({
         setLocalGraphLoading(false);
       }
     }
-  }, [baseUrl, noteId, confidenceThreshold]);
+  }, [baseUrl, noteId, nodeSalienceThreshold, relationshipConfidenceThreshold]);
 
   useEffect(() => {
     if (noteView === "graph") {
