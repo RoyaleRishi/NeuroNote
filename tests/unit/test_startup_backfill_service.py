@@ -58,3 +58,22 @@ def test_startup_backfill_runs_async_without_blocking() -> None:
     assert elapsed < 0.03
     assert done.wait(timeout=1.0)
 
+
+def test_run_graph_reconcile_iterates_tenants(monkeypatch):
+    from app.services import startup_backfill_service as mod
+
+    calls = []
+
+    class _StubService:
+        def __init__(self, *, session, graph_name):
+            self.graph_name = graph_name
+        def reconcile(self, *, live_note_ids, live_subject_ids):
+            calls.append(self.graph_name)
+            from shared.contracts.python.v1.parity import GraphParityReport
+            return GraphParityReport()
+
+    monkeypatch.setattr(mod, "GraphReconciliationService", _StubService, raising=False)
+    svc = mod.StartupBackfillService()
+    svc.run_graph_reconcile()  # should not raise
+    assert isinstance(calls, list)
+

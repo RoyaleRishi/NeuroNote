@@ -15,6 +15,7 @@ from app.core.backfill_store import (
 from app.db.engine import get_session_factory, set_tenant_schema
 from app.db.repositories.note_repository import NoteRepository
 from app.nlp.pipeline import clear_extraction_cache
+from app.services.graph_reconciliation_service import GraphReconciliationService
 from app.services.note_processing_service import NoteNotFoundError, NoteProcessingService
 from shared.contracts.python.v1.process import ProcessNoteRequest
 
@@ -280,3 +281,55 @@ class StartupBackfillService:
                     in_progress=False,
                 )
             )
+
+    def run_graph_reconcile(self) -> None:
+        """Reconcile SQL↔AGE graph parity for every tenant on startup.
+
+        Mirrors ``run_note_reprocessing_backfill``'s tenant enumeration: iterates
+        all tenant schemas (falling back to the default schema when none exist),
+        opens a per-tenant session, and calls ``GraphReconciliationService.reconcile``
+        with the live note and subject IDs sourced from the relational DB.  Each
+        tenant is isolated in its own try/except so one failure never aborts the
+        rest.  Results are logged at INFO so operators can confirm convergence.
+        """
+        tenant_schemas = self._list_tenant_schemas()
+        if not tenant_schemas:
+            # Single-tenant or test environment — operate on default schema.
+            tenant_schemas = [None]  # type: ignore[list-item]
+
+        session_factory = get_session_factory()
+
+        for schema_name in tenant_schemas:
+            graph_name = f"nn_{schema_name}" if schema_name else "neuronote"
+            set_tenant_schema(schema_name)
+            try:
+                with session_factory() as session:
+                    repo = NoteRepository(session)
+                    live_note_ids = repo.list_note_ids()
+                    live_subject_ids = repo.list_live_subject_ids()
+                    report = GraphReconciliationService(
+                        session=session,
+                        graph_name=graph_name,
+                    ).reconcile(
+                        live_note_ids=live_note_ids,
+                        live_subject_ids=live_subject_ids,
+                    )
+                    _LOGGER.info(
+                        "graph reconcile schema=%s graph=%s "
+                        "pruned_note_artifacts=%d pruned_concept_nodes=%d "
+                        "pruned_subject_nodes=%d pruned_registry_rows=%d "
+                        "reprocessed_notes=%d",
+                        schema_name or "default",
+                        graph_name,
+                        report.pruned_note_artifacts,
+                        report.pruned_concept_nodes,
+                        report.pruned_subject_nodes,
+                        report.pruned_registry_rows,
+                        report.reprocessed_notes,
+                    )
+            except Exception:
+                _LOGGER.exception(
+                    "graph reconcile failed for schema=%s", schema_name or "default"
+                )
+            finally:
+                set_tenant_schema(None)

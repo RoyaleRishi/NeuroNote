@@ -105,6 +105,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         threading.Thread(target=prewarm_nlp, name="nlp-prewarm", daemon=True).start()
         backfill_service = StartupBackfillService()
         backfill_service.run_async(backfill_service.run_note_reprocessing_backfill)
+        backfill_service.run_async(backfill_service.run_graph_reconcile)
 
     try:
         yield
