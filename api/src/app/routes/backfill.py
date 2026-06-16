@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
 
+from app.core.auth import UserContext, get_current_user
 from app.core.backfill_store import get_backfill_status
 from app.core.rate_limiter import limiter
+from app.db.repositories.note_repository import NoteRepository
+from app.db.tenant_session import get_tenant_session
+from app.services.graph_reconciliation_service import GraphReconciliationService
 from app.services.startup_backfill_service import StartupBackfillService
 from shared.contracts.python.v1.backfill import BackfillStatusResponse
+from shared.contracts.python.v1.parity import GraphParityReport
 
 router = APIRouter()
 
@@ -51,3 +57,25 @@ def reprocess_all(
         failed_notes=0,
         in_progress=True,
     )
+
+
+@router.post("/graph/reconcile", response_model=GraphParityReport)
+@limiter.limit("6/hour")
+def reconcile_graph(
+    request: Request,
+    session: Session = Depends(get_tenant_session),
+    user: UserContext = Depends(get_current_user),
+) -> GraphParityReport:
+    """Reverse-prune AGE state with no live SQL source for the caller's tenant.
+
+    Operates only on the caller's own schema/graph. Idempotent.
+    """
+    graph_name = f"nn_{user.schema_name}"
+    repo = NoteRepository(session)
+    with session.begin_nested():
+        report = GraphReconciliationService(session=session, graph_name=graph_name).reconcile(
+            live_note_ids=repo.list_note_ids(),
+            live_subject_ids=repo.list_live_subject_ids(),
+        )
+    session.commit()
+    return report
