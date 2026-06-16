@@ -448,6 +448,114 @@ class GraphRepository:
         self._exec_cypher(graph_name, query)
 
     # ------------------------------------------------------------------
+    # Parity / orphan-GC primitives
+    # ------------------------------------------------------------------
+
+    def fetch_live_mentioned_ids(self, *, graph_name: str = "neuronote") -> set[str]:
+        """Return the set of Entity ids referenced by at least one live MENTIONS edge.
+
+        This ``live`` set is the basis for orphan detection: any Entity/Concept node
+        whose id is absent from it has no surviving note mention.
+
+        Note: Concept nodes are NEVER targets of MENTIONS edges — only Entity nodes
+        are. The live set is keyed on Entity.id; orphan detection then applies the
+        same id space to both Entity and Concept labels (they share an id namespace).
+        """
+        if not self._is_postgresql():
+            return set()
+        self.ensure_graph_exists(graph_name=graph_name)
+        query = "MATCH (:Note)-[:MENTIONS]->(e:Entity) RETURN DISTINCT e.id"
+        ids: set[str] = set()
+        for row in self._exec_cypher(graph_name, query):
+            ids.add(json.loads(str(row[0])))
+        return ids
+
+    def _collect_ids(self, *, graph_name: str, label: str, live_ids: set[str]) -> list[str]:
+        """Return ids of ``label`` nodes whose id is not in ``live_ids``.
+
+        Filters in Python rather than embedding a potentially empty ``IN []``
+        array literal in Cypher — AGE crashes on ``IN []`` with "cache lookup
+        failed for type 0" because an empty array has element-type OID 0.
+        """
+        self._validate_label(label)
+        query = f"MATCH (n:{label}) RETURN n.id"
+        out: list[str] = []
+        for row in self._exec_cypher(graph_name, query):
+            node_id = json.loads(str(row[0]))
+            if node_id not in live_ids:
+                out.append(node_id)
+        return out
+
+    def delete_orphan_concept_nodes(self, *, graph_name: str = "neuronote") -> list[str]:
+        """DETACH DELETE every Entity and Concept node whose id has no live MENTIONS.
+
+        Both labels share an id namespace, so an orphaned concept is removed from
+        BOTH labels. Returns the deduped deleted ids so the caller can prune the
+        matching ``concept_registry`` rows (full forget).
+
+        Empty-id-set safety: if ``_collect_ids`` returns nothing, we return early
+        before emitting any Cypher — avoiding the AGE ``IN []`` crash entirely.
+        """
+        if not self._is_postgresql():
+            return []
+        self.ensure_graph_exists(graph_name=graph_name)
+        live = self.fetch_live_mentioned_ids(graph_name=graph_name)
+        orphan_ids = set(self._collect_ids(graph_name=graph_name, label="Entity", live_ids=live))
+        orphan_ids |= set(self._collect_ids(graph_name=graph_name, label="Concept", live_ids=live))
+        if not orphan_ids:
+            return []
+        ids_json = json.dumps(sorted(orphan_ids))
+        for label in ("Entity", "Concept"):
+            query = (
+                f"MATCH (n:{label}) WHERE n.id IN {ids_json} "
+                f"DETACH DELETE n RETURN 1"
+            )
+            self._exec_cypher(graph_name, query)
+        return sorted(orphan_ids)
+
+    def fetch_age_note_ids(self, *, graph_name: str = "neuronote") -> list[str]:
+        """Return the ids of all Note nodes currently in AGE (for reverse-prune diff)."""
+        if not self._is_postgresql():
+            return []
+        self.ensure_graph_exists(graph_name=graph_name)
+        query = "MATCH (n:Note) RETURN n.id"
+        return [json.loads(str(row[0])) for row in self._exec_cypher(graph_name, query)]
+
+    def delete_orphan_subjects(
+        self, *, live_subject_ids: list[str], graph_name: str = "neuronote"
+    ) -> list[str]:
+        """Delete Subject nodes whose id is not among the live note subject ids.
+
+        Subject nodes are edgeless write-only nodes, so liveness is supplied by
+        the caller from SQL (``SELECT DISTINCT subject_id FROM note``).
+        Empty-set safety: filters in Python to avoid AGE ``IN []`` crash.
+        """
+        if not self._is_postgresql():
+            return []
+        self.ensure_graph_exists(graph_name=graph_name)
+        live = set(live_subject_ids)
+        orphans = self._collect_ids(graph_name=graph_name, label="Subject", live_ids=live)
+        if not orphans:
+            return []
+        ids_json = json.dumps(orphans)
+        query = (
+            f"MATCH (s:Subject) WHERE s.id IN {ids_json} "
+            f"DETACH DELETE s RETURN 1"
+        )
+        self._exec_cypher(graph_name, query)
+        return orphans
+
+    def delete_dangling_edges(self, *, graph_name: str = "neuronote") -> None:
+        """Defensive seam: under AGE's model, edges cannot outlive their endpoints
+        (DETACH DELETE removes them), so this is currently a no-op kept as an
+        explicit, named hook for the reconcile backstop and future edge types.
+        """
+        if not self._is_postgresql():
+            return
+        self.ensure_graph_exists(graph_name=graph_name)
+        return
+
+    # ------------------------------------------------------------------
     # Read methods
     # ------------------------------------------------------------------
 
