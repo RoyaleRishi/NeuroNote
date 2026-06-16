@@ -358,6 +358,8 @@ export async function fetchGlobalGraph(
   if (query.node_salience_threshold !== undefined) params.set("node_salience_threshold", String(query.node_salience_threshold));
   if (query.relationship_confidence_threshold !== undefined) params.set("relationship_confidence_threshold", String(query.relationship_confidence_threshold));
   if (query.include_types && query.include_types.length > 0) params.set("include_types", query.include_types.join(","));
+  if (query.subject_id) params.set("subject_id", query.subject_id);
+  if (query.tag) params.set("tag", query.tag);
   const suffix = params.toString();
   const response = await apiFetch(
     `${baseUrl}/v1/graph/global${suffix ? `?${suffix}` : ""}`,
