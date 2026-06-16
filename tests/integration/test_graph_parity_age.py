@@ -130,11 +130,11 @@ def test_orphan_sweep_is_idempotent(db_session):
     db_session.commit()
 
     svc = GraphReconciliationService(session=db_session, graph_name=_GRAPH)
-    first = svc._sweep_orphans(live_subject_ids=[])
+    first = svc.sweep_orphans(live_subject_ids=[])
     db_session.commit()
     assert first[0] >= 1  # idem-orphan removed
 
-    second = svc._sweep_orphans(live_subject_ids=[])
+    second = svc.sweep_orphans(live_subject_ids=[])
     db_session.commit()
     assert second == (0, 0, 0)  # nothing left to prune — idempotent
 
@@ -159,6 +159,13 @@ def test_reconcile_converges_and_is_idempotent(db_session):
         db_session.execute(sa_text(f"SELECT ag_catalog.drop_graph('{_ISOLATED}', true)"))
         db_session.commit()
 
+    # reconcile()'s catch-all registry prune SELECTs from concept_registry on PG;
+    # ensure the table exists so the test doesn't depend on leftover state.
+    db_session.execute(sa_text(
+        "CREATE TABLE IF NOT EXISTS concept_registry "
+        "(concept_text TEXT PRIMARY KEY, entity_id TEXT NOT NULL)"
+    ))
+
     # Seed drift: a stale Note (no SQL row) + its orphan entity.
     _seed_mention(repo, note_id="rc-stale", entity_id="rc-orphan", graph=_ISOLATED)
     db_session.commit()
@@ -174,3 +181,57 @@ def test_reconcile_converges_and_is_idempotent(db_session):
         "pruned_note_artifacts": 0, "pruned_concept_nodes": 0,
         "pruned_subject_nodes": 0, "pruned_registry_rows": 0, "reprocessed_notes": 0,
     }
+
+
+def test_full_forget_prunes_registry_row_and_embedding_on_real_pg(db_session):
+    """Full forget on real PostgreSQL: an orphaned concept's concept_registry row
+    (including its vector embedding) is deleted, while a still-live concept's row
+    survives — proving the entity_id ↔ node-id mapping directly (spec's flagged
+    highest-risk item, previously only covered on a SQLite table with no embedding).
+    """
+    _require_pg(db_session)
+    from sqlalchemy import text as sa_text
+    from app.db.repositories.graph_repository import GraphRepository
+    from app.services.graph_reconciliation_service import GraphReconciliationService
+
+    _ISOLATED = "nn_user_ff_reg01"
+
+    # Real concept_registry mirror with a vector embedding column. Recreate clean
+    # so a pre-existing public.concept_registry (e.g. vector(384)) can't mismatch
+    # our fixture dimensions. Tenant data lives in user_* schemas, never public.
+    db_session.execute(sa_text("CREATE EXTENSION IF NOT EXISTS vector"))
+    db_session.execute(sa_text("DROP TABLE IF EXISTS concept_registry"))
+    db_session.execute(sa_text(
+        "CREATE TABLE concept_registry ("
+        " concept_text TEXT PRIMARY KEY, entity_id TEXT NOT NULL, embedding vector(3))"
+    ))
+    db_session.execute(sa_text(
+        "INSERT INTO concept_registry (concept_text, entity_id, embedding) VALUES "
+        "('keep concept', 'ff-keep', '[0.1,0.2,0.3]'), "
+        "('gone concept', 'ff-orphan', '[0.4,0.5,0.6]')"
+    ))
+
+    repo = GraphRepository(db_session)
+    # ff-keep is mentioned by a live note; ff-orphan has Entity+Concept nodes but
+    # no live mention → it is the orphan that must be fully forgotten.
+    _seed_mention(repo, note_id="ff-n1", entity_id="ff-keep", graph=_ISOLATED)
+    repo.upsert_node(label="Concept", node_id="ff-keep",
+                     properties={"id": "ff-keep", "name": "keep"}, graph_name=_ISOLATED)
+    repo.upsert_node(label="Entity", node_id="ff-orphan",
+                     properties={"id": "ff-orphan", "name": "orphan", "kind": "concept"},
+                     graph_name=_ISOLATED)
+    repo.upsert_node(label="Concept", node_id="ff-orphan",
+                     properties={"id": "ff-orphan", "name": "orphan"}, graph_name=_ISOLATED)
+    db_session.commit()
+
+    report = GraphReconciliationService(
+        session=db_session, graph_name=_ISOLATED
+    ).sweep_orphans(live_subject_ids=[])
+    db_session.commit()
+
+    # sweep_orphans returns (concepts, subjects, registry_rows)
+    assert report[2] == 1  # exactly one registry row (incl embedding) pruned
+    remaining = {
+        r[0] for r in db_session.execute(sa_text("SELECT entity_id FROM concept_registry")).all()
+    }
+    assert remaining == {"ff-keep"}  # mapping correct: live kept, orphan forgotten

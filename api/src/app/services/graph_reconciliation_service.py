@@ -30,7 +30,7 @@ class GraphReconciliationService:
         self._graph_name = graph_name
         self._repository = repository or GraphRepository(session)
 
-    def _sweep_orphans(self, *, live_subject_ids: list[str]) -> tuple[int, int, int]:
+    def sweep_orphans(self, *, live_subject_ids: list[str]) -> tuple[int, int, int]:
         """Delete orphaned Entity/Concept + Subject nodes and their registry rows.
 
         Returns (pruned_concept_nodes, pruned_subject_nodes, pruned_registry_rows).
@@ -59,12 +59,17 @@ class GraphReconciliationService:
                 source_note_id=nid, graph_name=self._graph_name
             )
 
-        concepts, subjects, registry = self._sweep_orphans(live_subject_ids=live_subject_ids)
+        concepts, subjects, registry = self.sweep_orphans(live_subject_ids=live_subject_ids)
 
         # Catch-all: registry rows whose entity_id no longer maps to a live mention
-        # (drift where the graph node was already gone).
-        live_ids = self._repository.fetch_live_mentioned_ids(graph_name=self._graph_name)
-        registry += prune_orphan_registry_rows(self._session, live_ids)
+        # (drift where the graph node was already gone). concept_registry is a
+        # PostgreSQL-only per-tenant table (absent in the SQLite test fallback), so
+        # this catch-all SELECT only runs on PostgreSQL. Errors there propagate so
+        # the per-tenant reconcile transaction rolls back atomically.
+        bind = self._session.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            live_ids = self._repository.fetch_live_mentioned_ids(graph_name=self._graph_name)
+            registry += prune_orphan_registry_rows(self._session, live_ids)
 
         return GraphParityReport(
             pruned_note_artifacts=len(stale),
@@ -84,7 +89,7 @@ class GraphReconciliationService:
         self._repository.delete_source_artifacts(
             source_note_id=note_id, graph_name=self._graph_name
         )
-        concepts, subjects, registry = self._sweep_orphans(live_subject_ids=live_subject_ids)
+        concepts, subjects, registry = self.sweep_orphans(live_subject_ids=live_subject_ids)
         return GraphParityReport(
             pruned_note_artifacts=1,
             pruned_concept_nodes=concepts,

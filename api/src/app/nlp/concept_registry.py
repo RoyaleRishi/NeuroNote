@@ -113,37 +113,35 @@ def registry_size(session: Session) -> int:
 def prune_registry_rows(session: Session, entity_ids: list[str]) -> int:
     """Delete concept_registry rows for the given entity ids (full forget).
 
-    Best-effort: returns the number of rows deleted, 0 on empty input or DB error.
+    **Not** best-effort. Unlike ``register_*`` (which must never fail NLP
+    processing on a DB hiccup), pruning participates in the atomic
+    delete/sweep/reconcile transaction: if the DELETE fails after the AGE node was
+    already removed in the same transaction, the error must propagate so the whole
+    transaction rolls back and parity is never left half-applied. Returns the
+    number of rows deleted (0 on empty input).
     """
     ids = [i for i in entity_ids if i]
     if not ids:
         return 0
-    try:
-        result = session.execute(
-            text("DELETE FROM concept_registry WHERE entity_id IN :ids").bindparams(
-                bindparam("ids", expanding=True)
-            ),
-            {"ids": ids},
-        )
-        return int(result.rowcount or 0)
-    except SQLAlchemyError as exc:
-        _log.warning("prune_registry_rows failed: %s", exc, exc_info=True)
-        return 0
+    result = session.execute(
+        text("DELETE FROM concept_registry WHERE entity_id IN :ids").bindparams(
+            bindparam("ids", expanding=True)
+        ),
+        {"ids": ids},
+    )
+    return int(result.rowcount or 0)
 
 
 def prune_orphan_registry_rows(session: Session, live_entity_ids: set[str]) -> int:
     """Delete concept_registry rows whose entity_id is not in the live set.
 
     Catch-all used by the reconcile backstop to clean drift where the graph node
-    was already removed. Best-effort.
+    was already removed. Like ``prune_registry_rows`` this is **not** best-effort —
+    errors propagate so the per-tenant reconcile transaction rolls back atomically.
     """
-    try:
-        rows = session.execute(text("SELECT entity_id FROM concept_registry")).all()
-        stale = [str(r[0]) for r in rows if str(r[0]) not in live_entity_ids]
-        return prune_registry_rows(session, stale)
-    except SQLAlchemyError as exc:
-        _log.warning("prune_orphan_registry_rows failed: %s", exc, exc_info=True)
-        return 0
+    rows = session.execute(text("SELECT entity_id FROM concept_registry")).all()
+    stale = [str(r[0]) for r in rows if str(r[0]) not in live_entity_ids]
+    return prune_registry_rows(session, stale)
 
 
 __all__ = [

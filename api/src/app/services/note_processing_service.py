@@ -169,7 +169,7 @@ class NoteProcessingService:
                 live_subject_ids = NoteRepository(session).list_live_subject_ids()
                 GraphReconciliationService(
                     session=session, graph_name=self._graph_name
-                )._sweep_orphans(live_subject_ids=live_subject_ids)
+                ).sweep_orphans(live_subject_ids=live_subject_ids)
 
         return ExtractionSummary(
             entity_count=len(result.entities),

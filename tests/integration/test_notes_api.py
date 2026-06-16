@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -335,6 +336,36 @@ def test_delete_note_removes_record(client: TestClient) -> None:
 
     get_response = client.get("/v1/notes/note-delete")
     assert get_response.status_code == 404
+
+
+def test_delete_note_rolls_back_sql_when_graph_prune_fails(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Atomicity: the SQL row delete and the AGE graph prune run in one transaction.
+
+    If the graph prune raises, the SQL delete must roll back too — the note row
+    survives. Guards the inline-transactional contract (and that prune errors are
+    no longer swallowed).
+    """
+    from app.routes import notes as notes_route
+
+    client.put(
+        "/v1/notes/note-rb",
+        json=_payload("note-rb", "Keep me on failure", "2026-03-01T12:20:00Z"),
+    )
+
+    def _boom(self, *, note_id: str, live_subject_ids: list[str]) -> None:
+        raise RuntimeError("simulated graph prune failure")
+
+    monkeypatch.setattr(
+        notes_route.GraphReconciliationService, "delete_note_graph", _boom
+    )
+
+    with pytest.raises(Exception):
+        client.delete("/v1/notes/note-rb")
+
+    # The note row survived the failed transaction (atomic rollback).
+    assert client.get("/v1/notes/note-rb").status_code == 200
 
 
 def test_delete_note_returns_404_for_unknown_note(client: TestClient) -> None:
