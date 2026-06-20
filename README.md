@@ -1,5 +1,4 @@
 # NeuroNote
-
 NeuroNote is a local-first, AI-powered knowledge base. You write notes in a rich editor, and the system automatically extracts concepts, builds a knowledge graph, and lets you explore how your ideas connect — all without leaving your workspace.
 
 **Key capabilities:**
