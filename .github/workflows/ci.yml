@@ -43,6 +43,12 @@ jobs:
     if: github.ref == 'refs/heads/rework' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
+      - name: Inspect secret shape
+        run: |
+          echo "length: $(echo -n "${{ secrets.GCP_SSH_KEY }}" | wc -c)"
+          echo "first line:"
+          echo "${{ secrets.GCP_SSH_KEY }}" | head -1
+
       - name: Deploy to GCP VM
         uses: appleboy/ssh-action@v1
         with:
