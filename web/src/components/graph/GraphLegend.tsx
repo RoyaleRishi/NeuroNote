@@ -88,6 +88,9 @@ export function GraphLegend({
                     onChange={() => onToggleHidden(type)}
                     aria-label={`Show ${style.label}`}
                   />
+                  <span className="graph-legend-toggle-pill" aria-hidden="true">
+                    <span className="graph-legend-toggle-knob" />
+                  </span>
                   <EdgeSwatch type={type} />
                   <span className="graph-legend-name">{style.label}</span>
                 </label>
@@ -107,7 +110,7 @@ export function GraphLegend({
                     }
                   }}
                 >
-                  <span aria-hidden="true">{isHighlighted ? "◉" : "○"}</span>
+                  <span aria-hidden="true">{isHighlighted ? "✦" : "✧"}</span>
                 </button>
               </div>
             );

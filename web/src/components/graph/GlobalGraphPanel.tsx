@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { D3GraphCanvas } from "./D3GraphCanvas";
 import { GraphLegend } from "./GraphLegend";
 import { ConceptInsightPanel } from "./ConceptInsightPanel";
+import { FilterCombobox } from "../ui/FilterCombobox";
 import type { GlobalGraphResponse, LocalGraphNode } from "../../../../shared/contracts/ts/v1/graph";
 import { SkeletonGraph } from "../ui/Skeleton";
 import { EmptyState } from "../ui/EmptyState";
@@ -85,51 +86,38 @@ export function GlobalGraphPanel({
     <div className="global-graph-view" aria-label="Global graph view">
       <aside className="global-graph-sidebar">
         <h2 className="global-graph-title">Knowledge Graph</h2>
-        <input
-          className="notes-filter-input"
-          type="text"
-          aria-label="Search nodes"
-          placeholder="Search nodes…"
-          value={nodeSearch}
-          onChange={(e) => setNodeSearch(e.target.value)}
-        />
 
-        <div className="notes-filters">
-          <label className="notes-filter-label">
-            Subject
-            <select
-              className="notes-filter-input"
-              aria-label="Filter by subject"
-              value={filters.subject_id ?? ""}
-              onChange={(e) =>
-                onFiltersChange({ ...filters, subject_id: e.target.value || undefined })
-              }
-            >
-              <option value="">All subjects</option>
-              {availableSubjects.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="notes-filter-label">
-            Tag
-            <select
-              className="notes-filter-input"
-              aria-label="Filter by tag"
-              value={filters.tag ?? ""}
-              onChange={(e) =>
-                onFiltersChange({ ...filters, tag: e.target.value || undefined })
-              }
-            >
-              <option value="">All tags</option>
-              {availableTags.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </label>
+        {/* Node search — pill bar, same pattern as notes sidebar */}
+        <div className="notes-filter-search-wrap">
+          <input
+            className="notes-filter-input notes-filter-search-input"
+            type="text"
+            aria-label="Search nodes"
+            placeholder="Search nodes…"
+            value={nodeSearch}
+            onChange={(e) => setNodeSearch(e.target.value)}
+          />
         </div>
 
+        {/* Subject + Tag — compact side-by-side pill comboboxes */}
+        <div className="notes-filter-pair">
+          <FilterCombobox
+            label="Subject"
+            value={filters.subject_id ?? ""}
+            onChange={(v) => onFiltersChange({ ...filters, subject_id: v || undefined })}
+            options={availableSubjects}
+            placeholder="Subject"
+          />
+          <FilterCombobox
+            label="Tag"
+            value={filters.tag ?? ""}
+            onChange={(v) => onFiltersChange({ ...filters, tag: v || undefined })}
+            options={availableTags}
+            placeholder="Tag"
+          />
+        </div>
+
+        {/* Node + edge counts */}
         <div className="workspace-stat-grid global-graph-stats">
           <div className="workspace-stat-card">
             <span className="workspace-stat-label">Nodes</span>
@@ -140,6 +128,7 @@ export function GlobalGraphPanel({
             <span className="workspace-stat-value">{edgeCount}</span>
           </div>
         </div>
+
         {graph?.meta.truncated && (
           <p className="global-graph-truncated-note">
             Showing top {graph.meta.applied_filters.limit_nodes} nodes

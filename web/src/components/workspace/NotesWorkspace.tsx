@@ -47,6 +47,7 @@ import { QuickCaptureModal, type QuickCaptureResult } from "./QuickCaptureModal"
 import { FileDropZone } from "./FileDropZone";
 import { UserMenu } from "../auth/UserMenu";
 import { useAuth } from "../../lib/hooks/useAuth";
+import { TutorialOverlay, shouldShowTutorial } from "../onboarding/TutorialOverlay";
 
 const SELECTED_NOTE_STORAGE_KEY = "neuronote.workspace.selected";
 const RECENT_NOTES_STORAGE_KEY = "neuronote.workspace.recent";
@@ -226,6 +227,8 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const createInFlightRef = useRef(false);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const filtersInitializedRef = useRef(false);
@@ -347,6 +350,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   useEffect(() => {
     setRecentNoteIds(loadRecentNotes());
     void refreshNotes(initialNoteId ?? null);
+    setShowTutorial(shouldShowTutorial());
   }, [initialNoteId, refreshNotes]);
 
   useEffect(() => {
@@ -986,6 +990,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           setSelectedNoteId(note.note_id);
           setHighlightedNoteId(note.note_id);
           closeContextMenu();
+          setMobileSidebarOpen(false);
         }}
         onContextMenu={(event) => handleNoteContextMenu(event, note.note_id)}
         onKeyDown={(event) => handleNoteContextMenuKeyDown(event, note.note_id)}
@@ -1022,6 +1027,17 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
       />
       <ModelDownloadProgress status={edge.status} progress={edge.progress} />
       <nav className="app-nav">
+        <button
+          type="button"
+          className="app-nav-mobile-toggle"
+          onClick={() => setMobileSidebarOpen((v) => !v)}
+          aria-label={mobileSidebarOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileSidebarOpen}
+        >
+          <span className="app-nav-mobile-toggle-bar" />
+          <span className="app-nav-mobile-toggle-bar" />
+          <span className="app-nav-mobile-toggle-bar" />
+        </button>
         <span className="app-nav-brand">NeuroNote</span>
         <div className="app-nav-tabs" role="tablist" aria-label="App view">
           <button
@@ -1100,7 +1116,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
       ) : (
       <FileDropZone onFileContent={(name, content) => void handleFileImport(name, content)}>
       <section className={`notes-workspace${sidebarOpen ? "" : " sidebar-collapsed"}`} data-testid="notes-workspace">
-      <aside className="notes-sidebar">
+      <aside className={`notes-sidebar${mobileSidebarOpen ? " mobile-open" : ""}`}>
         <header className="notes-sidebar-header">
           <div className="notes-sidebar-title-row">
             <h1>Notes</h1>
@@ -1164,36 +1180,38 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         </div>
 
         <div className="notes-filters">
-          <label className="notes-filter-label">
-            Search
+          <div className="notes-filter-search-wrap">
             <input
               aria-label="Search"
-              className="notes-filter-input"
+              className="notes-filter-input notes-filter-search-input"
               type="text"
               value={search}
+              placeholder="Search notes…"
               onChange={(event) => setSearch(event.target.value)}
             />
-          </label>
-          <FilterCombobox
-            label="Subject"
-            value={subjectFilter}
-            onChange={setSubjectFilter}
-            options={availableSubjects}
-          />
-          <FilterCombobox
-            label="Tag"
-            value={tagFilter}
-            onChange={setTagFilter}
-            options={availableTags}
-          />
-          <label className="notes-toggle-filter">
+          </div>
+          <div className="notes-filter-pair">
+            <FilterCombobox
+              label="Subject"
+              value={subjectFilter}
+              onChange={setSubjectFilter}
+              options={availableSubjects}
+              placeholder="Subject"
+            />
+            <FilterCombobox
+              label="Tag"
+              value={tagFilter}
+              onChange={setTagFilter}
+              options={availableTags}
+              placeholder="Tag"
+            />
+          </div>
+          <label className={`notes-toggle-filter${showArchived ? " active" : ""}`}>
             <input
               aria-label="Show archived"
               type="checkbox"
               checked={showArchived}
-              onChange={(event) => {
-                setShowArchived(event.target.checked);
-              }}
+              onChange={(event) => setShowArchived(event.target.checked)}
             />
             Show archived
           </label>
@@ -1308,18 +1326,18 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         </div>
       </aside>
 
+      {!sidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-expand-btn"
+          onClick={() => setSidebarOpen(true)}
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+        >
+          ›
+        </button>
+      )}
       <main className="notes-editor-panel">
-        {!sidebarOpen && (
-          <button
-            type="button"
-            className="sidebar-expand-btn"
-            onClick={() => setSidebarOpen(true)}
-            title="Expand sidebar"
-            aria-label="Expand sidebar"
-          >
-            ›
-          </button>
-        )}
         {selectedNoteId ? (
           <NoteEditor
             key={selectedNoteId}
@@ -1524,6 +1542,19 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         onSave={(result) => void handleQuickCaptureSave(result)}
       />
       <HelpWidget />
+
+      {/* Mobile sidebar scrim */}
+      {mobileSidebarOpen && (
+        <div
+          className="mobile-sidebar-scrim"
+          aria-hidden="true"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      {showTutorial && (
+        <TutorialOverlay onDone={() => setShowTutorial(false)} />
+      )}
     </div>
   );
 }

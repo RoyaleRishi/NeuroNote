@@ -40,7 +40,7 @@ jobs:
 
   deploy:
     needs: [api-fast-checks, web-fast-checks]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/rework' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to GCP VM
@@ -51,5 +51,5 @@ jobs:
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
             cd ~/neuronote
-            git pull origin main
+            git pull origin rework
             make deploy-prod

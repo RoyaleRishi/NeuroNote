@@ -15,7 +15,7 @@ const emptyGraph = {
 };
 
 describe("GlobalGraphPanel", () => {
-  it("renders subject dropdown with all options and default empty selection", () => {
+  it("renders subject filter with options visible on focus", () => {
     render(
       <GlobalGraphPanel
         baseUrl="http://localhost:8000"
@@ -30,14 +30,14 @@ describe("GlobalGraphPanel", () => {
         onOpenNote={() => {}}
       />,
     );
-    const select = screen.getByLabelText("Filter by subject") as HTMLSelectElement;
-    expect(select.value).toBe("");
-    expect(screen.getByText("All subjects")).toBeInTheDocument();
+    const input = screen.getByLabelText("Subject") as HTMLInputElement;
+    expect(input.value).toBe("");
+    fireEvent.focus(input);
     expect(screen.getByText("math")).toBeInTheDocument();
     expect(screen.getByText("physics")).toBeInTheDocument();
   });
 
-  it("calls onFiltersChange with subject_id when subject is selected", () => {
+  it("calls onFiltersChange with subject_id when subject is typed", () => {
     const onFiltersChange = vi.fn();
     render(
       <GlobalGraphPanel
@@ -53,11 +53,11 @@ describe("GlobalGraphPanel", () => {
         onOpenNote={() => {}}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Filter by subject"), { target: { value: "math" } });
+    fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "math" } });
     expect(onFiltersChange).toHaveBeenCalledWith({ subject_id: "math" });
   });
 
-  it("renders tag dropdown and calls onFiltersChange when tag selected", () => {
+  it("renders tag filter and calls onFiltersChange when tag is typed", () => {
     const onFiltersChange = vi.fn();
     render(
       <GlobalGraphPanel
@@ -73,7 +73,7 @@ describe("GlobalGraphPanel", () => {
         onOpenNote={() => {}}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Filter by tag"), { target: { value: "lecture" } });
+    fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "lecture" } });
     expect(onFiltersChange).toHaveBeenCalledWith({ tag: "lecture" });
   });
 
