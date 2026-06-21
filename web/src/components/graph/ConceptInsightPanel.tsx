@@ -131,7 +131,7 @@ export function ConceptInsightPanel({
           parsed = JSON.parse(raw) as typeof parsed;
         } catch {
           // Non-JSON fallback: treat the whole response as plain insight text
-          parsed = { insight: raw || null, learning_links: [] };
+          parsed = { insight: raw || undefined, learning_links: [] };
         }
 
         const links: ConceptLearningLink[] = (parsed.learning_links ?? []).filter(
