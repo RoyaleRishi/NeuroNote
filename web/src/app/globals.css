@@ -3848,40 +3848,11 @@ select:focus-visible {
   z-index: var(--z-modal);
 }
 
-.app-loading-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-5);
-}
-
-.app-loading-brand {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--text-strong);
-  letter-spacing: -0.02em;
-}
-
-.app-loading-dots {
-  display: flex;
-  gap: 7px;
-}
-
-.app-loading-dots span {
-  display: block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: loadingDot 1.3s ease-in-out infinite;
-}
-
-.app-loading-dots span:nth-child(2) { animation-delay: 0.22s; }
-.app-loading-dots span:nth-child(3) { animation-delay: 0.44s; }
-
-@keyframes loadingDot {
-  0%, 80%, 100% { opacity: 0.18; transform: scale(0.75); }
-  40%            { opacity: 1;    transform: scale(1);    }
+.loading-graph-svg {
+  width: 220px;
+  height: 220px;
+  /* reuse landing-hero-graph breathing animation */
+  animation: heroGraphBreathe 6s ease-in-out 2s infinite;
 }
 
 /* ═══════════════════════════════════════════════════════════════

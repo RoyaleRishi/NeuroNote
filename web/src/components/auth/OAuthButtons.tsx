@@ -24,7 +24,7 @@ export function OAuthButtons() {
         credentials: "include",
       });
       if (res.ok) {
-        window.location.href = "/";
+        window.location.href = "/workspace";
       }
     } catch {
       // ignore

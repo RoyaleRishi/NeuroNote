@@ -72,7 +72,7 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me}
       PREF_ENCRYPTION_KEY: ${PREF_ENCRYPTION_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000/workspace}
       UV_PROJECT_ENVIRONMENT: /tmp/neuronote-api-venv
       UV_CACHE_DIR: /tmp/uv-cache
       PYTHONPATH: api/src:.

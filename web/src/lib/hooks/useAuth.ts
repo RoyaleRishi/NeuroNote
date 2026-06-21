@@ -20,7 +20,8 @@ export function useAuth() {
         if (cancelled) return;
         if (!profile) {
           if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-            window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+            const next = window.location.pathname === "/" ? "/workspace" : window.location.pathname;
+            window.location.href = `/login?next=${encodeURIComponent(next)}`;
           }
           return;
         }
@@ -29,7 +30,8 @@ export function useAuth() {
       .catch(() => {
         if (cancelled) return;
         if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-          window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+          const next = window.location.pathname === "/" ? "/workspace" : window.location.pathname;
+          window.location.href = `/login?next=${encodeURIComponent(next)}`;
         }
       })
       .finally(() => {

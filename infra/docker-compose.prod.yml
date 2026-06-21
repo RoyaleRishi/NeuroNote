@@ -21,7 +21,7 @@ services:
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       OAUTH_REDIRECT_BASE_URL: https://${DOMAIN}
       CORS_ORIGINS: https://${DOMAIN}
-      FRONTEND_URL: https://${DOMAIN}
+      FRONTEND_URL: https://${DOMAIN}/workspace
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
     restart: always

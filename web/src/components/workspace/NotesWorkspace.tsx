@@ -48,6 +48,7 @@ import { FileDropZone } from "./FileDropZone";
 import { UserMenu } from "../auth/UserMenu";
 import { useAuth } from "../../lib/hooks/useAuth";
 import { TutorialOverlay, shouldShowTutorial } from "../onboarding/TutorialOverlay";
+import { LoadingGraph } from "../ui/LoadingGraph";
 
 const SELECTED_NOTE_STORAGE_KEY = "neuronote.workspace.selected";
 const RECENT_NOTES_STORAGE_KEY = "neuronote.workspace.recent";
@@ -234,7 +235,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const filtersInitializedRef = useRef(false);
 
   // ── Auth ──
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   // ── Preferences ──
   const { prefs, mutate: mutatePrefs } = usePreferences();
@@ -1013,6 +1014,15 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
     ),
     [closeContextMenu, handleNoteContextMenu, handleNoteContextMenuKeyDown, search, selectedNoteId],
   );
+
+  // Block render until auth check resolves — prevents workspace flash before login redirect.
+  if (authLoading) {
+    return (
+      <div className="app-loading-screen" aria-label="Loading NeuroNote">
+        <LoadingGraph />
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">

@@ -11,7 +11,7 @@ export default function LoginPage() {
         </div>
         <OAuthButtons />
         <p className="login-card-footer-link">
-          <Link href="/landing">What is NeuroNote? →</Link>
+          <Link href="/">What is NeuroNote? →</Link>
         </p>
       </div>
     </div>
