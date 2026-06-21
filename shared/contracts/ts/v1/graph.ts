@@ -78,3 +78,15 @@ export interface ConceptInsightResponse {
   learning_links: ConceptLearningLink[];
   generated_at: string;
 }
+
+export interface InsightContextNote {
+  note_id: string;
+  title: string;
+  excerpt: string;
+}
+
+export interface InsightContextResponse {
+  concept_label: string;
+  notes: InsightContextNote[];
+  total_notes: number;
+}

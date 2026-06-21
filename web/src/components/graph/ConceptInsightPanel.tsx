@@ -2,14 +2,35 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { fetchConceptInsight } from "../../lib/api-client";
+import { fetchConceptInsight, fetchInsightContext } from "../../lib/api-client";
+import { usePreferences } from "../../lib/hooks/usePreferences";
+import { getEngine } from "../../lib/edge-llm/model-manager";
 import { useDismissable } from "../../lib/hooks/useDismissable";
 import type {
   ConceptInsightResponse,
   ConceptLearningLink,
   ConceptNoteRef,
+  InsightContextNote,
   LocalGraphNode,
 } from "../../../../shared/contracts/ts/v1/graph";
+
+const EDGE_SYSTEM_PROMPT = `You are a knowledge synthesis assistant. Generate an insight about a concept based \
+SOLELY on the user's own notes.
+
+Rules:
+- The insight must draw only from the provided notes. Do not add external knowledge.
+- Reference note titles explicitly, e.g. "In your note 'Title'...".
+- Keep the insight to 2–3 focused paragraphs.
+- For learning_links: suggest 3–4 genuinely reputable URLs (Wikipedia, official \
+documentation, well-known academic sources). Use only real, widely-known URLs.
+
+Respond ONLY with valid JSON in exactly this shape (no markdown fences):
+{
+  "insight": "...",
+  "learning_links": [
+    {"title": "...", "url": "https://...", "description": "..."}
+  ]
+}`;
 
 interface ConceptInsightPanelProps {
   node: LocalGraphNode;
@@ -18,15 +39,28 @@ interface ConceptInsightPanelProps {
   onOpenNote: (noteId: string) => void;
 }
 
+type EdgeStatus = "loading-model" | "generating" | "done" | "error";
+
+interface PanelData {
+  noteRefs: ConceptNoteRef[];
+  insight: string | null;
+  insightError: string | null;
+  learningLinks: ConceptLearningLink[];
+}
+
 export function ConceptInsightPanel({
   node,
   baseUrl,
   onClose,
   onOpenNote,
 }: ConceptInsightPanelProps) {
-  const [data, setData] = useState<ConceptInsightResponse | null>(null);
+  const { prefs } = usePreferences();
+  const llmMode = prefs?.llm_mode ?? "edge";
+
+  const [data, setData] = useState<PanelData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [edgeStatus, setEdgeStatus] = useState<EdgeStatus | null>(null);
   const [linksOpen, setLinksOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -34,18 +68,93 @@ export function ConceptInsightPanel({
     setLoading(true);
     setError(null);
     setData(null);
-    fetchConceptInsight(baseUrl, node.label, 10)
-      .then(setData)
-      .catch(() => setError("Could not load insight. Please try again."))
-      .finally(() => setLoading(false));
-  }, [baseUrl, node.label]);
+    setEdgeStatus(null);
+
+    if (llmMode === "edge") {
+      void runEdgeInsight();
+    } else {
+      void runCloudInsight();
+    }
+
+    async function runCloudInsight() {
+      try {
+        const resp: ConceptInsightResponse = await fetchConceptInsight(baseUrl, node.label, 10);
+        setData({
+          noteRefs: resp.note_refs,
+          insight: resp.insight,
+          insightError: resp.insight_error,
+          learningLinks: resp.learning_links,
+        });
+      } catch {
+        setError("Could not load insight. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function runEdgeInsight() {
+      try {
+        const context = await fetchInsightContext(baseUrl, node.label, 10);
+        const noteRefs: ConceptNoteRef[] = context.notes.map((n: InsightContextNote) => ({
+          note_id: n.note_id,
+          note_title: n.title,
+          snippet: n.excerpt,
+        }));
+
+        const engine = getEngine();
+        if (!engine) {
+          setData({ noteRefs, insight: null, insightError: null, learningLinks: [] });
+          setEdgeStatus("loading-model");
+          setLoading(false);
+          return;
+        }
+
+        setEdgeStatus("generating");
+        const noteContext = context.notes
+          .map((n: InsightContextNote, i: number) => `[Note ${i + 1}: '${n.title}']\n${n.excerpt}`)
+          .join("\n\n---\n\n");
+
+        const response = await engine.chat.completions.create({
+          messages: [
+            { role: "system", content: EDGE_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: `Concept: "${node.label}"\n\nUser notes:\n\n${noteContext}`,
+            },
+          ],
+          max_tokens: 1024,
+        });
+
+        const raw = (response.choices[0]?.message.content ?? "").trim();
+        let parsed: { insight?: string; learning_links?: ConceptLearningLink[] } = {};
+        try {
+          parsed = JSON.parse(raw) as typeof parsed;
+        } catch {
+          // Non-JSON fallback: treat the whole response as plain insight text
+          parsed = { insight: raw || null, learning_links: [] };
+        }
+
+        const links: ConceptLearningLink[] = (parsed.learning_links ?? []).filter(
+          (l): l is ConceptLearningLink =>
+            typeof l === "object" && l !== null && "title" in l && "url" in l && "description" in l,
+        );
+        setData({ noteRefs, insight: parsed.insight ?? null, insightError: null, learningLinks: links });
+        setEdgeStatus("done");
+      } catch {
+        setEdgeStatus("error");
+        setData((prev) => prev ?? { noteRefs: [], insight: null, insightError: null, learningLinks: [] });
+      } finally {
+        setLoading(false);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseUrl, node.label, llmMode]);
 
   useDismissable(panelRef, true, onClose);
 
   return (
     <div className="concept-insight-overlay" role="dialog" aria-modal="true" aria-label={`Insight: ${node.label}`}>
       <div ref={panelRef} className="concept-insight-panel">
-        {/* ── Header ── */}
         <div className="concept-insight-header">
           <div className="concept-insight-header-left">
             <span className="concept-insight-type-badge">{node.type}</span>
@@ -61,7 +170,6 @@ export function ConceptInsightPanel({
           </button>
         </div>
 
-        {/* ── Body ── */}
         <div className="concept-insight-body">
           {loading ? (
             <LoadingSkeleton />
@@ -69,14 +177,16 @@ export function ConceptInsightPanel({
             <p className="concept-insight-error">{error}</p>
           ) : data ? (
             <>
-              <RelatedNotes refs={data.note_refs} onOpenNote={onOpenNote} onClose={onClose} />
+              <RelatedNotes refs={data.noteRefs} onOpenNote={onOpenNote} onClose={onClose} />
               <InsightSection
                 insight={data.insight}
-                insightError={data.insight_error ?? null}
+                insightError={data.insightError}
+                llmMode={llmMode}
+                edgeStatus={edgeStatus}
               />
-              {data.learning_links.length > 0 && (
+              {data.learningLinks.length > 0 && (
                 <LearningLinks
-                  links={data.learning_links}
+                  links={data.learningLinks}
                   open={linksOpen}
                   onToggle={() => setLinksOpen((v) => !v)}
                 />
@@ -138,9 +248,13 @@ function RelatedNotes({
 function InsightSection({
   insight,
   insightError,
+  llmMode,
+  edgeStatus,
 }: {
   insight: string | null;
   insightError: string | null;
+  llmMode: "edge" | "cloud";
+  edgeStatus: EdgeStatus | null;
 }) {
   return (
     <div className="concept-insight-section">
@@ -151,11 +265,23 @@ function InsightSection({
       {insight ? (
         <div className="concept-insight-text">{insight}</div>
       ) : insightError ? (
-        // The backend reported a concrete reason — surface it verbatim so
-        // the user can fix their model/key/base-url instead of guessing.
         <p className="concept-insight-error" role="alert">
           AI insight unavailable: {insightError}
         </p>
+      ) : llmMode === "edge" ? (
+        edgeStatus === "loading-model" ? (
+          <p className="concept-insight-no-llm">
+            On-device AI is still loading — insight will appear once the model finishes downloading.
+          </p>
+        ) : edgeStatus === "error" ? (
+          <p className="concept-insight-error" role="alert">
+            On-device AI insight unavailable. The model may have encountered an error.
+          </p>
+        ) : (
+          <p className="concept-insight-no-llm">
+            On-device AI is still loading — insight will appear once the model finishes downloading.
+          </p>
+        )
       ) : (
         <p className="concept-insight-no-llm">
           Configure a cloud AI key in your user menu to enable AI insights.

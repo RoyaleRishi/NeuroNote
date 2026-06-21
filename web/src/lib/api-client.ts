@@ -34,6 +34,7 @@ import type {
   LocalGraphResponse,
   GlobalGraphResponse,
   ConceptInsightResponse,
+  InsightContextResponse,
 } from "../../../shared/contracts/ts/v1/graph";
 import type { UserProfile } from "../../../shared/contracts/ts/v1/auth";
 import type {
@@ -322,6 +323,21 @@ export async function fetchConceptInsight(
     { timeoutMs: 30_000 },
   );
   return parseJsonResponse<ConceptInsightResponse>(response);
+}
+
+export async function fetchInsightContext(
+  baseUrl: string,
+  label: string,
+  limitNotes = 10,
+): Promise<InsightContextResponse> {
+  const params = new URLSearchParams();
+  params.set("label", label);
+  params.set("limit_notes", String(limitNotes));
+  const response = await apiFetch(
+    `${baseUrl}/v1/concepts/insight-context?${params.toString()}`,
+    { timeoutMs: 30_000 },
+  );
+  return parseJsonResponse<InsightContextResponse>(response);
 }
 
 // ── File import ───────────────────────────────────────────────────────────────
