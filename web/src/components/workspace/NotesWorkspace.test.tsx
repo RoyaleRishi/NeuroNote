@@ -230,7 +230,7 @@ describe("NotesWorkspace", () => {
     const pinnedSection = await screen.findByTestId("notes-section-pinned");
     expect(within(pinnedSection).getByRole("button", { name: /Pinned A/ })).toBeInTheDocument();
 
-    const allSection = screen.getByTestId("notes-section-all");
+    const allSection = await screen.findByTestId("notes-section-all");
     expect(within(allSection).getByRole("button", { name: /Regular B/ })).toBeInTheDocument();
     expect(within(allSection).queryByRole("button", { name: /Pinned A/ })).not.toBeInTheDocument();
   });
@@ -278,7 +278,7 @@ describe("NotesWorkspace", () => {
     expect(screen.queryByRole("button", { name: "Rename note" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete note" })).not.toBeInTheDocument();
 
-    const allSection = screen.getByTestId("notes-section-all");
+    const allSection = await screen.findByTestId("notes-section-all");
     await waitFor(() => {
       expect(within(allSection).getByRole("button", { name: /Context A/ })).toBeInTheDocument();
     });
@@ -321,7 +321,7 @@ describe("NotesWorkspace", () => {
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
 
-    const allSection = screen.getByTestId("notes-section-all");
+    const allSection = await screen.findByTestId("notes-section-all");
     await waitFor(() => {
       expect(within(allSection).getByRole("button", { name: /Context A/ })).toBeInTheDocument();
     });
@@ -365,7 +365,7 @@ describe("NotesWorkspace", () => {
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
 
-    const allSection = screen.getByTestId("notes-section-all");
+    const allSection = await screen.findByTestId("notes-section-all");
     await waitFor(() => {
       expect(within(allSection).getByRole("button", { name: /Context A/ })).toBeInTheDocument();
     });
@@ -396,7 +396,7 @@ describe("NotesWorkspace", () => {
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
 
-    const allSection = screen.getByTestId("notes-section-all");
+    const allSection = await screen.findByTestId("notes-section-all");
     await waitFor(() => {
       expect(within(allSection).getByRole("button", { name: /Title note-a/ })).toBeInTheDocument();
     });
@@ -467,7 +467,7 @@ describe("NotesWorkspace", () => {
 
     render(<NotesWorkspace baseUrl="http://localhost:8000" />);
 
-    const allSection = screen.getByTestId("notes-section-all");
+    const allSection = await screen.findByTestId("notes-section-all");
     await waitFor(() => {
       expect(within(allSection).getByRole("button", { name: /Keyboard Menu/ })).toBeInTheDocument();
     });
