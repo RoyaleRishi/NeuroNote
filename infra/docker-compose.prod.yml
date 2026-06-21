@@ -5,7 +5,7 @@ services:
     restart: always
 
   api:
-    image: neuronote-api:prod
+    image: ghcr.io/royalerishi/neuronote-api:latest
     volumes: !reset []
     environment:
       DATABASE_URL: postgresql+psycopg://neuronote:${DB_PASSWORD}@db:5432/neuronote
@@ -27,14 +27,7 @@ services:
     restart: always
 
   web:
-    build:
-      context: ..
-      dockerfile: web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: https://${DOMAIN}
-        NEXT_PUBLIC_API_KEY: ${API_KEY:-}
-        NEXT_PUBLIC_AUTH_ENABLED: "false"
-    image: neuronote-web:prod
+    image: ghcr.io/royalerishi/neuronote-web:latest
     command: ["sh", "-c", "node_modules/.bin/next start --hostname 0.0.0.0 --port ${PORT:-3000}"]
     volumes: !reset []
     environment:

@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/royalerishi/neuronote
+
 jobs:
   api-fast-checks:
     runs-on: ubuntu-latest
@@ -38,25 +42,65 @@ jobs:
       - name: Tests
         run: cd web && npm run test
 
-  deploy:
+  build-and-push:
     needs: [api-fast-checks, web-fast-checks]
     if: github.ref == 'refs/heads/rework' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Inspect secret shape
-        run: |
-          echo "length: $(echo -n "${{ secrets.GCP_SSH_KEY }}" | wc -c)"
-          echo "first line:"
-          echo "${{ secrets.GCP_SSH_KEY }}" | head -1
+      - uses: actions/checkout@v5
 
-      - name: Deploy to GCP VM
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://neuronote.rsrikaanth.com
+            NEXT_PUBLIC_AUTH_ENABLED=false
+
+  deploy:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/rework' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and restart on VM
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.GCP_VM_IP }}
           username: ${{ secrets.GCP_VM_USER }}
           key: ${{ secrets.GCP_SSH_KEY }}
-          command_timeout: 30m
+          command_timeout: 10m
           script: |
             cd ~/neuronote
-            git pull origin rework
-            make deploy-prod
+            git fetch origin rework && git reset --hard origin/rework
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u royalerishi --password-stdin
+            docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file infra/.env.prod pull
+            docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --force-recreate
+            docker image prune -f
