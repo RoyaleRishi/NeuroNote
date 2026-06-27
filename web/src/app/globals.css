@@ -1,20 +1,25 @@
 :root {
-  /* App-specific palette — warm "aged paper" theme (parchment + olive accent).
-     Referenced by tokens.css semantic aliases. */
-  --workspace-bg: #ece0c8;        /* parchment outer */
-  --workspace-surface: #f4ecda;   /* lighter paper surface */
-  --panel-bg: #faf4e6;            /* cream panel */
-  --panel-border: #d8c9a8;        /* soft tan */
-  --panel-border-strong: #c4b288; /* stronger tan */
-  --text-strong: #2e2519;         /* espresso ink */
-  --text-muted: #6f6450;          /* walnut */
-  --accent: #3f6b3a;              /* warm olive-green */
-  --accent-strong: #335a30;
-  --accent-soft: #e6ead2;         /* pale warm olive */
-  --accent-ink: #2f5a2c;
-  --danger: #a4232f;              /* reads fine on warm surfaces */
-  --shadow-soft: 0 12px 36px rgb(60 45 20 / 12%);
-  --shadow-panel: 0 18px 42px rgb(60 45 20 / 12%);
+  /* App-specific palette — mirrored from rsrikaanth.com: warm cream base, warm
+     near-black ink, and a confident editorial accent set (blue / navy / golden
+     / vermilion). Referenced by tokens.css semantic aliases. */
+  --workspace-bg: #EFE9DB;        /* deeper cream canvas behind panels */
+  --workspace-surface: #F3EEE2;   /* warm cream surface */
+  --panel-bg: #FBF9F2;            /* light cream panel (site's paper) */
+  --panel-border: #E2DACA;        /* warm sand border */
+  --panel-border-strong: #D0C5AE; /* stronger sand */
+  --text-strong: #161410;         /* warm near-black ink (site exact) */
+  --text-muted: #5F5A49;          /* warm grey-olive (site exact) */
+  --accent: #F4B019;              /* marigold (site exact) — primary */
+  --accent-strong: #D1920A;       /* deeper marigold — hover/active */
+  --accent-soft: #FBE8C2;         /* pale marigold tint */
+  --accent-ink: #6B4905;          /* dark brown (site exact) — accent text */
+  /* Dark brown secondary — depth, hierarchy, secondary emphasis. */
+  --secondary: #6B4905;           /* dark brown (site exact) */
+  --secondary-strong: #4A3203;    /* deepest brown */
+  --secondary-soft: #EDE3D0;      /* pale tan */
+  --danger: #D6452B;              /* vermilion (site exact) */
+  --shadow-soft: 0 4px 16px rgba(22, 20, 16, 0.06);
+  --shadow-panel: 0 10px 30px rgba(22, 20, 16, 0.08);
 
   /* Derived utility tokens */
   --input-border: var(--panel-border);
@@ -62,12 +67,29 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(circle at -5% -20%, #f7efdc 0%, transparent 40%),
-    radial-gradient(circle at 110% 0%, #efe4cb 0%, transparent 42%),
-    linear-gradient(170deg, var(--workspace-surface) 0%, var(--workspace-bg) 100%);
+  background: var(--workspace-bg);
   color: var(--text-strong);
   font-family: var(--font-family-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Type roles ─────────────────────────────────────────────
+   Bricolage display for headings/titles (tight tracking), mono for the
+   signature uppercase micro-labels. Applied via utility classes so the
+   role is explicit at every call site. */
+.u-display {
+  font-family: var(--font-family-display);
+  letter-spacing: -0.02em;
+}
+
+.u-eyebrow {
+  font-family: var(--font-family-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .sr-only {
@@ -112,8 +134,8 @@ body {
   flex-direction: column;
   gap: 14px;
   background: var(--panel-bg);
-  border: 1px solid var(--panel-border-strong);
-  border-radius: 24px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
   box-shadow: var(--shadow-panel);
   padding: 20px;
   height: 100%;
@@ -144,8 +166,11 @@ body {
 
 .notes-sidebar-header h1 {
   margin: 0;
-  font-size: 1.55rem;
-  line-height: 1.15;
+  font-family: var(--font-family-display);
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
 }
 
 .notes-sidebar-actions {
@@ -223,7 +248,7 @@ body {
 
 .new-note-split-option:hover {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 
@@ -235,24 +260,28 @@ body {
 
 .workspace-stat-card {
   border: 1px solid var(--panel-border);
-  background: linear-gradient(155deg, var(--panel-bg), #f0e7d0);
-  border-radius: 14px;
-  padding: 10px 10px 8px;
+  background: var(--workspace-surface);
+  border-radius: 6px;
+  padding: 9px 10px 8px;
   display: grid;
-  gap: 4px;
+  gap: 5px;
 }
 
 .workspace-stat-label {
   color: var(--text-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
+  font-family: var(--font-family-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .workspace-stat-value {
-  font-size: 1.05rem;
+  font-family: var(--font-family-display);
+  font-size: 1.35rem;
+  font-weight: 700;
   line-height: 1;
-  color: var(--accent-ink);
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
 }
 
 .notes-filters {
@@ -381,7 +410,7 @@ body {
 
 .notes-toggle-filter.active {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-ink);
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
@@ -391,7 +420,7 @@ body {
 
 .notes-toggle-filter:hover {
   border-color: var(--accent);
-  color: var(--accent-strong);
+  color: var(--accent-ink);
 }
 
 /* FilterCombobox */
@@ -425,7 +454,7 @@ body {
 }
 
 .filter-combobox-clear:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .filter-combobox-dropdown {
@@ -462,7 +491,7 @@ body {
 .filter-combobox-option:hover,
 .filter-combobox-option.selected {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .filter-combobox-option--typed {
@@ -480,23 +509,26 @@ body {
 .notes-section h2 {
   margin: 0 0 9px;
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-family: var(--font-family-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .notes-section h2 span {
-  min-width: 1.6rem;
+  min-width: 1.5rem;
   text-align: center;
-  border-radius: 999px;
-  padding: 2px 7px;
-  font-size: var(--text-xs);
-  color: var(--accent-ink);
-  border: 1px solid var(--surface-subtle-border);
-  background: var(--surface-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-family: var(--font-family-mono);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  border: 1px solid var(--panel-border);
+  background: var(--workspace-surface);
 }
 
 .notes-list {
@@ -511,25 +543,24 @@ body {
 .note-list-button {
   width: 100%;
   text-align: left;
-  border: 1px solid var(--input-border);
-  background: linear-gradient(160deg, var(--panel-bg), var(--workspace-surface));
-  border-radius: 14px;
-  padding: 11px 12px 10px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 9px 12px 9px 12px;
   cursor: pointer;
   display: grid;
-  gap: 4px;
-  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  gap: 3px;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .note-list-button:hover {
-  border-color: var(--panel-border-strong);
-  background: var(--panel-bg);
-  transform: translateY(-1px);
+  background: var(--workspace-surface);
 }
 
 .note-list-button.selected {
-  border-color: var(--accent-strong);
-  background: linear-gradient(160deg, #efe3c4, #e7d9b6);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .note-list-button.highlighted {
@@ -538,12 +569,16 @@ body {
 
 .note-list-title {
   font-weight: 600;
+  font-size: var(--text-sm);
   color: var(--text-strong);
+  letter-spacing: -0.01em;
 }
 
 .note-list-meta {
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-family: var(--font-family-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
 }
 
 .note-list-tags-row {
@@ -559,7 +594,7 @@ body {
   align-items: center;
   padding: 1px 7px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   border-radius: 999px;
   font-size: var(--text-xs);
   font-weight: 500;
@@ -576,8 +611,9 @@ body {
 
 .note-list-date {
   color: var(--text-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.01em;
+  font-family: var(--font-family-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
 }
 
 .note-list-preview {
@@ -660,8 +696,8 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--panel-border-strong);
-  border-radius: 24px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
   box-shadow: var(--shadow-panel);
   background: var(--panel-bg);
   overflow-y: auto;
@@ -775,7 +811,7 @@ body {
 }
 
 .graph-legend-key-dot {
-  color: var(--accent-strong);
+  color: var(--accent-ink);
 }
 
 .graph-legend-group {
@@ -850,7 +886,7 @@ body {
 
 .graph-legend-highlight:hover {
   border-color: var(--accent);
-  color: var(--accent-strong);
+  color: var(--accent-ink);
 }
 
 .graph-legend-highlight:focus-visible {
@@ -1012,7 +1048,7 @@ body {
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--accent-subtle);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--text-xs);
 }
 
@@ -1042,7 +1078,7 @@ body {
 .note-options-trigger:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .note-options-dropdown {
@@ -1114,7 +1150,7 @@ body {
 
 .note-options-action:hover {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .editor-toolbar {
@@ -1127,11 +1163,12 @@ body {
   background: var(--accent-soft);
   color: var(--accent-ink);
   border: 1px solid var(--panel-border);
-  border-radius: 999px;
-  font-size: var(--text-xs);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family-mono);
+  font-size: 0.66rem;
   padding: 4px 9px;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
 }
 
 .note-editor-field {
@@ -1144,7 +1181,7 @@ body {
   gap: 4px;
   padding: 3px 10px;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
   border: 1px solid var(--input-focus-outline);
   border-radius: 999px;
   font-size: var(--text-sm);
@@ -1172,7 +1209,7 @@ body {
 
 .subject-placeholder:hover {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .note-editor-input {
@@ -1185,9 +1222,19 @@ body {
 }
 
 .note-editor-title {
-  font-size: 1.35rem;
+  font-family: var(--font-family-display);
+  font-size: 1.7rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
+  border: none;
+  padding-left: 0;
+  padding-right: 0;
+  background: transparent;
+}
+
+.note-editor-title:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .note-editor-input:focus {
@@ -1277,29 +1324,24 @@ body {
 
 .tiptap-editor-shell {
   border: 1px solid var(--panel-border);
-  border-radius: 18px;
-  /* Warm paper surface with a faint inline-SVG grain (top layer, ~4.5%
-     opacity) composited over the cream→ecru gradient. No external asset. */
-  background-color: var(--panel-bg);
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E"),
-    linear-gradient(180deg, var(--panel-bg), #f6eeda);
+  border-radius: 10px;
+  background: var(--panel-bg);
   min-height: 420px;
 }
 
 .tiptap-editor .ProseMirror {
   min-height: 420px;
-  max-width: 860px;
-  padding: 20px 22px;
+  max-width: 720px;
+  padding: 28px 24px;
   outline: none;
   white-space: pre-wrap;
   color: var(--text-strong);
-  /* Warm serif for the note reading/writing surface only — UI chrome stays
-     on the sans body stack. */
-  font-family: var(--font-family-serif);
-  line-height: 1.72;
+  /* Clean Inter body for a Notion-like reading surface. Headings switch to
+     the Bricolage display face below. */
+  font-family: var(--font-family-body);
+  line-height: 1.7;
   overflow-wrap: anywhere;
-  font-size: 1.05rem;
+  font-size: 1rem;
   margin: 0 auto;
 }
 
@@ -1348,7 +1390,7 @@ body {
 }
 
 .editor-reference-link {
-  color: var(--accent-strong);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
@@ -1366,17 +1408,19 @@ body {
 .tiptap-editor .ProseMirror h1,
 .tiptap-editor .ProseMirror h2,
 .tiptap-editor .ProseMirror h3 {
-  margin: 1.15em 0 0.42em;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  margin: 1.3em 0 0.45em;
+  font-family: var(--font-family-display);
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
 }
 
 .tiptap-editor .ProseMirror h1 {
-  font-size: 1.78rem;
+  font-size: 1.85rem;
 }
 
 .tiptap-editor .ProseMirror h2 {
-  font-size: 1.42rem;
+  font-size: 1.45rem;
 }
 
 .tiptap-editor .ProseMirror h3 {
@@ -1499,9 +1543,9 @@ body {
 
 .quick-switch-item {
   width: 100%;
-  border: 1px solid var(--input-border);
-  background: linear-gradient(160deg, var(--panel-bg), var(--workspace-surface));
-  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  border-radius: 8px;
   text-align: left;
   padding: 8px 10px;
   cursor: pointer;
@@ -1511,8 +1555,8 @@ body {
 
 .quick-switch-item:hover,
 .quick-switch-item.selected {
-  border-color: var(--accent-strong);
-  background: linear-gradient(160deg, #efe3c4, #e7d9b6);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .quick-switch-item-title {
@@ -1762,7 +1806,7 @@ body {
 
 .modal-actions button.primary {
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   border: none;
 }
 
@@ -1812,7 +1856,7 @@ body {
   font-family: inherit;
   cursor: pointer;
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   border: none;
   transition: opacity 150ms ease;
 }
@@ -1843,7 +1887,7 @@ body {
   padding: 12px 24px;
   border-radius: 8px;
   background: var(--panel-bg);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: var(--text-base);
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -1987,7 +2031,7 @@ body {
 
 .error-actions button.primary {
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   border: none;
 }
 
@@ -2037,7 +2081,7 @@ body {
   cursor: pointer;
   font-family: inherit;
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   border: none;
   transition: all 150ms ease;
 }
@@ -2143,7 +2187,7 @@ body {
 }
 
 .toast-info .toast-icon {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 /* Toast animation */
@@ -2214,7 +2258,7 @@ body {
 /* Variants */
 .btn-primary {
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   border-color: var(--accent);
 }
 
@@ -2342,7 +2386,7 @@ body {
   margin-top: 4px;
   padding: 8px 20px;
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   border: none;
   border-radius: 8px;
   font-size: var(--text-sm);
@@ -2484,7 +2528,7 @@ body {
 .help-widget-trigger:hover {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .help-widget-overlay {
@@ -2540,7 +2584,7 @@ body {
 
 .help-widget-close:hover {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .help-widget-body {
@@ -2601,7 +2645,7 @@ a {
 }
 
 a:hover {
-  color: var(--accent-strong);
+  color: var(--accent-ink);
 }
 
 /* Select focus state */
@@ -2627,7 +2671,7 @@ select:focus-visible {
   transition:
     border-color var(--transition-fast) var(--ease),
     background var(--transition-fast) var(--ease),
-    transform var(--transition-fast) var(--ease);
+    box-shadow var(--transition-fast) var(--ease);
 }
 
 /* Context menu item transition */
@@ -2700,16 +2744,17 @@ select:focus-visible {
   padding: 0 24px;
   height: 48px;
   background: var(--panel-bg);
-  border-bottom: 1px solid var(--panel-border-strong);
+  border-bottom: 1px solid var(--panel-border);
   flex-shrink: 0;
 }
 
 .app-nav-brand {
   flex: 1;
-  font-weight: 600;
-  font-size: 1rem;
+  font-family: var(--font-family-display);
+  font-weight: 800;
+  font-size: 1.05rem;
   color: var(--text-strong);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
 
 .app-nav-right {
@@ -2744,7 +2789,7 @@ select:focus-visible {
 
 .app-nav-tab.active,
 .app-nav-tab[aria-selected="true"] {
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
   font-weight: 600;
 }
@@ -2791,7 +2836,7 @@ select:focus-visible {
 
 .note-view-tab.active,
 .note-view-tab[aria-selected="true"] {
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
   font-weight: 600;
 }
@@ -2813,8 +2858,8 @@ select:focus-visible {
   overflow-y: auto;
   padding: 20px;
   background: var(--panel-bg);
-  border: 1px solid var(--panel-border-strong);
-  border-radius: 24px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
   box-shadow: var(--shadow-panel);
   display: flex;
   flex-direction: column;
@@ -2822,10 +2867,12 @@ select:focus-visible {
 }
 
 .global-graph-title {
-  font-size: 1.35rem;
-  line-height: 1.15;
+  font-family: var(--font-family-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.05;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
 
 .global-graph-stats {
@@ -2840,8 +2887,8 @@ select:focus-visible {
   align-items: center;
   justify-content: center;
   background: var(--panel-bg);
-  border: 1px solid var(--panel-border-strong);
-  border-radius: 24px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
   box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
@@ -2976,7 +3023,7 @@ select:focus-visible {
 }
 
 .picker-create {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-style: italic;
 }
 
@@ -3087,7 +3134,7 @@ select:focus-visible {
 .user-menu-test-status.error { color: var(--danger); }
 .user-menu-confidence-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .user-menu-confidence-row > .user-menu-label { margin-bottom: 0; }
-.user-menu-confidence-value  { font-size: var(--text-xs); font-weight: 700; color: var(--accent); }
+.user-menu-confidence-value  { font-size: var(--text-xs); font-weight: 700; color: var(--accent-ink); }
 .user-menu-confidence-slider { width: 100%; accent-color: var(--accent); }
 .user-menu-confidence-bounds { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
 
@@ -3273,7 +3320,7 @@ select:focus-visible {
 
 .concept-insight-close:hover {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .concept-insight-body {
@@ -3428,7 +3475,7 @@ select:focus-visible {
 }
 
 .concept-insight-links-toggle:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .concept-insight-links-chevron {
@@ -3460,14 +3507,14 @@ select:focus-visible {
 .concept-insight-link-title {
   font-size: var(--text-sm);
   font-weight: 600;
-  color: var(--accent-strong);
+  color: var(--accent-ink);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
 .concept-insight-link-title:hover {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .concept-insight-link-desc {
@@ -3573,7 +3620,7 @@ select:focus-visible {
 
 .user-menu-mode-btn.active {
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   font-weight: var(--font-semibold);
 }
 
@@ -3806,13 +3853,13 @@ select:focus-visible {
 
 .model-status-indicator.is-downloading {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent-strong);
+  color: var(--accent-ink);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .model-status-indicator.is-ready {
   background: var(--accent-soft);
-  color: var(--accent-strong);
+  color: var(--accent-ink);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
@@ -3887,10 +3934,11 @@ select:focus-visible {
 
 .login-card-brand {
   margin: 0;
-  font-size: var(--text-xl);
-  font-weight: 700;
+  font-family: var(--font-family-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
   color: var(--text-strong);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .login-card-sub {
@@ -3907,7 +3955,7 @@ select:focus-visible {
 }
 
 .login-card-footer-link a {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
 }
 
@@ -3931,10 +3979,7 @@ select:focus-visible {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(circle at -5% -20%, #f7efdc 0%, transparent 40%),
-    radial-gradient(circle at 110% 0%, #efe4cb 0%, transparent 42%),
-    linear-gradient(170deg, var(--workspace-surface) 0%, var(--workspace-bg) 100%);
+  background: var(--workspace-bg);
 }
 
 /* ── Landing nav ── */
@@ -3948,16 +3993,17 @@ select:focus-visible {
 }
 
 .landing-nav-brand {
-  font-size: var(--text-base);
-  font-weight: 700;
+  font-family: var(--font-family-display);
+  font-size: var(--text-lg);
+  font-weight: 800;
   color: var(--text-strong);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
 
 .landing-nav-cta {
   font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
   padding: 6px 16px;
   border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
@@ -3988,7 +4034,7 @@ select:focus-visible {
   inset: 0;
   width: 100%;
   height: 100%;
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
 .landing-hero-edge {
@@ -4038,8 +4084,8 @@ select:focus-visible {
 }
 
 @keyframes heroGraphBreathe {
-  0%, 100% { opacity: 0.45; }
-  50%       { opacity: 0.55; }
+  0%, 100% { opacity: 0.35; }
+  50%       { opacity: 0.45; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4062,12 +4108,12 @@ select:focus-visible {
 
 .landing-hero-headline {
   margin: 0 0 var(--space-5);
-  font-family: var(--font-family-serif);
-  font-size: clamp(2.6rem, 6vw, 4.5rem);
-  font-weight: 600;
-  line-height: 1.1;
+  font-family: var(--font-family-display);
+  font-size: clamp(2.8rem, 7vw, 5.5rem);
+  font-weight: 800;
+  line-height: 1.0;
   color: var(--text-strong);
-  letter-spacing: -0.025em;
+  letter-spacing: -0.045em;
 }
 
 .landing-hero-sub {
@@ -4145,10 +4191,12 @@ select:focus-visible {
 
 .landing-feature-title {
   margin: 0;
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--accent-strong);
+  font-family: var(--font-family-display);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-strong);
   line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
 }
 
 .landing-feature-body {
@@ -4170,7 +4218,7 @@ select:focus-visible {
 }
 
 .landing-footer-link {
-  color: var(--accent);
+  color: var(--accent-ink);
   text-decoration: none;
 }
 
@@ -4220,7 +4268,7 @@ select:focus-visible {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border-strong);
   border-radius: var(--radius-xl);
-  box-shadow: 0 24px 64px color-mix(in srgb, #2e2519 22%, transparent);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.16);
   padding: var(--space-6) var(--space-8);
   max-width: 480px;
   width: 100%;
@@ -4272,7 +4320,7 @@ select:focus-visible {
 .tutorial-hint {
   margin: 0 0 var(--space-4);
   font-size: var(--text-xs);
-  color: var(--accent-strong);
+  color: var(--accent-ink);
   font-weight: 500;
   background: var(--accent-soft);
   padding: var(--space-2) var(--space-3);
@@ -4408,7 +4456,7 @@ select:focus-visible {
 
   .notes-sidebar.mobile-open {
     transform: translateX(0);
-    box-shadow: 6px 0 32px color-mix(in srgb, #2e2519 18%, transparent) !important;
+    box-shadow: 6px 0 32px rgba(0, 0, 0, 0.12) !important;
   }
 
   /* Show scrim when mobile sidebar open */

@@ -38,12 +38,16 @@
   --font-semibold: 600;
   --font-bold:     700;
 
-  /* Font families. `--font-serif-next` is injected by next/font in layout.tsx
-     and only used for the note editor surface; UI chrome stays on the sans
-     stack. */
-  --font-family-body: "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
-  --font-family-serif: var(--font-serif-next), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --font-family-mono: "SF Mono", Menlo, Monaco, Consolas, "Courier New", monospace;
+  /* Font families — mirrored from rsrikaanth.com. The `--font-*-next` vars are
+     injected by next/font in layout.tsx.
+     - display: Bricolage Grotesque, for headings/titles (tight tracking).
+     - body: Inter, for UI chrome + note body.
+     - mono: JetBrains Mono, the signature uppercase tracked micro-labels.
+     - serif: Newsreader, retained for optional editor emphasis only. */
+  --font-family-display: var(--font-display-next), "Bricolage Grotesque", system-ui, sans-serif;
+  --font-family-body: var(--font-body-next), "Inter", system-ui, "Segoe UI", sans-serif;
+  --font-family-mono: var(--font-mono-next), "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --font-family-serif: var(--font-serif-next), "Iowan Old Style", Georgia, serif;
 
   /* ── Border Radius ──────────────────────────────────────── */
   --radius-sm:   4px;
@@ -109,46 +113,48 @@
   --info-bg:   #dbeafe;
   --info-text: #1e40af;
 
-  /* Graph colors — warmed to sit on the parchment canvas. Note vs. entity stay
-     distinct (olive vs. bronze) but both read warm. */
-  --graph-node-note:        #3f6b3a;  /* olive, matches accent */
-  --graph-node-entity:      #9a6b34;  /* warm bronze */
-  --graph-node-other:       #7a6f5a;  /* warm grey */
-  --graph-edge:             #b8a585;  /* warm taupe */
-  --graph-node-highlight:   #e07b1a;  /* amber (already warm) */
-  --graph-edge-dim:         rgba(184, 165, 133, 0.18);
+  /* Graph colors — marigold + brown on warm cream. Notes (marigold) and
+     entities (brown) are distinct families; vermilion is the highlight. */
+  --graph-node-note:        #C8870A;  /* deep marigold, matches accent */
+  --graph-node-entity:      #6B4905;  /* dark brown — secondary */
+  --graph-node-other:       #8A8270;  /* warm grey */
+  --graph-edge:             #D8CDB5;  /* warm sand */
+  --graph-node-highlight:   #D6452B;  /* vermilion */
+  --graph-edge-dim:         rgba(216, 205, 181, 0.22);
   --graph-node-dim-opacity: 0.2;
-  --graph-node-stroke-default:   #faf4e6;  /* paper, matches panel-bg */
-  --graph-node-stroke-root:      #335a30;
-  --graph-node-stroke-highlight: #b85e10;
-  --graph-label-default:         #6f6450;  /* walnut */
-  --graph-label-highlight:       #7a3d0a;
+  --graph-node-stroke-default:   #FBF9F2;  /* cream, matches panel-bg */
+  --graph-node-stroke-root:      #4A3203;
+  --graph-node-stroke-highlight: #A82E18;
+  --graph-label-default:         #5F5A49;
+  --graph-label-highlight:       #8A5A04;
 
   /* Node widgets — soft tinted fills (legible dark text) with a typed border.
      "strong" variants are used for hierarchy parents (deeper fill + border). */
-  --graph-node-note-fill:          #e9efe2;  /* pale olive parchment */
-  --graph-node-note-fill-strong:   #d6e2c9;
-  --graph-node-note-strong:        #335a30;  /* deep olive border */
-  --graph-node-entity-fill:        #f1e6d4;  /* pale bronze parchment */
-  --graph-node-entity-fill-strong: #e6d3b4;
-  --graph-node-entity-strong:      #7a5326;  /* deep bronze border */
-  --graph-node-other-fill:         #ece7dd;
-  --graph-node-other-fill-strong:  #ded6c6;
-  --graph-node-other-strong:       #5f574a;
-  --graph-node-highlight-fill:     #fbe6c9;  /* pale amber */
-  --graph-widget-text:             #3a3122;  /* walnut-strong, on tinted fills */
+  --graph-node-note-fill:          #FBEAC6;  /* pale marigold */
+  --graph-node-note-fill-strong:   #F6D99B;
+  --graph-node-note-strong:        #A9740A;  /* deep marigold border */
+  --graph-node-entity-fill:        #EDE3D0;  /* pale tan */
+  --graph-node-entity-fill-strong: #DFD0B5;
+  --graph-node-entity-strong:      #4A3203;  /* deep brown border */
+  --graph-node-other-fill:         #F0EBDF;
+  --graph-node-other-fill-strong:  #E3DCCB;
+  --graph-node-other-strong:       #4A4638;
+  --graph-node-highlight-fill:     #FBD9CF;  /* pale vermilion */
+  --graph-widget-text:             #161410;
 
   /* Edge colours by relationship family (form carries the rest of the meaning). */
-  --graph-edge-hierarchy:    #335a30;  /* deep olive — structural backbone */
-  --graph-edge-equivalence:  #9a6b34;  /* bronze — synonym links */
-  --graph-edge-link:         #5b6f8a;  /* warm slate — note linkage */
-  --graph-edge-label:        #6f6450;  /* walnut — edge name labels */
+  --graph-edge-hierarchy:    #6B4905;  /* dark brown — structural backbone */
+  --graph-edge-equivalence:  #C8870A;  /* marigold — synonym links */
+  --graph-edge-link:         #8A8270;  /* warm grey — note linkage */
+  --graph-edge-label:        #8A8270;  /* warm grey — edge name labels */
 
   /* Overlay scrim used for modal/dialog backgrounds — warm sepia-dark. */
-  --overlay-scrim: rgba(40, 30, 15, 0.45);
+  --overlay-scrim: rgba(22, 20, 16, 0.5);
 
-  /* Foreground for text rendered on accent/danger/info colored fills. */
-  --text-on-accent: #ffffff;
+  /* Foreground for text rendered on the marigold accent — dark brown reads
+     legibly where white would fail contrast. (Danger/vermilion fills set
+     their own white text inline.) */
+  --text-on-accent: #2E2003;
 
   /* Tag chip colors (deterministic per-tag palette). */
   --tag-blue-bg:   #dbeafe; --tag-blue-text:   #1e40af;
