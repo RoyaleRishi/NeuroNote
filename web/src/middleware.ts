@@ -15,6 +15,10 @@ import { NextResponse } from "next/server";
  *    var is absent (e.g. unit tests / CI).
  *  - `font-src data:`: KaTeX inlines fonts as data URIs.
  *  - `img-src blob:`: TipTap image extension and graph canvas produce blob URLs.
+ *  - `img-src https:`: OAuth provider avatars are served from external HTTPS
+ *    CDNs (e.g. lh3.googleusercontent.com, avatars.githubusercontent.com), and
+ *    those hostnames vary per account/provider; broad `https:` mirrors the
+ *    connect-src philosophy and is low-risk for images (they cannot execute).
  *  - `frame-ancestors 'none'` / `object-src 'none'`: belt-and-suspenders
  *    clickjacking + plugin protection (X-Frame-Options: DENY covers legacy UA).
  */
@@ -32,7 +36,7 @@ const CONTENT_SECURITY_POLICY = [
   "base-uri 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
