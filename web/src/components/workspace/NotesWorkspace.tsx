@@ -1066,6 +1066,11 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         <button
           type="button"
           className="app-nav-mobile-toggle"
+          // Stop the toggle's own mousedown from reaching useDismissable's
+          // document listener (the toggle lives outside the drawer ref). Without
+          // this, mousedown closes the drawer and the click then reopens it, so
+          // the "Close menu" button would never actually close it.
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setMobileSidebarOpen((v) => !v)}
           aria-label={mobileSidebarOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileSidebarOpen}

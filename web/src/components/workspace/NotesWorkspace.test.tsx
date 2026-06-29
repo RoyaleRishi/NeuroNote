@@ -895,6 +895,22 @@ describe("NotesWorkspace", () => {
       );
     });
 
+    it("closes the mobile drawer when the toggle is tapped while open", async () => {
+      renderWorkspace();
+      const toggle = await screen.findByRole("button", { name: /open menu/i });
+      fireEvent.click(toggle);
+      expect(screen.getByRole("button", { name: /close menu/i })).toBeInTheDocument();
+      // Reproduce the real tap sequence: mousedown reaches useDismissable's
+      // document listener, then click toggles. The toggle must stop its own
+      // mousedown so it doesn't close-then-reopen.
+      const closeToggle = screen.getByRole("button", { name: /close menu/i });
+      fireEvent.mouseDown(closeToggle);
+      fireEvent.click(closeToggle);
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /open menu/i })).toBeInTheDocument()
+      );
+    });
+
     it("closes the mobile drawer when a note is selected", async () => {
       vi.mocked(listNotes).mockResolvedValue({
         items: [noteSummary("note-a"), noteSummary("note-b")],
