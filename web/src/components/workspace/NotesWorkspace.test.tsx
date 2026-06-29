@@ -895,6 +895,42 @@ describe("NotesWorkspace", () => {
       );
     });
 
+    it("creates the new note with a non-conflicting title when 'Untitled' exists", async () => {
+      vi.mocked(listNotes).mockResolvedValue({
+        items: [noteSummary("note-u", { note_title: "Untitled" })],
+        total: 1,
+      });
+      vi.mocked(saveNote).mockResolvedValue({
+        note_id: "note-new",
+        saved_at: "2026-03-12T20:01:00Z",
+        version: 1,
+        content_hash: "hash-test",
+      });
+
+      render(<NotesWorkspace baseUrl="http://localhost:8000" />);
+
+      await screen.findByRole("listbox", { name: "Notes" });
+      fireEvent.click(screen.getByRole("button", { name: "+ New note" }));
+
+      await waitFor(() => {
+        expect(saveNote).toHaveBeenCalledTimes(1);
+      });
+      // The new note must not reuse the taken "Untitled" title (would 409).
+      expect(vi.mocked(saveNote).mock.calls[0]?.[1]).toMatchObject({
+        note_title: "Untitled 2",
+      });
+    });
+
+    it("closes the mobile drawer when the collapse arrow is tapped", async () => {
+      renderWorkspace();
+      fireEvent.click(await screen.findByRole("button", { name: /open menu/i }));
+      expect(screen.getByRole("button", { name: /close menu/i })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /collapse sidebar/i }));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /open menu/i })).toBeInTheDocument()
+      );
+    });
+
     it("closes the mobile drawer when the toggle is tapped while open", async () => {
       renderWorkspace();
       const toggle = await screen.findByRole("button", { name: /open menu/i });

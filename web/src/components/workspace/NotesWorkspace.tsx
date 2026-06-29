@@ -37,7 +37,7 @@ import type { WorkspaceFilters } from "../../lib/workspace/types";
 import type { QuickSwitchItem } from "../../lib/workspace/quick-switch";
 import type { NoteSummary } from "../../../../shared/contracts/ts/v1/note";
 import { getTagColorClass } from "../../lib/ui/tag-colors";
-import { makeNewNoteId } from "../../lib/utils/note-id";
+import { makeNewNoteId, nextUntitledTitle } from "../../lib/utils/note-id";
 import { useBacklinks } from "../../lib/hooks/useBacklinks";
 import { useGlobalGraph } from "../../lib/hooks/useGlobalGraph";
 import { useSelectionMode } from "../../lib/hooks/useSelectionMode";
@@ -504,10 +504,13 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
     createInFlightRef.current = true;
     setIsCreatingNote(true);
     const newNoteId = makeNewNoteId();
+    // Titles are unique per tenant — default to the first free "Untitled N" so
+    // a second blank note doesn't 409 against an existing "Untitled".
+    const newNoteTitle = nextUntitledTitle(notes.map((note) => note.note_title));
     try {
       const created = await saveNote(baseUrl, {
         note_id: newNoteId,
-        note_title: "Untitled",
+        note_title: newNoteTitle,
         subject_id: "inbox",
         tags: [],
         is_pinned: false,
@@ -526,7 +529,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
       createInFlightRef.current = false;
       setIsCreatingNote(false);
     }
-  }, [baseUrl, refreshNotes]);
+  }, [baseUrl, refreshNotes, notes]);
 
   const handleCreateNoteFromTemplate = useCallback(
     async (template: Template) => {
@@ -1169,7 +1172,13 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             <button
               type="button"
               className="sidebar-collapse-btn"
-              onClick={() => setSidebarOpen(false)}
+              // Collapses the panel on desktop; on mobile the panel *is* the
+              // slide-over drawer, so this also dismisses it (the desktop
+              // setSidebarOpen is a harmless no-op there).
+              onClick={() => {
+                setSidebarOpen(false);
+                setMobileSidebarOpen(false);
+              }}
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
             >
