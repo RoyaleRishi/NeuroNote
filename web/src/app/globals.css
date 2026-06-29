@@ -4099,6 +4099,8 @@ select:focus-visible {
     animation-iteration-count: 1 !important;
     opacity: 0.4;
   }
+  /* Catch any future animated descendants of the hero graph */
+  .landing-hero-graph * { animation: none !important; }
 }
 
 .landing-hero-content {
@@ -4229,7 +4231,68 @@ select:focus-visible {
   text-decoration: underline;
 }
 
-/* ── Landing responsive ── */
+/* ── Landing + login responsive (≤768px) ── */
+@media (max-width: 768px) {
+  /* Safe-area shell padding */
+  .landing-shell {
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+  }
+
+  /* Nav: tighter side padding */
+  .landing-nav { padding: 0 var(--space-4); }
+
+  /* Hero: stack graph above headline in a single column */
+  .landing-hero {
+    flex-direction: column;
+    text-align: center;
+    gap: var(--space-6);
+    min-height: auto;
+  }
+
+  /* Pull graph out of absolute position so it participates in flex flow */
+  .landing-hero-graph {
+    position: relative;
+    inset: auto;
+    width: min(280px, 70vw);
+    aspect-ratio: 1 / 1;
+    height: auto;
+    order: -1; /* renders above .landing-hero-content */
+    opacity: 0.5;
+  }
+
+  /* Smaller headline */
+  .landing-hero-headline { font-size: var(--text-3xl); }
+
+  /* Full-width thumb-reachable CTA */
+  .landing-hero-btn {
+    width: 100%;
+    min-height: var(--touch-target-min);
+  }
+
+  /* Features: single-column stack */
+  .landing-features-grid { grid-template-columns: 1fr; }
+
+  /* ── Login page ── */
+  .login-page {
+    padding: var(--space-4);
+    padding-top: calc(var(--space-8) + var(--safe-top));
+    align-items: flex-start;
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  /* OAuthButtons renders inline-styled <a> and <button> — target by element */
+  .login-card a,
+  .login-card button {
+    min-height: 48px;
+  }
+}
+
+/* ── Landing responsive (≤700px fine-tuning) ── */
 @media (max-width: 700px) {
   .landing-features-grid {
     grid-template-columns: 1fr;
