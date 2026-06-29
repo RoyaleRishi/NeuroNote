@@ -4622,24 +4622,22 @@ select:focus-visible {
   /* Touch-friendly note rows */
   .note-list-button { min-height: 56px; }
 
-  /* Graph panel on mobile */
-  .global-graph-view {
-    flex-direction: column !important;
-    height: auto !important;
-    min-height: calc(100vh - var(--nav-height-mobile));
+  /* Graph panel on mobile — canvas on top, filter rail docked as bottom sheet */
+  .global-graph-view { flex-direction: column; }
+
+  .global-graph-canvas-area {
+    order: -1;
+    flex: 1;
+    min-height: 60vh;
   }
 
   .global-graph-sidebar {
-    width: 100% !important;
-    max-height: 260px;
+    width: 100%;
+    max-height: 40vh;
     overflow-y: auto;
-    border-right: none !important;
-    border-bottom: 1px solid var(--panel-border) !important;
-  }
-
-  .global-graph-canvas-area {
-    flex: 1;
-    min-height: 400px;
+    border-top: 1px solid var(--panel-border);
+    border-right: none;
+    padding-bottom: var(--safe-bottom);
   }
 }
 
