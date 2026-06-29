@@ -517,6 +517,9 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         updated_at: new Date().toISOString(),
       });
       await refreshNotes(created.note_id);
+      // On mobile, drop into the editor for the new note instead of leaving
+      // the user staring at the list behind the still-open drawer.
+      setMobileSidebarOpen(false);
     } catch {
       setErrorMessage("Failed to create note");
     } finally {

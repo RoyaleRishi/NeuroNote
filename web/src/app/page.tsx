@@ -96,7 +96,8 @@ export default function LandingPage() {
             Your thinking,<br />mapped.
           </h1>
           <p className="landing-hero-sub">
-            Write notes. Watch concepts surface and connect<br className="landing-br" />
+            Write notes. Watch concepts surface and connect{" "}
+            <br className="landing-br" />
             across everything you&apos;ve written.
           </p>
           <Link href="/login" className="landing-hero-btn">

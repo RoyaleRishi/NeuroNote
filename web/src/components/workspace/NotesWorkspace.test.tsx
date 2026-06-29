@@ -189,6 +189,37 @@ describe("NotesWorkspace", () => {
     });
   });
 
+  it("closes the mobile drawer after creating a note", async () => {
+    vi.mocked(listNotes)
+      .mockResolvedValueOnce({
+        items: [noteSummary("note-a")],
+        total: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [noteSummary("note-a"), noteSummary("note-new")],
+        total: 2,
+      });
+    vi.mocked(saveNote).mockResolvedValue({
+      note_id: "note-new",
+      saved_at: "2026-03-12T20:01:00Z",
+      version: 1,
+      content_hash: "hash-test",
+    });
+
+    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
+
+    await screen.findByRole("listbox", { name: "Notes" });
+    // Open the drawer, then create a note — the drawer should close so the
+    // user lands in the editor rather than behind the open list.
+    fireEvent.click(screen.getByRole("button", { name: /open menu/i }));
+    expect(screen.getByRole("button", { name: /close menu/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "+ New note" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /open menu/i })).toBeInTheDocument();
+    });
+  });
+
   it("guards against duplicate note creation on rapid repeated clicks", async () => {
     let resolveSave!: (value: { note_id: string; saved_at: string; version: number; content_hash: string }) => void;
     const pendingSave = new Promise<{ note_id: string; saved_at: string; version: number; content_hash: string }>(
