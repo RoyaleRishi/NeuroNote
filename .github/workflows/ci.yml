@@ -96,7 +96,7 @@ jobs:
           host: ${{ secrets.GCP_VM_IP }}
           username: ${{ secrets.GCP_VM_USER }}
           key: ${{ secrets.GCP_SSH_KEY }}
-          command_timeout: 20m
+          command_timeout: 30m
           script: |
             cd ~/neuronote
             git fetch origin rework && git reset --hard origin/rework
