@@ -233,6 +233,10 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   const createInFlightRef = useRef(false);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const filtersInitializedRef = useRef(false);
+  // Ref for the mobile drawer aside — consumed by useDismissable for Escape + outside-click.
+  const drawerRef = useRef<HTMLElement | null>(null);
+  // Left-edge swipe tracking — touch must begin within 24px of the left edge.
+  const touchStartX = useRef<number | null>(null);
 
   // ── Auth ──
   const { user, loading: authLoading } = useAuth();
@@ -396,6 +400,25 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
   }, [notes, selectedNoteId]);
 
   useDismissable(contextMenuRef, contextMenu !== null, closeContextMenu);
+
+  // Close the mobile drawer on Escape or outside-mousedown.
+  const closeMobileSidebar = useCallback(() => setMobileSidebarOpen(false), []);
+  useDismissable(drawerRef, mobileSidebarOpen, closeMobileSidebar);
+
+  // Left-edge swipe gesture: open the drawer when a touch starts within 24px of
+  // the left edge and moves right by more than 40px. This guards against hijacking
+  // horizontal scroll initiated in the content area.
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const x = e.touches[0]?.clientX ?? 999;
+    touchStartX.current = x <= 24 ? x : null;
+  }, []);
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current == null) return;
+    if ((e.touches[0]?.clientX ?? 0) - touchStartX.current > 40) {
+      setMobileSidebarOpen(true);
+      touchStartX.current = null;
+    }
+  }, []);
 
   const recentNotes = useMemo(() => {
     const index = new Map(notes.map((note) => [note.note_id, note]));
@@ -1125,8 +1148,13 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
         />
       ) : (
       <FileDropZone onFileContent={(name, content) => void handleFileImport(name, content)}>
-      <section className={`notes-workspace${sidebarOpen ? "" : " sidebar-collapsed"}`} data-testid="notes-workspace">
-      <aside className={`notes-sidebar${mobileSidebarOpen ? " mobile-open" : ""}`}>
+      <section
+        className={`notes-workspace${sidebarOpen ? "" : " sidebar-collapsed"}`}
+        data-testid="notes-workspace"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+      >
+      <aside ref={drawerRef} className={`notes-sidebar${mobileSidebarOpen ? " mobile-open" : ""}`}>
         <header className="notes-sidebar-header">
           <div className="notes-sidebar-title-row">
             <h1>Notes</h1>

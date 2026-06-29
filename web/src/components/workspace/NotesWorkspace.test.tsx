@@ -850,4 +850,45 @@ describe("NotesWorkspace", () => {
     const notesTab = screen.getByRole("tab", { name: /notes/i });
     expect(notesTab).toHaveAttribute("aria-selected", "false");
   });
+
+  describe("mobile drawer", () => {
+    it("closes the mobile drawer on Escape", async () => {
+      renderWorkspace();
+      const toggle = await screen.findByRole("button", { name: /open menu/i });
+      fireEvent.click(toggle);
+      expect(screen.getByRole("button", { name: /close menu/i })).toBeInTheDocument();
+      // useDismissable listens on document — fire Escape there.
+      fireEvent.keyDown(document, { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /open menu/i })).toBeInTheDocument()
+      );
+    });
+
+    it("closes the mobile drawer when a note is selected", async () => {
+      vi.mocked(listNotes).mockResolvedValue({
+        items: [noteSummary("note-a"), noteSummary("note-b")],
+        total: 2,
+      });
+      render(<NotesWorkspace baseUrl="http://localhost:8000" />);
+      const toggle = await screen.findByRole("button", { name: /open menu/i });
+      fireEvent.click(toggle);
+      // Scope to the all-notes section to avoid ambiguity with the recent-chips.
+      const allSection = await screen.findByTestId("notes-section-all");
+      const row = within(allSection).getByRole("button", { name: /title note-b/i });
+      fireEvent.click(row);
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /open menu/i })).toBeInTheDocument()
+      );
+    });
+
+    it("opens the drawer on a left-edge swipe", async () => {
+      renderWorkspace();
+      const ws = await screen.findByTestId("notes-workspace");
+      fireEvent.touchStart(ws, { touches: [{ clientX: 10 }] });
+      fireEvent.touchMove(ws, { touches: [{ clientX: 70 }] });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /close menu/i })).toBeInTheDocument()
+      );
+    });
+  });
 });
