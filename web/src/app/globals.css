@@ -4479,21 +4479,21 @@ select:focus-visible {
   /* Readable body type for mobile editor */
   .tiptap-editor .ProseMirror {
     font-size: var(--text-md);
-    line-height: 1.7;
+    line-height: var(--leading-relaxed);
   }
 
   /* Status bar wraps gracefully on narrow widths */
   .editor-toolbar { flex-wrap: wrap; gap: var(--space-2); }
 
   /* Full-width subject + tag pickers */
-  .picker-container { width: 100%; }
+  .notes-editor-panel .picker-container { width: 100%; }
 
   /* Touch-friendly subject picker trigger buttons */
-  .subject-badge,
-  .subject-placeholder { min-height: var(--touch-target-min); }
+  .notes-editor-panel .subject-badge,
+  .notes-editor-panel .subject-placeholder { min-height: var(--touch-target-min); }
 
   /* Touch-friendly tag picker field */
-  .tag-picker-field { min-height: var(--touch-target-min); }
+  .notes-editor-panel .tag-picker-field { min-height: var(--touch-target-min); }
 
   /* The sidebar-expand btn is not needed on mobile */
   .sidebar-expand-btn {
