@@ -4565,15 +4565,6 @@ select:focus-visible {
   .app-nav-brand {
     font-size: var(--text-sm);
   }
-
-  .workspace-stat-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-2);
-  }
-
-  .notes-sidebar {
-    width: 92vw !important;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════

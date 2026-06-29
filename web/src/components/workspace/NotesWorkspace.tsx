@@ -1217,7 +1217,7 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
           </article>
         </div>
         {/* Mobile condensed summary — hidden on desktop via CSS */}
-        <p className="workspace-stat-summary" aria-hidden="true">
+        <p className="workspace-stat-summary">
           {notes.length} notes · {pinnedNotes.length} pinned · {recentNotes.length} recent
         </p>
 
