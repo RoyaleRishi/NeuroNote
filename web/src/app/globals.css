@@ -4258,7 +4258,6 @@ select:focus-visible {
     aspect-ratio: 1 / 1;
     height: auto;
     order: -1; /* renders above .landing-hero-content */
-    opacity: 0.5;
   }
 
   /* Smaller headline */
@@ -4277,6 +4276,7 @@ select:focus-visible {
   .login-page {
     padding: var(--space-4);
     padding-top: calc(var(--space-8) + var(--safe-top));
+    padding-bottom: calc(var(--space-8) + var(--safe-bottom));
     align-items: flex-start;
   }
 
@@ -4285,10 +4285,14 @@ select:focus-visible {
     max-width: 420px;
   }
 
-  /* OAuthButtons renders inline-styled <a> and <button> — target by element */
-  .login-card a,
-  .login-card button {
-    min-height: 48px;
+  /* Scope to the OAuthButtons wrapper so the footer link isn't inflated */
+  .oauth-buttons a,
+  .oauth-buttons button {
+    min-height: var(--touch-target-lg);
+  }
+
+  .landing-footer {
+    padding-bottom: calc(var(--space-6) + var(--safe-bottom));
   }
 }
 

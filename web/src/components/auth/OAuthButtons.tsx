@@ -61,7 +61,7 @@ export function OAuthButtons() {
 
   if (devMode) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div className="oauth-buttons" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <button type="button" onClick={() => void handleDevLogin()} disabled={loading} style={accentButtonStyle}>
           {loading ? "Signing in..." : "Sign in as Dev User"}
         </button>
@@ -73,7 +73,7 @@ export function OAuthButtons() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <div className="oauth-buttons" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <a href={`${apiBase}/v1/auth/google/login`} style={accentButtonStyle}>
         Sign in with Google
       </a>
