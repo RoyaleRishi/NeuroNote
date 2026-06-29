@@ -96,9 +96,22 @@ function noteSummary(
   };
 }
 
+/** Renders the workspace with a minimal empty note list. */
+function renderWorkspace(props: Partial<React.ComponentProps<typeof NotesWorkspace>> = {}) {
+  vi.mocked(listNotes).mockResolvedValue({ items: [], total: 0 });
+  return render(<NotesWorkspace baseUrl="http://localhost:8000" {...props} />);
+}
+
 describe("NotesWorkspace", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // vi.resetAllMocks() wipes implementations — re-stub ResizeObserver so
+    // components that use it (GlobalGraphPanel) don't throw in jsdom.
+    window.ResizeObserver = vi.fn().mockImplementation(() => ({
+      observe: vi.fn(),
+      unobserve: vi.fn(),
+      disconnect: vi.fn(),
+    }));
     window.localStorage.clear();
     vi.mocked(fetchCurrentUser).mockResolvedValue({
       id: "test-user",
@@ -827,5 +840,14 @@ describe("NotesWorkspace", () => {
     await waitFor(() => {
       expect(fetchNoteBacklinks).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("marks the active app view tab as selected", async () => {
+    renderWorkspace();
+    const graphTab = await screen.findByRole("tab", { name: /graph/i });
+    fireEvent.click(graphTab);
+    expect(graphTab).toHaveAttribute("aria-selected", "true");
+    const notesTab = screen.getByRole("tab", { name: /notes/i });
+    expect(notesTab).toHaveAttribute("aria-selected", "false");
   });
 });
