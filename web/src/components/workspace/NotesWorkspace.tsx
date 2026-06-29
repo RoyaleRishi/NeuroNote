@@ -1216,6 +1216,10 @@ export function NotesWorkspace({ baseUrl, initialNoteId }: NotesWorkspaceProps) 
             <strong className="workspace-stat-value">{recentNotes.length}</strong>
           </article>
         </div>
+        {/* Mobile condensed summary — hidden on desktop via CSS */}
+        <p className="workspace-stat-summary" aria-hidden="true">
+          {notes.length} notes · {pinnedNotes.length} pinned · {recentNotes.length} recent
+        </p>
 
         <div className="notes-filters">
           <div className="notes-filter-search-wrap">

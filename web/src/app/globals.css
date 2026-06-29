@@ -258,6 +258,9 @@ body {
   gap: 10px;
 }
 
+/* Hidden on desktop; shown only at ≤768px via media query below */
+.workspace-stat-summary { display: none; }
+
 .workspace-stat-card {
   border: 1px solid var(--panel-border);
   background: var(--workspace-surface);
@@ -4510,10 +4513,26 @@ select:focus-visible {
     font-size: 0;
   }
 
-  /* Tighter stat grid on mobile */
-  .workspace-stat-grid {
-    grid-template-columns: repeat(3, 1fr);
+  /* Hide stat grid on mobile — replaced by summary line */
+  .workspace-stat-grid { display: none; }
+
+  /* Condensed mono summary line — shown only on mobile */
+  .workspace-stat-summary {
+    display: block;
+    font-family: var(--font-family-mono);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding: var(--space-2) var(--space-4);
+    margin: 0;
   }
+
+  /* Sidebar respects safe-area inset and uses token-based width */
+  .notes-sidebar { width: var(--drawer-width); padding-top: var(--safe-top); }
+
+  /* Touch-friendly note rows */
+  .note-list-button { min-height: 56px; }
 
   /* Graph panel on mobile */
   .global-graph-view {
@@ -4536,9 +4555,10 @@ select:focus-visible {
   }
 }
 
-/* Tighter tab labels on very small phones */
+/* Tighter tab labels + narrower drawer on very small phones */
 @media (max-width: 430px) {
   .app-nav-tab { padding: 0 var(--space-2); font-size: var(--text-sm); }
+  .notes-sidebar { width: var(--drawer-width-sm); }
 }
 
 @media (max-width: 480px) {

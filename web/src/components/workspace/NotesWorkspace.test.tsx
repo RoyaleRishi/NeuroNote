@@ -891,4 +891,15 @@ describe("NotesWorkspace", () => {
       );
     });
   });
+
+  it("renders the mobile stat summary line", async () => {
+    vi.mocked(listNotes).mockResolvedValue({
+      items: [noteSummary("note-a"), noteSummary("note-b"), noteSummary("note-c")],
+      total: 3,
+    });
+    render(<NotesWorkspace baseUrl="http://localhost:8000" />);
+    // Wait for notes to load, then verify the summary text is present.
+    // aria-hidden="true" does not prevent text queries in testing-library.
+    expect(await screen.findByText(/3 notes · .* pinned · .* recent/i)).toBeInTheDocument();
+  });
 });
